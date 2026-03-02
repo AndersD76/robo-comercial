@@ -7,7 +7,7 @@ Funil: inicial (com links) → resposta → proposta de demo → agendamento
 import re
 import random
 
-from .config import MENSAGENS, ANTHROPIC_API_KEY, DEMO_CAL_LINK
+from config import MENSAGENS, ANTHROPIC_API_KEY, DEMO_CAL_LINK
 
 try:
     import anthropic

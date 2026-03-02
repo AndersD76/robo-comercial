@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Máquina de Vendas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg:     #0a0a0f;
+      --bg2:    #111118;
+      --card:   rgba(255,255,255,0.04);
+      --border: rgba(255,255,255,0.08);
+      --text:   #e8e8f0;
+      --muted:  #777;
+      --font:   'Space Grotesk', sans-serif;
+
+      /* Prisma — verde WhatsApp */
+      --prisma:   #25D366;
+      --prisma2:  #128C7E;
+
+      /* Pili — âmbar campo */
+      --pili:   #F59E0B;
+      --pili2:  #D97706;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 17px; font-weight: 600; letter-spacing: -.3px;
+    }
+    .logo i { color: var(--prisma); }
+    .logo span.slash { color: var(--pili); margin: 0 4px; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .badge-live {
+      display: flex; align-items: center; gap: 6px;
+      background: rgba(37,211,102,.12); border: 1px solid rgba(37,211,102,.25);
+      color: var(--prisma); border-radius: 20px; padding: 4px 12px;
+      font-size: 12px; font-weight: 500;
+    }
+    .badge-live .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--prisma); animation: pulse 1.4s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; } 50% { opacity: .3; }
+    }
+
+    /* ── LAYOUT ── */
+    main { max-width: 1320px; margin: 0 auto; padding: 32px 24px 60px; }
+
+    .section-title {
+      font-size: 12px; font-weight: 600; letter-spacing: 1.5px;
+      text-transform: uppercase; color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    /* ── BOT CARDS (lado a lado) ── */
+    .bots-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-bottom: 40px;
+    }
+    @media(max-width:820px){ .bots-grid { grid-template-columns: 1fr; } }
+
+    .bot-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 28px;
+      position: relative;
+      overflow: hidden;
+    }
+    .bot-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    }
+    .bot-card.prisma::before { background: linear-gradient(90deg,var(--prisma),var(--prisma2)); }
+    .bot-card.pili::before   { background: linear-gradient(90deg,var(--pili),var(--pili2)); }
+
+    .bot-header {
+      display: flex; align-items: flex-start;
+      justify-content: space-between; margin-bottom: 24px;
+    }
+    .bot-info h2 { font-size: 20px; font-weight: 700; margin-bottom: 2px; }
+    .bot-info p  { font-size: 13px; color: var(--muted); }
+
+    .bot-icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+    }
+    .bot-card.prisma .bot-icon { background: rgba(37,211,102,.15); color: var(--prisma); }
+    .bot-card.pili   .bot-icon { background: rgba(245,158,11,.15); color: var(--pili); }
+
+    /* ── MÉTRICAS ── */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .metric {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      text-align: center;
+    }
+    .metric .val {
+      font-size: 26px; font-weight: 700; line-height: 1;
+      margin-bottom: 4px;
+    }
+    .bot-card.prisma .metric .val { color: var(--prisma); }
+    .bot-card.pili   .metric .val { color: var(--pili); }
+    .metric .lbl { font-size: 11px; color: var(--muted); font-weight: 500; }
+
+    /* ── FUNIL ── */
+    .funnel {
+      display: flex; gap: 0; margin-bottom: 20px;
+    }
+    .funnel-step {
+      flex: 1; position: relative;
+      text-align: center; padding: 10px 4px;
+      border-radius: 0;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      font-size: 11px;
+    }
+    .funnel-step:first-child { border-radius: 10px 0 0 10px; }
+    .funnel-step:last-child  { border-radius: 0 10px 10px 0; }
+    .funnel-step + .funnel-step { border-left: none; }
+    .funnel-step .n { font-size: 18px; font-weight: 700; display: block; }
+    .funnel-step .t { color: var(--muted); }
+    .bot-card.prisma .funnel-step .n { color: var(--prisma); }
+    .bot-card.pili   .funnel-step .n { color: var(--pili); }
+
+    /* ── TABS ── */
+    .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+    .tab-btn {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--muted); border-radius: 8px;
+      padding: 6px 14px; font-size: 12px; font-weight: 500;
+      cursor: pointer; transition: all .2s;
+      font-family: var(--font);
+    }
+    .tab-btn.active, .tab-btn:hover {
+      color: var(--text); border-color: rgba(255,255,255,.2);
+      background: rgba(255,255,255,.06);
+    }
+
+    /* ── TABELA DE LEADS ── */
+    .leads-table-wrap { overflow-x: auto; }
+    table {
+      width: 100%; border-collapse: collapse;
+      font-size: 12px;
+    }
+    th {
+      text-align: left; padding: 8px 10px;
+      color: var(--muted); font-weight: 500;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 8px 10px;
+      border-bottom: 1px solid rgba(255,255,255,.04);
+    }
+    tr:last-child td { border-bottom: none; }
+    .status-chip {
+      display: inline-flex; align-items: center;
+      padding: 2px 8px; border-radius: 20px;
+      font-size: 10px; font-weight: 600;
+    }
+    .chip-novo         { background:rgba(255,255,255,.08);  color:#aaa; }
+    .chip-contactada   { background:rgba(245,158,11,.15);   color:#F59E0B; }
+    .chip-respondeu    { background:rgba(59,130,246,.15);   color:#60A5FA; }
+    .chip-qualificado  { background:rgba(37,211,102,.15);   color:#25D366; }
+    .chip-confirmado   { background:rgba(168,85,247,.15);   color:#A78BFA; }
+
+    /* ── LOGS ── */
+    .logs-list { list-style: none; }
+    .log-item {
+      display: flex; gap: 8px; align-items: flex-start;
+      padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,.04);
+      font-size: 12px;
+    }
+    .log-item:last-child { border-bottom: none; }
+    .log-badge {
+      flex-shrink: 0; padding: 2px 7px; border-radius: 6px;
+      font-size: 10px; font-weight: 600; margin-top: 1px;
+    }
+    .log-info    { background:rgba(59,130,246,.15);  color:#60A5FA; }
+    .log-success { background:rgba(37,211,102,.15);  color:#25D366; }
+    .log-warn    { background:rgba(245,158,11,.15);  color:#F59E0B; }
+    .log-error   { background:rgba(239,68,68,.15);   color:#F87171; }
+    .log-ts      { color: var(--muted); font-size: 10px; margin-left: auto; flex-shrink: 0; }
+
+    .empty-state {
+      text-align: center; padding: 30px;
+      color: var(--muted); font-size: 13px;
+    }
+    .empty-state i { font-size: 28px; display: block; margin-bottom: 8px; opacity:.4; }
+
+    /* ── FOOTER ── */
+    footer {
+      text-align: center; padding: 24px;
+      color: var(--muted); font-size: 12px;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <i class="fa-brands fa-whatsapp"></i>
+    Máquina de Vendas
+    <span class="slash">·</span>
+    <span style="color:var(--prisma)">Prisma</span>
+    <span class="slash">+</span>
+    <span style="color:var(--pili)">Pili</span>
+  </div>
+  <div class="header-right">
+    <div class="badge-live"><div class="dot"></div>Ao vivo</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- ══ CARDS DOS BOTS ══ -->
+  <p class="section-title"><i class="fa fa-bolt"></i> &nbsp;Agentes de prospecção</p>
+  <div class="bots-grid">
+
+    <!-- ═══ CARD PRISMA ═══ -->
+    <div class="bot-card prisma">
+      <div class="bot-header">
+        <div class="bot-info">
+          <h2>🟢 Prisma</h2>
+          <p>PrismaBiz — Gestão da Qualidade</p>
+        </div>
+        <div class="bot-icon"><i class="fa fa-industry"></i></div>
+      </div>
+
+      <!-- Métricas -->
+      <div class="metrics">
+        <div class="metric">
+          <div class="val" id="p-total">{{ prisma.total_leads }}</div>
+          <div class="lbl">Total Leads</div>
+        </div>
+        <div class="metric">
+          <div class="val" id="p-hoje">{{ prisma.msgs_hoje }}</div>
+          <div class="lbl">Msgs Hoje</div>
+        </div>
+        <div class="metric">
+          <div class="val" id="p-demos">{{ prisma.demos }}</div>
+          <div class="lbl">Demos</div>
+        </div>
+      </div>
+
+      <!-- Funil -->
+      <div class="funnel">
+        <div class="funnel-step">
+          <span class="n" id="p-f1">{{ prisma.total_leads }}</span>
+          <span class="t">Encontrados</span>
+        </div>
+        <div class="funnel-step">
+          <span class="n" id="p-f2">{{ prisma.contactadas }}</span>
+          <span class="t">Contactados</span>
+        </div>
+        <div class="funnel-step">
+          <span class="n" id="p-f3">{{ prisma.responderam }}</span>
+          <span class="t">Responderam</span>
+        </div>
+        <div class="funnel-step">
+          <span class="n" id="p-f4">{{ prisma.demos }}</span>
+          <span class="t">Demos</span>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab-btn active" onclick="showTab('prisma','leads',this)">Leads</button>
+        <button class="tab-btn" onclick="showTab('prisma','logs',this)">Logs</button>
+      </div>
+
+      <!-- Leads -->
+      <div id="prisma-leads" class="leads-table-wrap">
+        <table>
+          <thead>
+            <tr><th>Empresa</th><th>Segmento</th><th>Status</th><th>Score</th></tr>
+          </thead>
+          <tbody id="prisma-leads-body">
+            {% if prisma.total_leads == 0 %}
+            <tr><td colspan="4">
+              <div class="empty-state">
+                <i class="fa fa-inbox"></i>
+                Nenhum lead ainda. O robô ainda não iniciou.
+              </div>
+            </td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Logs -->
+      <div id="prisma-logs" style="display:none">
+        <ul class="logs-list" id="prisma-logs-list">
+          <li class="log-item">
+            <span class="log-badge log-info">INFO</span>
+            <span>Aguardando dados do robô Prisma...</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ═══ CARD PILI ═══ -->
+    <div class="bot-card pili">
+      <div class="bot-header">
+        <div class="bot-info">
+          <h2>🟡 Pili</h2>
+          <p>Pili Equipamentos — Tombadores &amp; Coletores de Grãos</p>
+        </div>
+        <div class="bot-icon"><i class="fa fa-wheat-awn"></i></div>
+      </div>
+
+      <!-- Métricas -->
+      <div class="metrics">
+        <div class="metric">
+          <div class="val" id="li-total">{{ pili.total_leads }}</div>
+          <div class="lbl">Total Leads</div>
+        </div>
+        <div class="metric">
+          <div class="val" id="li-hoje">{{ pili.msgs_hoje }}</div>
+          <div class="lbl">Msgs Hoje</div>
+        </div>
+        <div class="metric">
+          <div class="val" id="li-demos">{{ pili.demos }}</div>
+          <div class="lbl">Demos</div>
+        </div>
+      </div>
+
+      <!-- Funil -->
+      <div class="funnel">
+        <div class="funnel-step">
+          <span class="n" id="li-f1">{{ pili.total_leads }}</span>
+          <span class="t">Encontrados</span>
+        </div>
+        <div class="funnel-step">
+          <span class="n" id="li-f2">{{ pili.contactadas }}</span>
+          <span class="t">Contactados</span>
+        </div>
+        <div class="funnel-step">
+          <span class="n" id="li-f3">{{ pili.responderam }}</span>
+          <span class="t">Responderam</span>
+        </div>
+        <div class="funnel-step">
+          <span class="n" id="li-f4">{{ pili.demos }}</span>
+          <span class="t">Demos</span>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab-btn active" onclick="showTab('pili','leads',this)">Leads</button>
+        <button class="tab-btn" onclick="showTab('pili','logs',this)">Logs</button>
+      </div>
+
+      <!-- Leads -->
+      <div id="pili-leads" class="leads-table-wrap">
+        <table>
+          <thead>
+            <tr><th>Empresa</th><th>Segmento</th><th>Status</th><th>Score</th></tr>
+          </thead>
+          <tbody id="pili-leads-body">
+            {% if pili.total_leads == 0 %}
+            <tr><td colspan="4">
+              <div class="empty-state">
+                <i class="fa fa-inbox"></i>
+                Nenhum lead ainda. O robô ainda não iniciou.
+              </div>
+            </td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Logs -->
+      <div id="pili-logs" style="display:none">
+        <ul class="logs-list" id="pili-logs-list">
+          <li class="log-item">
+            <span class="log-badge log-info">INFO</span>
+            <span>Aguardando dados do robô Pili...</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+  </div><!-- /bots-grid -->
+
+</main>
+
+<footer>
+  Máquina de Vendas &mdash; PrismaBiz &amp; Pili Equipamentos
+  &nbsp;·&nbsp; Auto-refresh a cada 30s
+</footer>
+
+<script>
+  // ── TABS ──
+  function showTab(bot, tab, btn) {
+    ['leads','logs'].forEach(t => {
+      const el = document.getElementById(`${bot}-${t}`);
+      if (el) el.style.display = (t === tab) ? '' : 'none';
+    });
+    btn.closest('.tabs').querySelectorAll('.tab-btn')
+       .forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    if (tab === 'leads') loadLeads(bot);
+    if (tab === 'logs')  loadLogs(bot);
+  }
+
+  // ── STATUS CHIP ──
+  function statusChip(status, demoStatus) {
+    if (demoStatus === 'confirmado') return '<span class="status-chip chip-confirmado">Demo ✓</span>';
+    const map = {
+      novo:        '<span class="status-chip chip-novo">Novo</span>',
+      contactada:  '<span class="status-chip chip-contactada">Contactado</span>',
+      respondeu:   '<span class="status-chip chip-respondeu">Respondeu</span>',
+      qualificado: '<span class="status-chip chip-qualificado">Qualificado</span>',
+    };
+    return map[status] || `<span class="status-chip chip-novo">${status}</span>`;
+  }
+
+  // ── LOAD LEADS ──
+  function loadLeads(bot) {
+    fetch(`/api/${bot}/leads`)
+      .then(r => r.json())
+      .then(data => {
+        const tbody = document.getElementById(`${bot}-leads-body`);
+        if (!data.length) {
+          tbody.innerHTML = `<tr><td colspan="4">
+            <div class="empty-state">
+              <i class="fa fa-inbox"></i>Nenhum lead ainda.
+            </div></td></tr>`;
+          return;
+        }
+        tbody.innerHTML = data.map(l => `
+          <tr>
+            <td><strong>${l.nome_fantasia || '—'}</strong></td>
+            <td style="color:var(--muted)">${l.segmento || '—'}</td>
+            <td>${statusChip(l.status, l.demo_status)}</td>
+            <td>${l.score || 0}</td>
+          </tr>`).join('');
+      })
+      .catch(() => {});
+  }
+
+  // ── LOAD LOGS ──
+  function logClass(tipo) {
+    if (!tipo) return 'log-info';
+    const t = tipo.toLowerCase();
+    if (t.includes('erro') || t.includes('error')) return 'log-error';
+    if (t.includes('warn') || t.includes('aviso')) return 'log-warn';
+    if (t.includes('sucesso') || t.includes('demo') || t.includes('ok')) return 'log-success';
+    return 'log-info';
+  }
+
+  function loadLogs(bot) {
+    fetch(`/api/${bot}/logs`)
+      .then(r => r.json())
+      .then(data => {
+        const ul = document.getElementById(`${bot}-logs-list`);
+        if (!data.length) {
+          ul.innerHTML = '<li class="log-item"><span style="color:var(--muted)">Sem logs ainda.</span></li>';
+          return;
+        }
+        ul.innerHTML = data.map(l => {
+          const ts = l.timestamp ? new Date(l.timestamp).toLocaleTimeString('pt-BR') : '';
+          return `<li class="log-item">
+            <span class="log-badge ${logClass(l.tipo)}">${(l.tipo || 'info').toUpperCase()}</span>
+            <span>${l.mensagem || ''}</span>
+            <span class="log-ts">${ts}</span>
+          </li>`;
+        }).join('');
+      })
+      .catch(() => {});
+  }
+
+  // ── REFRESH STATS ──
+  function refreshStats() {
+    // Prisma
+    fetch('/api/prisma/stats')
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById('p-total').textContent = d.total_leads;
+        document.getElementById('p-hoje').textContent  = d.msgs_hoje;
+        document.getElementById('p-demos').textContent = d.demos;
+        document.getElementById('p-f1').textContent    = d.total_leads;
+        document.getElementById('p-f2').textContent    = d.contactadas;
+        document.getElementById('p-f3').textContent    = d.responderam;
+        document.getElementById('p-f4').textContent    = d.demos;
+      }).catch(() => {});
+
+    // Pili
+    fetch('/api/pili/stats')
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById('li-total').textContent = d.total_leads;
+        document.getElementById('li-hoje').textContent  = d.msgs_hoje;
+        document.getElementById('li-demos').textContent = d.demos;
+        document.getElementById('li-f1').textContent    = d.total_leads;
+        document.getElementById('li-f2').textContent    = d.contactadas;
+        document.getElementById('li-f3').textContent    = d.responderam;
+        document.getElementById('li-f4').textContent    = d.demos;
+      }).catch(() => {});
+  }
+
+  // ── INIT ──
+  loadLeads('prisma');
+  loadLeads('pili');
+  setInterval(refreshStats, 30000);
+</script>
+
+</body>
+</html>

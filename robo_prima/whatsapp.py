@@ -10,7 +10,7 @@ import random
 import asyncio
 from urllib.parse import quote
 
-from .config import (
+from config import (
     INTERVALO_MSG_MIN, INTERVALO_MSG_MAX,
     PAUSA_LONGA_A_CADA, PAUSA_LONGA_MIN, PAUSA_LONGA_MAX,
     HORARIO_INICIO, HORARIO_FIM, DIAS_ATIVOS,

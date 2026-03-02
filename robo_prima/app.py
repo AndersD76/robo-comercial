@@ -14,7 +14,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'prima-secret-2024')
 
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
-DB_SCHEMA = 'prima'
+DB_SCHEMA = 'prisma'
 
 
 def get_db():

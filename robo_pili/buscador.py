@@ -9,7 +9,7 @@ import random
 import asyncio
 from urllib.parse import quote_plus, urlparse, parse_qs, unquote
 
-from .config import (
+from config import (
     TERMOS_BUSCA, INTERVALO_BUSCA_MIN, INTERVALO_BUSCA_MAX,
     PALAVRAS_POSITIVAS, PALAVRAS_NEGATIVAS, ESTADOS_PRIORIDADE
 )

@@ -182,7 +182,7 @@ Obrigado pela atenção! 🙏""",
 # BANCO DE DADOS (PostgreSQL — Neon)
 # =============================================================================
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
-DB_SCHEMA = 'prima'  # schema exclusivo deste bot no Neon
+DB_SCHEMA = 'prisma'  # schema exclusivo deste bot no Neon
 
 # =============================================================================
 # API CNPJ
