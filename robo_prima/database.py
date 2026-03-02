@@ -3,24 +3,26 @@
 Banco de dados do Agente de Prospecção — PostgreSQL (Neon)
 """
 
+import os
 import psycopg2
 import psycopg2.extras
 
-from config import DATABASE_URL as _RAW_URL, DB_SCHEMA
+from config import DB_SCHEMA
 
-# psycopg2 aceita postgresql:// e postgres:// mas NÃO psql://
-def _normalize_url(url):
-    if url and url.startswith('psql://'):
-        return 'postgresql://' + url[7:]
-    if url and url.startswith('postgres://'):
-        return 'postgresql://' + url[11:]
+
+def _fix_url(url: str) -> str:
+    """Garante que a URL use o scheme 'postgresql://' exigido pelo psycopg2."""
+    url = (url or '').strip()
+    if '://' in url:
+        scheme, rest = url.split('://', 1)
+        if scheme in ('psql', 'postgres'):
+            return 'postgresql://' + rest
     return url
-
-DATABASE_URL = _normalize_url(_RAW_URL)
 
 
 def get_connection():
-    conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+    url = _fix_url(os.environ.get('DATABASE_URL', ''))
+    conn = psycopg2.connect(url, cursor_factory=psycopg2.extras.RealDictCursor)
     with conn.cursor() as c:
         c.execute(f"SET search_path TO {DB_SCHEMA}, public")
     return conn
