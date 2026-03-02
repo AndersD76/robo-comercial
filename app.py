@@ -391,6 +391,25 @@ def api_bot_stop(bot):
     return jsonify({'status': 'stopped'})
 
 
+# --- Console (últimas linhas do log) ---
+@app.route('/api/<bot>/console')
+def api_bot_console(bot):
+    if bot not in _procs:
+        return jsonify({'lines': [], 'error': 'bot invalido'}), 400
+    canal = request.args.get('canal', 'wa')
+    n = request.args.get('n', 60, type=int)
+    bot_dir = _bot_dir(bot)
+    log_path = os.path.join(bot_dir, f'{canal}.log')
+    try:
+        with open(log_path, 'r', encoding='utf-8', errors='replace') as f:
+            lines = f.readlines()
+        return jsonify({'lines': [l.rstrip('\n') for l in lines[-n:]]})
+    except FileNotFoundError:
+        return jsonify({'lines': []})
+    except Exception as e:
+        return jsonify({'lines': [], 'error': str(e)})
+
+
 # --- Health check ---
 @app.route('/health')
 def health():
