@@ -191,14 +191,43 @@ def get_linkedin(schema: str, limite: int = 30) -> list:
 
 
 # =============================================================================
-# ROTAS — DASHBOARD
+# ROTAS — PÁGINAS
 # =============================================================================
 
+# Config por bot (cores CSS, labels)
+_BOT_CFG = {
+    'prisma': {
+        'name': 'Prisma', 'label': 'PrismaBiz',
+        'color': '#10b981', 'color_bg': '#f0fdf8',
+        'color_bd': 'rgba(16,185,129,.2)',
+    },
+    'pili': {
+        'name': 'Pili', 'label': 'Equipamentos',
+        'color': '#f59e0b', 'color_bg': '#fffcf0',
+        'color_bd': 'rgba(245,158,11,.2)',
+    },
+}
+
+
 @app.route('/')
-def index():
+def landing():
     prisma = get_stats('prisma')
     pili = get_stats('pili')
-    return render_template('index.html', prisma=prisma, pili=pili)
+    return render_template('landing.html', prisma=prisma, pili=pili)
+
+
+@app.route('/prisma')
+def dashboard_prisma():
+    stats = get_stats('prisma')
+    return render_template('dashboard.html', bot='prisma',
+                           stats=stats, **_BOT_CFG['prisma'])
+
+
+@app.route('/pili')
+def dashboard_pili():
+    stats = get_stats('pili')
+    return render_template('dashboard.html', bot='pili',
+                           stats=stats, **_BOT_CFG['pili'])
 
 
 # --- API Prisma ---

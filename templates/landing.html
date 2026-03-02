@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Máquina de Vendas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+    :root {
+      --prisma:    #10b981;
+      --prisma-dk: #059669;
+      --prisma-bg: #f0fdf8;
+      --prisma-bd: rgba(16,185,129,.22);
+      --pili:      #f59e0b;
+      --pili-dk:   #d97706;
+      --pili-bg:   #fffcf0;
+      --pili-bd:   rgba(245,158,11,.22);
+    }
+
+    body {
+      font-family:'Inter',sans-serif;
+      background:#0f172a;
+      min-height:100vh;
+      display:flex; flex-direction:column;
+    }
+
+    /* ════ HEADER ════ */
+    header {
+      height:56px;
+      display:flex; align-items:center; justify-content:space-between;
+      padding:0 32px;
+      border-bottom:1px solid rgba(255,255,255,.06);
+      flex-shrink:0;
+    }
+    .logo { display:flex; align-items:center; gap:10px; }
+    .logo-mark {
+      width:32px; height:32px; border-radius:9px;
+      background:linear-gradient(135deg,var(--prisma),var(--pili));
+      display:flex; align-items:center; justify-content:center;
+      font-size:14px; color:#fff;
+    }
+    .logo-name { font-size:15px; font-weight:800; color:#fff; letter-spacing:-.3px; }
+    .logo-sep  { color:rgba(255,255,255,.2); margin:0 4px; }
+    .logo-sub  { font-size:12px; color:rgba(255,255,255,.3); }
+    .hdr-clock {
+      font-size:12px; color:rgba(255,255,255,.35);
+      font-variant-numeric:tabular-nums; font-weight:500;
+    }
+
+    /* ════ HERO ════ */
+    .hero {
+      flex:1; display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+      padding:40px 24px 60px;
+    }
+    .hero-eyebrow {
+      font-size:10.5px; font-weight:700; letter-spacing:2px;
+      text-transform:uppercase;
+      color:rgba(255,255,255,.3);
+      margin-bottom:14px;
+    }
+    .hero-title {
+      font-size:36px; font-weight:900; color:#fff;
+      letter-spacing:-1.5px; text-align:center; line-height:1.1;
+      margin-bottom:8px;
+    }
+    .hero-sub {
+      font-size:14px; color:rgba(255,255,255,.4);
+      text-align:center; margin-bottom:48px; font-weight:400;
+    }
+
+    /* ════ CARDS ════ */
+    .cards {
+      display:grid; grid-template-columns:1fr 1fr; gap:20px;
+      width:100%; max-width:860px;
+    }
+    @media(max-width:640px){ .cards { grid-template-columns:1fr; } }
+
+    .agent-card {
+      background:rgba(255,255,255,.04);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:20px; padding:28px;
+      cursor:pointer; text-decoration:none;
+      display:flex; flex-direction:column;
+      transition:all .2s;
+      position:relative; overflow:hidden;
+    }
+    .agent-card::before {
+      content:''; position:absolute; inset:0;
+      opacity:0; transition:opacity .2s;
+    }
+    .agent-card.prisma::before { background:radial-gradient(ellipse at top left, rgba(16,185,129,.12) 0%, transparent 60%); }
+    .agent-card.pili::before   { background:radial-gradient(ellipse at top left, rgba(245,158,11,.12) 0%, transparent 60%); }
+    .agent-card:hover { border-color:rgba(255,255,255,.15); transform:translateY(-3px); box-shadow:0 20px 60px rgba(0,0,0,.4); }
+    .agent-card:hover::before { opacity:1; }
+    .agent-card.prisma:hover { border-color:rgba(16,185,129,.35); }
+    .agent-card.pili:hover   { border-color:rgba(245,158,11,.35); }
+
+    /* Card top */
+    .card-top {
+      display:flex; align-items:center; justify-content:space-between;
+      margin-bottom:20px;
+    }
+    .card-icon {
+      width:44px; height:44px; border-radius:12px;
+      display:flex; align-items:center; justify-content:center;
+      font-size:18px; flex-shrink:0;
+    }
+    .prisma .card-icon { background:rgba(16,185,129,.15); color:var(--prisma); }
+    .pili   .card-icon { background:rgba(245,158,11,.15);  color:var(--pili); }
+
+    .card-status {
+      display:flex; align-items:center; gap:5px;
+      font-size:10.5px; font-weight:600; padding:3px 10px; border-radius:20px;
+    }
+    .card-status.on  { background:rgba(34,197,94,.12); color:#4ade80; border:1px solid rgba(34,197,94,.2); }
+    .card-status.off { background:rgba(255,255,255,.05); color:rgba(255,255,255,.25); border:1px solid rgba(255,255,255,.08); }
+    .card-status .sdot { width:6px; height:6px; border-radius:50%; }
+    .card-status.on  .sdot { background:#4ade80; animation:pulse 1.4s infinite; }
+    .card-status.off .sdot { background:rgba(255,255,255,.2); }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    /* Card body */
+    .card-name {
+      font-size:22px; font-weight:900; letter-spacing:-.7px;
+      color:#fff; margin-bottom:2px;
+    }
+    .prisma .card-name { color:var(--prisma); }
+    .pili   .card-name { color:var(--pili); }
+    .card-label { font-size:12px; color:rgba(255,255,255,.35); margin-bottom:4px; font-weight:500; }
+    .card-desc  { font-size:12px; color:rgba(255,255,255,.3); margin-bottom:24px; line-height:1.5; }
+
+    /* Stats row */
+    .card-stats {
+      display:grid; grid-template-columns:repeat(3,1fr);
+      gap:0; margin-bottom:24px;
+      border:1px solid rgba(255,255,255,.07); border-radius:12px; overflow:hidden;
+    }
+    .stat-box {
+      padding:14px 10px; text-align:center;
+      border-right:1px solid rgba(255,255,255,.07);
+    }
+    .stat-box:last-child { border-right:none; }
+    .stat-n { font-size:28px; font-weight:900; line-height:1; margin-bottom:4px; letter-spacing:-1px; }
+    .prisma .stat-n { color:var(--prisma); }
+    .pili   .stat-n { color:var(--pili); }
+    .stat-l { font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:.8px; color:rgba(255,255,255,.25); }
+
+    /* CTA */
+    .card-cta {
+      display:flex; align-items:center; justify-content:space-between;
+      padding-top:20px; border-top:1px solid rgba(255,255,255,.07);
+    }
+    .cta-text { font-size:12px; color:rgba(255,255,255,.3); }
+    .cta-btn {
+      display:flex; align-items:center; gap:7px;
+      font-size:12.5px; font-weight:700; padding:8px 18px; border-radius:9px;
+      color:#fff; border:none; cursor:pointer; font-family:inherit;
+      transition:all .15s;
+    }
+    .prisma .cta-btn { background:var(--prisma); }
+    .pili   .cta-btn { background:var(--pili); }
+    .cta-btn:hover { filter:brightness(1.1); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark"><i class="fa fa-bolt"></i></div>
+    <span class="logo-name">Máquina de Vendas</span>
+    <span class="logo-sep">·</span>
+    <span class="logo-sub">Prisma &amp; Pili</span>
+  </div>
+  <div class="hdr-clock" id="clock">--:--</div>
+</header>
+
+<div class="hero">
+  <div class="hero-eyebrow">Selecione o agente</div>
+  <h1 class="hero-title">Qual robô<br>você quer controlar?</h1>
+  <p class="hero-sub">Cada agente tem seu próprio painel, pipeline e controles.</p>
+
+  <div class="cards">
+
+    <!-- PRISMA -->
+    <a href="/prisma" class="agent-card prisma">
+      <div class="card-top">
+        <div class="card-icon"><i class="fa fa-industry"></i></div>
+        <div class="card-status off" id="p-badge">
+          <div class="sdot"></div><span id="p-badge-txt">Parado</span>
+        </div>
+      </div>
+      <div class="card-name">Prisma</div>
+      <div class="card-label">PrismaBiz</div>
+      <div class="card-desc">Gestão da Qualidade<br>WhatsApp + LinkedIn</div>
+      <div class="card-stats">
+        <div class="stat-box">
+          <div class="stat-n" id="p-leads">{{ prisma.total_leads }}</div>
+          <div class="stat-l">Leads</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-n" id="p-today">{{ prisma.msgs_hoje }}</div>
+          <div class="stat-l">Msgs hoje</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-n" id="p-demos">{{ prisma.demos }}</div>
+          <div class="stat-l">Reuniões</div>
+        </div>
+      </div>
+      <div class="card-cta">
+        <span class="cta-text">Leads, pipeline e controles</span>
+        <button class="cta-btn"><i class="fa fa-arrow-right"></i> Abrir</button>
+      </div>
+    </a>
+
+    <!-- PILI -->
+    <a href="/pili" class="agent-card pili">
+      <div class="card-top">
+        <div class="card-icon"><i class="fa fa-wheat-awn"></i></div>
+        <div class="card-status off" id="l-badge">
+          <div class="sdot"></div><span id="l-badge-txt">Parado</span>
+        </div>
+      </div>
+      <div class="card-name">Pili</div>
+      <div class="card-label">Equipamentos</div>
+      <div class="card-desc">Tombadores &amp; Coletores de Grãos<br>WhatsApp + LinkedIn</div>
+      <div class="card-stats">
+        <div class="stat-box">
+          <div class="stat-n" id="l-leads">{{ pili.total_leads }}</div>
+          <div class="stat-l">Leads</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-n" id="l-today">{{ pili.msgs_hoje }}</div>
+          <div class="stat-l">Msgs hoje</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-n" id="l-demos">{{ pili.demos }}</div>
+          <div class="stat-l">Reuniões</div>
+        </div>
+      </div>
+      <div class="card-cta">
+        <span class="cta-text">Leads, pipeline e controles</span>
+        <button class="cta-btn"><i class="fa fa-arrow-right"></i> Abrir</button>
+      </div>
+    </a>
+
+  </div>
+</div>
+
+<script>
+function tick(){
+  document.getElementById('clock').textContent=
+    new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+}
+tick(); setInterval(tick,10000);
+
+function loadStatus(bot){
+  const px = bot==='prisma'?'p':'l';
+  fetch(`/api/${bot}/status`).then(r=>r.json()).then(d=>{
+    const badge = document.getElementById(`${px}-badge`);
+    const txt   = document.getElementById(`${px}-badge-txt`);
+    if(!badge) return;
+    if(d.wa || d.li){
+      badge.className='card-status on';
+      if(d.wa && d.li) txt.textContent='WA + LinkedIn';
+      else if(d.wa)    txt.textContent='Internet ativo';
+      else             txt.textContent='LinkedIn ativo';
+    } else {
+      badge.className='card-status off';
+      txt.textContent='Parado';
+    }
+  }).catch(()=>{});
+}
+
+function refreshStats(){
+  fetch('/api/prisma/stats').then(r=>r.json()).then(d=>{
+    document.getElementById('p-leads').textContent=d.total_leads;
+    document.getElementById('p-today').textContent=d.msgs_hoje;
+    document.getElementById('p-demos').textContent=d.demos;
+  }).catch(()=>{});
+  fetch('/api/pili/stats').then(r=>r.json()).then(d=>{
+    document.getElementById('l-leads').textContent=d.total_leads;
+    document.getElementById('l-today').textContent=d.msgs_hoje;
+    document.getElementById('l-demos').textContent=d.demos;
+  }).catch(()=>{});
+}
+
+loadStatus('prisma');
+loadStatus('pili');
+setInterval(()=>{loadStatus('prisma');loadStatus('pili');},10000);
+setInterval(refreshStats,30000);
+</script>
+</body>
+</html>
