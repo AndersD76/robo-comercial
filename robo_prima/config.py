@@ -214,7 +214,13 @@ Obrigado pela atenção! 🙏""",
 # =============================================================================
 # BANCO DE DADOS (PostgreSQL — Neon)
 # =============================================================================
-DATABASE_URL = os.environ.get('DATABASE_URL', '')
+_raw_db = os.environ.get('DATABASE_URL', '')
+if _raw_db.startswith('psql://'):
+    DATABASE_URL = 'postgresql://' + _raw_db[7:]
+elif _raw_db.startswith('postgres://'):
+    DATABASE_URL = 'postgresql://' + _raw_db[11:]
+else:
+    DATABASE_URL = _raw_db
 DB_SCHEMA = 'prisma'  # schema exclusivo deste bot no Neon
 
 # =============================================================================
