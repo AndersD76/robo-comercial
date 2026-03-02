@@ -26,7 +26,10 @@ _procs: dict = {
 
 def _bot_dir(bot: str) -> str:
     base = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(base, f'robo_{bot}')
+    # pasta em disco usa nome curto: prisma -> prima
+    _map = {'prisma': 'prima', 'pili': 'pili'}
+    folder = _map.get(bot, bot)
+    return os.path.join(base, f'robo_{folder}')
 
 
 def _is_running(proc) -> bool:
@@ -198,13 +201,15 @@ def get_linkedin(schema: str, limite: int = 30) -> list:
 _BOT_CFG = {
     'prisma': {
         'name': 'Prisma', 'label': 'PrismaBiz',
-        'color': '#10b981', 'color_bg': '#f0fdf8',
-        'color_bd': 'rgba(16,185,129,.2)',
+        'color': '#10b981',
+        'color_dim': 'rgba(16,185,129,.08)',
+        'color_bd': 'rgba(16,185,129,.18)',
     },
     'pili': {
         'name': 'Pili', 'label': 'Equipamentos',
-        'color': '#f59e0b', 'color_bg': '#fffcf0',
-        'color_bd': 'rgba(245,158,11,.2)',
+        'color': '#f59e0b',
+        'color_dim': 'rgba(245,158,11,.08)',
+        'color_bd': 'rgba(245,158,11,.18)',
     },
 }
 
