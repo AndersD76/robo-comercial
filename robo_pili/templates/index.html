@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robô Comercial Pili — Tombadores e Coletores de Grãos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --accent: #4ade80;
+      --accent2: #16a34a;
+      --gold: #d97706;
+      --gold2: #fbbf24;
+      --bg: #080d08;
+      --bg2: #0d150d;
+      --card: rgba(255,255,255,0.04);
+      --border: rgba(255,255,255,0.08);
+      --text: #e8f0e8;
+      --muted: #7a9a7a;
+      --font: 'Space Grotesk', sans-serif;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .logo-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--accent2), var(--gold));
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+
+    .badge {
+      background: rgba(74,222,128,0.12);
+      border: 1px solid rgba(74,222,128,0.28);
+      color: var(--accent);
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+
+    /* ── LAYOUT ── */
+    main { max-width: 1300px; margin: 0 auto; padding: 32px 24px; }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 16px;
+    }
+
+    /* ── STATS GRID ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      transition: border-color .2s;
+    }
+
+    .stat-card:hover { border-color: rgba(74,222,128,0.3); }
+
+    .stat-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      margin-bottom: 12px;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .stat-label { font-size: 13px; color: var(--muted); }
+
+    /* ── TWO COLUMNS ── */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-bottom: 32px;
+    }
+
+    @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* ── CARDS ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ── FUNNEL ── */
+    .funnel { display: flex; flex-direction: column; gap: 10px; }
+
+    .funnel-step {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .funnel-bar-wrap {
+      flex: 1;
+      background: rgba(255,255,255,0.06);
+      border-radius: 6px;
+      height: 28px;
+      overflow: hidden;
+    }
+
+    .funnel-bar {
+      height: 100%;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      padding-left: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      transition: width .8s ease;
+      min-width: 40px;
+    }
+
+    .funnel-label { font-size: 12px; color: var(--muted); width: 100px; text-align: right; }
+    .funnel-count { font-size: 13px; font-weight: 700; width: 50px; text-align: right; }
+
+    /* ── TABLE ── */
+    .table-wrap { overflow-x: auto; }
+
+    table { width: 100%; border-collapse: collapse; }
+
+    th {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      padding: 8px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 10px 12px;
+      font-size: 13px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .status-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    /* ── LOG ── */
+    .log-list { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
+
+    .log-item {
+      display: flex;
+      gap: 12px;
+      padding: 10px;
+      background: rgba(255,255,255,0.02);
+      border-radius: 8px;
+      font-size: 12px;
+    }
+
+    .log-time { color: var(--muted); white-space: nowrap; }
+    .log-msg { flex: 1; }
+
+    /* ── COMMANDS ── */
+    .commands {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 32px;
+    }
+
+    .cmd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+
+    .cmd-block {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+
+    .cmd-title { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    .cmd-code {
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      color: var(--accent);
+      background: rgba(74,222,128,0.06);
+      padding: 6px 10px;
+      border-radius: 6px;
+      word-break: break-all;
+    }
+
+    /* ── COLORS ── */
+    .c-green  { color: var(--accent); }
+    .c-gold   { color: var(--gold2); }
+    .c-blue   { color: #60a5fa; }
+    .c-purple { color: #a78bfa; }
+    .c-orange { color: #fb923c; }
+    .c-red    { color: #f87171; }
+
+    .bg-green  { background: rgba(74,222,128,0.12); }
+    .bg-gold   { background: rgba(251,191,36,0.15); }
+    .bg-blue   { background: rgba(96,165,250,0.15); }
+    .bg-purple { background: rgba(167,139,250,0.15); }
+
+    /* STATUS COLORS */
+    .s-novo       { background: rgba(96,165,250,.15);  color: #60a5fa; }
+    .s-contactada { background: rgba(251,191,36,.15);  color: #fbbf24; }
+    .s-respondeu  { background: rgba(167,139,250,.15); color: #a78bfa; }
+    .s-convertido { background: rgba(74,222,128,.15);  color: var(--accent); }
+    .s-encerrado  { background: rgba(248,113,113,.15); color: #f87171; }
+
+    /* ── PRODUCT CHIPS ── */
+    .product-chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+    .chip {
+      background: rgba(74,222,128,0.1);
+      border: 1px solid rgba(74,222,128,0.2);
+      color: var(--accent);
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .chip.gold {
+      background: rgba(217,119,6,0.12);
+      border-color: rgba(217,119,6,0.25);
+      color: var(--gold2);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🌾</div>
+    <div>
+      <div>Robô Comercial Pili</div>
+      <div style="font-size:11px;color:var(--muted);font-weight:400;">Pili Equipamentos · Tombadores e Coletores de Grãos</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div class="product-chips">
+      <span class="chip">🚜 Tombadores</span>
+      <span class="chip gold">🌾 Coletores</span>
+    </div>
+    <div class="badge">
+      <div class="dot"></div>
+      <span id="statusText">Carregando...</span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- ── STATS ── -->
+  <div class="section-title" style="margin-top:8px;">Visão Geral</div>
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon bg-blue"><i class="fa fa-building c-blue"></i></div>
+      <div class="stat-value c-blue" id="totalLeads">—</div>
+      <div class="stat-label">Leads Encontrados</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon bg-gold"><i class="fa fa-paper-plane c-gold"></i></div>
+      <div class="stat-value c-gold" id="msgEnviadas">—</div>
+      <div class="stat-label">Msgs Enviadas</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon bg-purple"><i class="fab fa-whatsapp c-purple"></i></div>
+      <div class="stat-value c-purple" id="responderam">—</div>
+      <div class="stat-label">Responderam</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon bg-green"><i class="fa fa-calendar-check c-green"></i></div>
+      <div class="stat-value c-green" id="demos">—</div>
+      <div class="stat-label">Demos Agendadas</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon" style="background:rgba(251,146,60,.15)"><i class="fa fa-chart-line c-orange"></i></div>
+      <div class="stat-value c-orange" id="taxaResp">—%</div>
+      <div class="stat-label">Taxa de Resposta</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon bg-green"><i class="fab fa-whatsapp c-green"></i></div>
+      <div class="stat-value c-green" id="msgsHoje">—</div>
+      <div class="stat-label">Msgs Hoje</div>
+    </div>
+  </div>
+
+  <!-- ── FUNNEL + LOG ── -->
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title"><i class="fa fa-filter c-green"></i> Funil de Vendas — Grãos</div>
+      <div class="funnel" id="funnel">
+        <div class="funnel-step">
+          <div class="funnel-label">Leads</div>
+          <div class="funnel-bar-wrap">
+            <div class="funnel-bar" id="barLeads" style="width:100%;background:linear-gradient(90deg,#1d4ed8,#60a5fa)">
+              <span id="lblLeads">0</span>
+            </div>
+          </div>
+          <div class="funnel-count" id="cntLeads">0</div>
+        </div>
+        <div class="funnel-step">
+          <div class="funnel-label">Contactadas</div>
+          <div class="funnel-bar-wrap">
+            <div class="funnel-bar" id="barContact" style="width:0%;background:linear-gradient(90deg,#92400e,#fbbf24)">
+              <span id="lblContact">0</span>
+            </div>
+          </div>
+          <div class="funnel-count" id="cntContact">0</div>
+        </div>
+        <div class="funnel-step">
+          <div class="funnel-label">Responderam</div>
+          <div class="funnel-bar-wrap">
+            <div class="funnel-bar" id="barResp" style="width:0%;background:linear-gradient(90deg,#5b21b6,#a78bfa)">
+              <span id="lblResp">0</span>
+            </div>
+          </div>
+          <div class="funnel-count" id="cntResp">0</div>
+        </div>
+        <div class="funnel-step">
+          <div class="funnel-label">Demos / Visitas</div>
+          <div class="funnel-bar-wrap">
+            <div class="funnel-bar" id="barDemo" style="width:0%;background:linear-gradient(90deg,#166534,#4ade80)">
+              <span id="lblDemo">0</span>
+            </div>
+          </div>
+          <div class="funnel-count" id="cntDemo">0</div>
+        </div>
+      </div>
+
+      <!-- Segmentos -->
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">SEGMENTOS PROSPECTADOS</div>
+        <div id="segmentos" style="display:flex;flex-wrap:wrap;gap:6px;">
+          <span class="chip">Cerealistas</span>
+          <span class="chip gold">Cooperativas</span>
+          <span class="chip">Silos / Armazéns</span>
+          <span class="chip gold">Fazendas</span>
+          <span class="chip">Transportadoras</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><i class="fa fa-clock c-gold"></i> Atividade Recente</div>
+      <div class="log-list" id="logList">
+        <div style="color:var(--muted);font-size:13px;">Carregando logs...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── COMANDOS ── -->
+  <div class="section-title">Como Executar o Robô Pili</div>
+  <div class="commands">
+    <div class="cmd-grid">
+      <div class="cmd-block">
+        <div class="cmd-title">🔍 Buscar Cerealistas e Cooperativas</div>
+        <div class="cmd-code">python -m agente --buscar "cerealista MT"</div>
+      </div>
+      <div class="cmd-block">
+        <div class="cmd-title">🌐 Enriquecer (WhatsApp + CNPJ)</div>
+        <div class="cmd-code">python -m agente --enriquecer --limite 20</div>
+      </div>
+      <div class="cmd-block">
+        <div class="cmd-title">📱 Enviar Mensagens</div>
+        <div class="cmd-code">python -m agente --enviar --limite 10</div>
+      </div>
+      <div class="cmd-block">
+        <div class="cmd-title">🤖 Responder com IA (tombadores/coletores)</div>
+        <div class="cmd-code">python -m agente --responder</div>
+      </div>
+      <div class="cmd-block">
+        <div class="cmd-title">⚡ Modo Automático</div>
+        <div class="cmd-code">python -m agente --auto</div>
+      </div>
+      <div class="cmd-block">
+        <div class="cmd-title">📊 Estatísticas</div>
+        <div class="cmd-code">python -m agente --stats</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── LEADS TABLE ── -->
+  <div class="card">
+    <div class="card-title"><i class="fa fa-list c-blue"></i> Leads — Setor de Grãos</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Empresa</th>
+            <th>WhatsApp</th>
+            <th>Segmento</th>
+            <th>Estado</th>
+            <th>Score</th>
+            <th>Status</th>
+            <th>Demo</th>
+          </tr>
+        </thead>
+        <tbody id="leadsTable">
+          <tr><td colspan="7" style="color:var(--muted);text-align:center;padding:24px;">Carregando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  function fmtStatus(s) {
+    const map = {
+      novo: 's-novo', contactada: 's-contactada', respondeu: 's-respondeu',
+      convertido: 's-convertido', encerrado: 's-encerrado'
+    };
+    return `<span class="status-badge ${map[s]||'s-novo'}">${s||'novo'}</span>`;
+  }
+
+  function pct(v, total) {
+    return total > 0 ? Math.max(4, Math.round(v / total * 100)) : 4;
+  }
+
+  async function loadStats() {
+    try {
+      const r = await fetch('/api/stats');
+      const d = await r.json();
+
+      document.getElementById('totalLeads').textContent  = d.total_leads;
+      document.getElementById('msgEnviadas').textContent = d.msgs_enviadas;
+      document.getElementById('responderam').textContent = d.responderam;
+      document.getElementById('demos').textContent       = d.demos;
+      document.getElementById('msgsHoje').textContent    = d.msgs_hoje;
+
+      const taxa = d.msgs_enviadas > 0
+        ? Math.round(d.respostas / d.msgs_enviadas * 100) : 0;
+      document.getElementById('taxaResp').textContent = taxa + '%';
+
+      // Funil
+      const total = d.total_leads || 1;
+      const bars = [
+        [d.total_leads,   100,                          'barLeads',   'cntLeads',   'lblLeads'],
+        [d.contactadas,   pct(d.contactadas,   total),  'barContact', 'cntContact', 'lblContact'],
+        [d.responderam,   pct(d.responderam,   total),  'barResp',    'cntResp',    'lblResp'],
+        [d.demos,         pct(d.demos,         total),  'barDemo',    'cntDemo',    'lblDemo'],
+      ];
+      bars.forEach(([v, p, bar, cnt, lbl]) => {
+        document.getElementById(cnt).textContent = v;
+        document.getElementById(lbl).textContent = v;
+        document.getElementById(bar).style.width = p + '%';
+      });
+
+      document.getElementById('statusText').textContent = 'Online';
+    } catch(e) {
+      document.getElementById('statusText').textContent = 'Offline';
+    }
+  }
+
+  async function loadLeads() {
+    try {
+      const r = await fetch('/api/leads?limite=30');
+      const leads = await r.json();
+      const tb = document.getElementById('leadsTable');
+      if (!leads.length) {
+        tb.innerHTML = '<tr><td colspan="7" style="color:var(--muted);text-align:center;padding:24px;">Nenhum lead ainda</td></tr>';
+        return;
+      }
+      tb.innerHTML = leads.map(l => `
+        <tr>
+          <td>${l.nome_fantasia||'—'}</td>
+          <td style="font-family:monospace;font-size:12px;">${l.whatsapp||'—'}</td>
+          <td>${l.segmento||'—'}</td>
+          <td><span style="font-size:12px;color:var(--gold2)">${l.estado||'—'}</span></td>
+          <td><strong style="color:var(--accent)">${l.score||0}</strong></td>
+          <td>${fmtStatus(l.status)}</td>
+          <td>${l.demo_status
+            ? `<span class="status-badge s-convertido">${l.demo_status}</span>`
+            : '—'}</td>
+        </tr>`).join('');
+    } catch(e) {}
+  }
+
+  async function loadLogs() {
+    try {
+      const r = await fetch('/api/logs');
+      const logs = await r.json();
+      const el = document.getElementById('logList');
+      if (!logs.length) {
+        el.innerHTML = '<div style="color:var(--muted);font-size:13px;">Sem atividade ainda</div>';
+        return;
+      }
+      el.innerHTML = logs.slice(0,20).map(l => `
+        <div class="log-item">
+          <span class="log-time">${(l.timestamp||'').substring(11,19)}</span>
+          <span class="log-msg">${l.mensagem||''}</span>
+        </div>`).join('');
+    } catch(e) {}
+  }
+
+  function refresh() {
+    loadStats();
+    loadLeads();
+    loadLogs();
+  }
+
+  refresh();
+  setInterval(refresh, 30000);
+</script>
+</body>
+</html>

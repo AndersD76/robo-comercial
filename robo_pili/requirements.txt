@@ -1,0 +1,16 @@
+# Robô Comercial Pili — Tombadores e Coletores de Grãos
+# Instale com: pip install -r requirements.txt
+# Depois: python -m playwright install chromium
+
+flask>=3.0.0
+gunicorn>=21.0.0
+playwright>=1.40.0
+anthropic>=0.18.0
+aiohttp>=3.9.0
+beautifulsoup4>=4.12.0
+psycopg2-binary>=2.9.0
+
+# Google Calendar (agendamento de demos/visitas técnicas)
+google-api-python-client>=2.100.0
+google-auth-oauthlib>=1.1.0
+google-auth-httplib2>=0.1.1

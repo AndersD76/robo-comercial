@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Banco de dados (local)
+*.db
+*.db-shm
+*.db-wal
+
+# Google Calendar
+credentials.json
+token.json
+
+# WhatsApp sessions (NÃO subir ao git)
+whatsapp_session/
+*/whatsapp_session/
+
+# Variáveis de ambiente
+.env
+.env.*
+
+# Logs
+*.log
+
+# MacOS / Windows
+.DS_Store
+Thumbs.db
