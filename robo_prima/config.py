@@ -11,6 +11,39 @@ import os
 # =============================================================================
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 
+# LinkedIn — definir no Railway como variáveis de ambiente (nunca no código)
+LINKEDIN_EMAIL    = os.environ.get('LINKEDIN_EMAIL', '')
+LINKEDIN_PASSWORD = os.environ.get('LINKEDIN_PASSWORD', '')
+
+# Limites diários LinkedIn (anti-ban)
+LINKEDIN_MAX_CONEXOES_DIA  = int(os.environ.get('LINKEDIN_MAX_CONEXOES', '20'))
+LINKEDIN_MAX_MENSAGENS_DIA = int(os.environ.get('LINKEDIN_MAX_MSGS', '15'))
+
+# Cargos-alvo para prospecção LinkedIn — gestão da qualidade
+LINKEDIN_CARGOS_ALVO = [
+    'qualidade', 'quality', 'SGQ', 'gestão da qualidade',
+    'gerente de qualidade', 'coordenador de qualidade',
+    'responsável pela qualidade', 'supervisor de qualidade',
+    'analista de qualidade', 'engenheiro de qualidade',
+    'ISO', 'auditoria', 'melhoria contínua', 'lean', 'six sigma',
+    'diretor industrial', 'gerente industrial', 'gerente de produção',
+    'gerente de operações', 'head of quality',
+]
+
+# Termos de busca LinkedIn — empresas industriais / ISO 9001
+LINKEDIN_TERMOS_BUSCA = [
+    'gerente qualidade metalurgica',
+    'coordenador SGQ industria',
+    'responsavel qualidade fabrica SP',
+    'gerente qualidade ISO 9001',
+    'quality manager manufacturing Brazil',
+    'gerente qualidade usinagem',
+    'coordenador qualidade industria alimentos',
+    'analista qualidade industria',
+    'gestor qualidade fabrica',
+    'gerente producao industria ISO',
+]
+
 # Link do Google Calendar Appointment Scheduling
 DEMO_CAL_LINK = os.environ.get(
     'DEMO_CAL_LINK',

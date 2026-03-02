@@ -11,6 +11,39 @@ import os
 # =============================================================================
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 
+# LinkedIn — definir no Railway como variáveis de ambiente (nunca no código)
+LINKEDIN_EMAIL    = os.environ.get('LINKEDIN_EMAIL', '')
+LINKEDIN_PASSWORD = os.environ.get('LINKEDIN_PASSWORD', '')
+
+# Limites diários LinkedIn (anti-ban)
+LINKEDIN_MAX_CONEXOES_DIA  = int(os.environ.get('LINKEDIN_MAX_CONEXOES', '20'))
+LINKEDIN_MAX_MENSAGENS_DIA = int(os.environ.get('LINKEDIN_MAX_MSGS', '15'))
+
+# Cargos-alvo para prospecção LinkedIn — agronegócio / grãos
+LINKEDIN_CARGOS_ALVO = [
+    'cerealista', 'cooperativa', 'armazem', 'armazém', 'silo',
+    'gerente operacoes', 'gerente de operações', 'gerente agricola',
+    'diretor agricola', 'gerente de recebimento', 'supervisor recebimento',
+    'gerente logistica', 'diretor operacional', 'gerente compras',
+    'produtor rural', 'fazenda', 'agronegocio', 'agronegócio',
+    'head of operations', 'operations manager', 'grain',
+    'coordenador logistica', 'analista operacoes',
+]
+
+# Termos de busca LinkedIn — cerealistas, cooperativas, silos
+LINKEDIN_TERMOS_BUSCA = [
+    'gerente operacoes cerealista',
+    'diretor cooperativa agricola',
+    'supervisor recebimento graos',
+    'gerente logistica agronegocio',
+    'coordenador operacoes silo',
+    'gerente compras graos cooperativa',
+    'diretor operacional cerealista MT',
+    'operations manager grain Brazil',
+    'gerente recebimento soja milho',
+    'supervisor armazem agricola',
+]
+
 DEMO_CAL_LINK = os.environ.get(
     'DEMO_CAL_LINK',
     'https://calendar.app.google/SEU_LINK_AQUI'

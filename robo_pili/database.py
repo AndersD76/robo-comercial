@@ -88,6 +88,23 @@ def init_database():
         ultima_execucao TIMESTAMP, modo TEXT DEFAULT 'busca'
     )""")
 
+    # Tabela de leads encontrados via LinkedIn
+    c.execute("""CREATE TABLE IF NOT EXISTS leads_linkedin (
+        id           BIGSERIAL PRIMARY KEY,
+        nome         TEXT,
+        cargo        TEXT,
+        empresa      TEXT,
+        url_perfil   TEXT UNIQUE,
+        termo_busca  TEXT,
+        status       TEXT DEFAULT 'encontrado',
+        encontrado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        conexao_em   TIMESTAMP,
+        dm_enviada_em TIMESTAMP,
+        respondeu    INTEGER DEFAULT 0,
+        ultima_resposta TEXT,
+        demo_status  TEXT
+    )""")
+
     c.execute("INSERT INTO execucao (id, status) VALUES (1, 'parado') ON CONFLICT (id) DO NOTHING")
     conn.commit()
     conn.close()
@@ -384,6 +401,89 @@ def get_status_execucao():
     result = c.fetchone()
     conn.close()
     return dict(result) if result else None
+
+
+# =============================================================================
+# LINKEDIN
+# =============================================================================
+
+def registrar_log(tipo, mensagem, detalhes=None):
+    """Alias de log_acao para uso do linkedin_bot."""
+    log_acao(tipo, mensagem, detalhes)
+
+
+def salvar_lead_linkedin(perfil: dict, status: str = 'encontrado'):
+    url = perfil.get('url_perfil', '')
+    if not url:
+        return None
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute("""
+            INSERT INTO leads_linkedin
+                (nome, cargo, empresa, url_perfil, termo_busca, status)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (url_perfil) DO UPDATE SET status = EXCLUDED.status
+            RETURNING id
+        """, (
+            perfil.get('nome'), perfil.get('cargo'),
+            perfil.get('empresa'), url,
+            perfil.get('termo_busca'), status
+        ))
+        row = c.fetchone()
+        if status == 'conexao_enviada':
+            c.execute(
+                "UPDATE leads_linkedin SET conexao_em = CURRENT_TIMESTAMP "
+                "WHERE url_perfil = %s", (url,)
+            )
+        elif status == 'dm_enviada':
+            c.execute(
+                "UPDATE leads_linkedin SET dm_enviada_em = CURRENT_TIMESTAMP "
+                "WHERE url_perfil = %s", (url,)
+            )
+        incrementar_contagem(f'linkedin_{status}')
+        conn.commit()
+        return row['id'] if row else None
+    except Exception as e:
+        conn.rollback()
+        log_acao('erro', f'salvar_lead_linkedin: {e}')
+        return None
+    finally:
+        conn.close()
+
+
+def get_leads_linkedin(limite=20):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT * FROM leads_linkedin ORDER BY encontrado_em DESC LIMIT %s",
+        (limite,)
+    )
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_stats_linkedin():
+    conn = get_connection()
+    c = conn.cursor()
+    stats = {}
+    c.execute("SELECT COUNT(*) AS n FROM leads_linkedin")
+    stats['total'] = c.fetchone()['n']
+    c.execute(
+        "SELECT COUNT(*) AS n FROM leads_linkedin "
+        "WHERE status = 'conexao_enviada'"
+    )
+    stats['conexoes'] = c.fetchone()['n']
+    c.execute("SELECT COUNT(*) AS n FROM leads_linkedin WHERE respondeu = 1")
+    stats['responderam'] = c.fetchone()['n']
+    c.execute(
+        "SELECT COUNT(*) AS n FROM leads_linkedin "
+        "WHERE demo_status = 'confirmado'"
+    )
+    stats['demos'] = c.fetchone()['n']
+    conn.close()
+    return stats
 
 
 # =============================================================================
