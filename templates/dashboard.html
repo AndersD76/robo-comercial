@@ -307,6 +307,67 @@
       animation:pulse 1.4s infinite;
     }
     .console-dot.off { background:var(--muted); animation:none; }
+
+    /* ── Configurar LinkedIn ── */
+    .btn-cfg {
+      font-family:inherit; font-size:12px; font-weight:600;
+      padding:6px 11px; border-radius:8px; cursor:pointer;
+      background:rgba(59,130,246,.12); border:1px solid rgba(59,130,246,.25);
+      color:#60a5fa; transition:all .15s; display:flex; align-items:center; gap:5px;
+    }
+    .btn-cfg:hover { background:rgba(59,130,246,.2); border-color:rgba(59,130,246,.4); }
+
+    /* ── Modal credenciais LinkedIn ── */
+    .li-cfg-overlay {
+      display:none; position:fixed; inset:0; z-index:500;
+      background:rgba(0,0,0,.7); backdrop-filter:blur(6px);
+      align-items:center; justify-content:center;
+    }
+    .li-cfg-overlay.open { display:flex; }
+    .li-cfg-card {
+      background:#1e293b; border:1px solid rgba(59,130,246,.3);
+      border-radius:16px; width:360px; overflow:hidden;
+      box-shadow:0 20px 60px rgba(0,0,0,.6);
+    }
+    .li-cfg-hd {
+      display:flex; align-items:center; gap:10px; padding:16px 20px;
+      border-bottom:1px solid var(--border); font-weight:700; font-size:14px;
+    }
+    .li-cfg-hd button { margin-left:auto; background:none; border:none;
+      cursor:pointer; color:var(--muted); font-size:14px; }
+    .li-cfg-hd button:hover { color:var(--text); }
+    .li-cfg-body { padding:20px; display:flex; flex-direction:column; gap:14px; }
+    .li-cfg-field { display:flex; flex-direction:column; gap:5px; }
+    .li-cfg-field label { font-size:11px; font-weight:600;
+      text-transform:uppercase; letter-spacing:.8px; color:var(--muted); }
+    .li-cfg-field input {
+      background:rgba(255,255,255,.06); border:1px solid var(--border2);
+      border-radius:8px; padding:9px 12px; font-size:13px;
+      color:var(--text); font-family:inherit; outline:none; transition:border .15s;
+    }
+    .li-cfg-field input:focus { border-color:rgba(59,130,246,.5); }
+    .li-cfg-hint {
+      font-size:11px; color:var(--muted); display:flex; align-items:center;
+      gap:6px; background:rgba(255,255,255,.03); border-radius:8px;
+      padding:8px 10px; border:1px solid var(--border);
+    }
+    .li-cfg-footer {
+      display:flex; justify-content:flex-end; gap:8px;
+      padding:14px 20px; border-top:1px solid var(--border);
+    }
+    .li-cfg-footer button {
+      font-family:inherit; font-size:12px; font-weight:600;
+      padding:7px 16px; border-radius:8px; cursor:pointer; transition:all .15s;
+    }
+    .li-cfg-footer .btn-cancel {
+      background:transparent; border:1px solid var(--border2); color:var(--muted);
+    }
+    .li-cfg-footer .btn-cancel:hover { color:var(--text); }
+    .li-cfg-footer .btn-save {
+      background:rgba(59,130,246,.2); border:1px solid rgba(59,130,246,.4);
+      color:#60a5fa;
+    }
+    .li-cfg-footer .btn-save:hover { background:rgba(59,130,246,.3); }
     .console-actions { display:flex; gap:6px; }
     .con-btn {
       font-family:inherit; font-size:10px; font-weight:600;
@@ -372,6 +433,7 @@
         </button>
       </div>
       <div class="ctrl-actions">
+        <button class="btn-cfg" onclick="openLiConfig()" title="Credenciais LinkedIn"><i class="fa-brands fa-linkedin"></i> Configurar</button>
         <button class="btn-stop"  onclick="botStopSel(this)"><i class="fa fa-stop"></i> Parar</button>
         <button class="btn-start" onclick="botStartSel(this)"><i class="fa fa-play"></i> Iniciar</button>
       </div>
@@ -487,6 +549,36 @@
       <li><span class="step-n">3</span>Toque em Conectar um Aparelho</li>
       <li><span class="step-n">4</span>Aponte para este QR Code</li>
     </ol>
+  </div>
+</div>
+
+<!-- LINKEDIN CREDENTIALS MODAL -->
+<div class="li-cfg-overlay" id="li-cfg-overlay" onclick="closeLiConfig(event)">
+  <div class="li-cfg-card">
+    <div class="li-cfg-hd">
+      <i class="fa-brands fa-linkedin" style="color:#3b82f6"></i>
+      Credenciais LinkedIn
+      <button onclick="closeLiConfig()"><i class="fa fa-times"></i></button>
+    </div>
+    <div class="li-cfg-body">
+      <div class="li-cfg-field">
+        <label>E-mail</label>
+        <input type="email" id="li-email" placeholder="seu@email.com" autocomplete="username">
+      </div>
+      <div class="li-cfg-field">
+        <label>Senha</label>
+        <input type="password" id="li-password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <div class="li-cfg-hint">
+        <i class="fa fa-lock"></i>
+        Salvo localmente no servidor. Sobrepõe a variável de ambiente LINKEDIN_EMAIL/PASSWORD.
+      </div>
+      <div id="li-cfg-msg" style="display:none;font-size:12px;font-weight:600;padding:8px 10px;border-radius:8px"></div>
+    </div>
+    <div class="li-cfg-footer">
+      <button class="btn-cancel" onclick="closeLiConfig()">Cancelar</button>
+      <button class="btn-save" onclick="saveLiConfig()"><i class="fa fa-check"></i> Salvar</button>
+    </div>
   </div>
 </div>
 
@@ -723,10 +815,11 @@ let _conCanal='wa', _conMinimized=false, _conLastLine=0, _conTimer=null;
 
 function colorLine(txt){
   const t=txt.toLowerCase();
-  if(t.includes('erro')||t.includes('error')||t.includes('falha')) return 'ln-err';
-  if(t.includes('warn')||t.includes('aviso'))  return 'ln-warn';
-  if(t.includes('[ok]')||t.includes('conectad')||t.includes('iniciand')) return 'ln-conn';
-  if(t.includes('ok ')||t.includes('enviada')||t.includes('enviado'))     return 'ln-ok';
+  // Emoji-based log format (new)
+  if(txt.includes('✗')||t.includes('erro')||t.includes('error')||t.includes('falha')) return 'ln-err';
+  if(txt.includes('⚠')||t.includes('warn')||t.includes('aviso'))  return 'ln-warn';
+  if(txt.includes('━━━')||t.includes('[ok]')||t.includes('conectad')||t.includes('iniciand')) return 'ln-conn';
+  if(txt.includes('✓')||t.includes('ok ')||t.includes('enviada')||t.includes('enviado'))     return 'ln-ok';
   return '';
 }
 
@@ -826,6 +919,51 @@ fetch(`/api/${BOT}/status`).then(r=>r.json()).then(d=>{
 setInterval(refreshStats,30000);
 setInterval(loadPipe,60000);
 setInterval(loadBotStatus,10000);
+
+// ── LinkedIn credentials modal ────────────────────────────────────────────────
+function openLiConfig(){
+  document.getElementById('li-cfg-overlay').classList.add('open');
+  document.getElementById('li-cfg-msg').style.display='none';
+}
+function closeLiConfig(e){
+  if(!e||e.target===document.getElementById('li-cfg-overlay'))
+    document.getElementById('li-cfg-overlay').classList.remove('open');
+}
+function saveLiConfig(){
+  const email=document.getElementById('li-email').value.trim();
+  const pwd=document.getElementById('li-password').value;
+  const msg=document.getElementById('li-cfg-msg');
+  if(!email||!pwd){
+    msg.style.display='block';
+    msg.style.background='rgba(248,113,113,.12)';
+    msg.style.color='#f87171';
+    msg.textContent='Preencha e-mail e senha.';
+    return;
+  }
+  fetch(`/api/${BOT}/linkedin-config`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({email,password:pwd})
+  }).then(r=>r.json()).then(d=>{
+    if(d.ok){
+      msg.style.display='block';
+      msg.style.background='rgba(74,222,128,.1)';
+      msg.style.color='#4ade80';
+      msg.textContent='✓ Credenciais salvas! Reinicie o bot LinkedIn para aplicar.';
+      setTimeout(()=>{ document.getElementById('li-cfg-overlay').classList.remove('open'); },2000);
+    } else {
+      msg.style.display='block';
+      msg.style.background='rgba(248,113,113,.12)';
+      msg.style.color='#f87171';
+      msg.textContent='Erro: '+(d.error||'falha ao salvar');
+    }
+  }).catch(()=>{
+    msg.style.display='block';
+    msg.style.background='rgba(248,113,113,.12)';
+    msg.style.color='#f87171';
+    msg.textContent='Erro de conexão ao servidor.';
+  });
+}
 </script>
 </body>
 </html>

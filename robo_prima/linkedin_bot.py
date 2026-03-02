@@ -11,7 +11,7 @@ Estratégia:
 
 import asyncio
 import random
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 from config import (
     ANTHROPIC_API_KEY, DEMO_CAL_LINK,
@@ -32,6 +32,9 @@ try:
     HAS_DB = True
 except ImportError:
     HAS_DB = False
+
+# Fuso horário de Brasília (UTC-3)
+_BRT = timezone(timedelta(hours=-3))
 
 # Diretório de sessão separado do WhatsApp
 SESSION_DIR = './linkedin_session'
@@ -54,6 +57,7 @@ class LinkedInBot:
         self.conexoes_hoje = 0
         self.msgs_hoje = 0
         self._msgs_respondidas: set = set()  # hashes já respondidos na sessão
+        self._ciclo = 0
         self.ai = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) \
             if HAS_AI and ANTHROPIC_API_KEY else None
 
@@ -87,7 +91,7 @@ class LinkedInBot:
         )
         self.page = self.context.pages[0] if self.context.pages \
             else await self.context.new_page()
-        self._log("LinkedIn bot iniciado")
+        self._log("LinkedIn bot Prisma iniciado (headless)")
 
     async def fechar(self):
         if self.context:
@@ -104,6 +108,7 @@ class LinkedInBot:
         Faz login se não estiver autenticado.
         Retorna True se já estava logado ou logou com sucesso.
         """
+        self._log("Verificando sessão LinkedIn...")
         await self.page.goto(
             f'{LINKEDIN_URL}/feed/', wait_until='domcontentloaded'
         )
@@ -112,11 +117,12 @@ class LinkedInBot:
         # Verifica se já está logado (feed carregou)
         if '/feed' in self.page.url or '/in/' in self.page.url:
             self.conectado = True
-            self._log("Sessão LinkedIn ativa (sem login necessário)")
+            self._log("Sessão LinkedIn ativa — login não necessário", 'sucesso')
             return True
 
         # Precisa logar
-        self._log("Fazendo login no LinkedIn...")
+        email_conf = LINKEDIN_EMAIL[:4] + '***' if LINKEDIN_EMAIL else '(não definido)'
+        self._log(f"Fazendo login com {email_conf}...")
         try:
             await self.page.goto(
                 f'{LINKEDIN_URL}/login', wait_until='domcontentloaded'
@@ -130,12 +136,16 @@ class LinkedInBot:
             await self.page.press('#password', 'Enter')
             await asyncio.sleep(random.uniform(3, 5))
 
-            if '/feed' in self.page.url or '/checkpoint' in self.page.url:
+            if '/feed' in self.page.url:
                 self.conectado = True
-                self._log("Login LinkedIn OK")
+                self._log("Login LinkedIn OK — feed carregado", 'sucesso')
+                return True
+            elif '/checkpoint' in self.page.url:
+                self.conectado = True
+                self._log("Login OK (checkpoint de verificação — verifique o email/app)", 'aviso')
                 return True
             else:
-                self._log(f"Falha no login — URL: {self.page.url}", 'erro')
+                self._log(f"Falha no login — URL atual: {self.page.url}", 'erro')
                 return False
         except Exception as e:
             self._log(f"Erro no login: {e}", 'erro')
@@ -157,6 +167,7 @@ class LinkedInBot:
                 f'?keywords={termo.replace(" ", "%20")}'
                 f'&page={pagina}'
             )
+            self._log(f"Buscando: \"{termo}\" (página {pagina})...")
             await self.page.goto(url, wait_until='domcontentloaded')
             await asyncio.sleep(random.uniform(2, 4))
 
@@ -167,6 +178,8 @@ class LinkedInBot:
             cards = await self.page.query_selector_all(
                 'li.reusable-search__result-container'
             )
+            self._log(f"  {len(cards)} perfis encontrados na página")
+
             for card in cards[:10]:
                 try:
                     nome_el = await card.query_selector(
@@ -192,7 +205,7 @@ class LinkedInBot:
                     )
                     empresa = (await empresa_el.inner_text()).strip() \
                         if empresa_el else ''
-                    url = (
+                    url_p = (
                         await link_el.get_attribute('href')
                         if link_el else ''
                     )
@@ -205,18 +218,20 @@ class LinkedInBot:
                     if not self._cargo_alvo(cargo):
                         continue
 
+                    self._log(f"  → {nome} | {cargo} @ {empresa}")
                     resultados.append({
                         'nome': nome,
                         'cargo': cargo,
                         'empresa': empresa,
-                        'url_perfil': url.split('?')[0] if url else '',
+                        'url_perfil': url_p.split('?')[0] if url_p else '',
                         'termo_busca': termo,
                     })
                 except Exception:
                     continue
 
             self._log(
-                f"Busca '{termo}' p.{pagina}: {len(resultados)} encontrados"
+                f"Resultado: {len(resultados)} leads qualificados "
+                f"(cargo-alvo) de {len(cards)} perfis"
             )
         except Exception as e:
             self._log(f"Erro na busca: {e}", 'erro')
@@ -242,6 +257,11 @@ class LinkedInBot:
         if not url:
             return False
 
+        nome = perfil.get('nome', '?')
+        cargo = perfil.get('cargo', '?')
+        empresa = perfil.get('empresa', '?')
+        self._log(f"Conectando com {nome} | {cargo} @ {empresa}...")
+
         try:
             await self.page.goto(url, wait_until='domcontentloaded')
             await asyncio.sleep(random.uniform(2, 4))
@@ -264,7 +284,7 @@ class LinkedInBot:
                     )
 
             if not conectar_btn:
-                self._log(f"Botão conectar não encontrado: {url}", 'aviso')
+                self._log(f"  Botão Conectar não encontrado para {nome}", 'aviso')
                 return False
 
             await conectar_btn.click()
@@ -294,7 +314,8 @@ class LinkedInBot:
                 await enviar_btn.click()
                 self.conexoes_hoje += 1
                 self._log(
-                    f"Conexao enviada: {perfil['nome']} ({perfil['empresa']})",
+                    f"✓ Conexão #{self.conexoes_hoje}/{LINKEDIN_MAX_CONEXOES_DIA} "
+                    f"enviada: {nome} @ {empresa}",
                     'sucesso'
                 )
                 if HAS_DB:
@@ -303,7 +324,7 @@ class LinkedInBot:
                 return True
 
         except Exception as e:
-            self._log(f"Erro ao conectar {url}: {e}", 'erro')
+            self._log(f"Erro ao conectar com {nome}: {e}", 'erro')
         return False
 
     async def _gerar_nota_conexao(self, perfil: dict) -> str:
@@ -366,6 +387,9 @@ class LinkedInBot:
             threads = await self.page.query_selector_all(
                 'li.msg-conversation-listitem'
             )
+            self._log(f"Inbox: {len(threads)} threads — verificando DMs iniciais pendentes")
+
+            enviadas = 0
             for thread in threads[:5]:
                 try:
                     preview = await thread.query_selector(
@@ -387,16 +411,27 @@ class LinkedInBot:
                     nome = (await nome_el.inner_text()).strip() \
                         if nome_el else 'contato'
 
+                    self._log(f"  Enviando DM inicial para {nome}...")
                     msg = self._gerar_dm_inicial(nome)
                     await self._digitar_e_enviar(msg)
                     self.msgs_hoje += 1
-                    self._log(f"DM enviada para {nome}", 'sucesso')
+                    enviadas += 1
+                    self._log(
+                        f"  ✓ DM #{self.msgs_hoje}/{LINKEDIN_MAX_MENSAGENS_DIA} "
+                        f"enviada para {nome}",
+                        'sucesso'
+                    )
 
                     if self.msgs_hoje >= LINKEDIN_MAX_MENSAGENS_DIA:
+                        self._log("Limite de DMs do dia atingido", 'aviso')
                         break
                     await asyncio.sleep(random.uniform(30, 60))
                 except Exception:
                     continue
+
+            if enviadas == 0:
+                self._log("Nenhuma DM inicial pendente encontrada")
+
         except Exception as e:
             self._log(f"Erro ao enviar DMs: {e}", 'erro')
 
@@ -450,6 +485,9 @@ class LinkedInBot:
             threads = await self.page.query_selector_all(
                 'li.msg-conversation-listitem'
             )
+            self._log(f"Monitorando inbox: {len(threads)} threads")
+
+            replies = 0
             for thread in threads[:20]:
                 try:
                     preview_el = await thread.query_selector(
@@ -471,6 +509,8 @@ class LinkedInBot:
                     nome = (await nome_el.inner_text()).strip() \
                         if nome_el else 'contato'
 
+                    self._log(f"  Resposta de {nome}: \"{preview[:70]}\"")
+
                     historico = await self._ler_conversa()
                     if not historico:
                         continue
@@ -483,8 +523,10 @@ class LinkedInBot:
                     # Pula se já respondemos esta msg na sessão atual
                     msg_hash = hash(ultima.get('texto', ''))
                     if msg_hash in self._msgs_respondidas:
+                        self._log("  (já respondido nesta sessão — pulando)")
                         continue
 
+                    self._log(f"  Gerando reply IA para {nome}...")
                     resposta = await self._gerar_resposta_inbox(
                         nome, historico
                     )
@@ -493,18 +535,25 @@ class LinkedInBot:
 
                     await self._digitar_e_enviar(resposta)
                     self.msgs_hoje += 1
+                    replies += 1
                     self._msgs_respondidas.add(msg_hash)
                     self._log(
-                        f"Reply IA para {nome}: {resposta[:60]}...", 'sucesso'
+                        f"  ✓ Reply enviado para {nome}: \"{resposta[:60]}...\"",
+                        'sucesso'
                     )
                     self._atualizar_resposta_db(nome, ultima['texto'])
 
                     if self.msgs_hoje >= LINKEDIN_MAX_MENSAGENS_DIA:
+                        self._log("Limite de DMs do dia atingido", 'aviso')
                         break
                     await asyncio.sleep(random.uniform(20, 40))
 
                 except Exception:
                     continue
+
+            if replies == 0:
+                self._log("Nenhuma resposta pendente no inbox")
+
         except Exception as e:
             self._log(f"Erro no monitoramento do inbox: {e}", 'erro')
 
@@ -609,15 +658,29 @@ class LinkedInBot:
             self._log("Não foi possível logar no LinkedIn. Abortando.", 'erro')
             return
 
-        self._log("LinkedIn bot iniciado com sucesso")
+        self._log(
+            f"LinkedIn bot Prisma ativo — "
+            f"max {LINKEDIN_MAX_CONEXOES_DIA} conexões/dia, "
+            f"{LINKEDIN_MAX_MENSAGENS_DIA} DMs/dia",
+            'sucesso'
+        )
         termos = LINKEDIN_TERMOS_BUSCA.copy()
         random.shuffle(termos)
+        self._log(f"{len(termos)} termos de busca carregados")
         termo_idx = 0
 
         while True:
             try:
-                now = datetime.now()
+                now = datetime.now(_BRT)
+
                 if not self._horario_ativo(now):
+                    # Log uma vez por hora quando inativo
+                    if now.minute == 0:
+                        self._log(
+                            f"Fora do horário ativo "
+                            f"({now.strftime('%H:%M')} BRT). "
+                            f"Ativo: seg-sex {HORARIO_INICIO:02d}h–{HORARIO_FIM:02d}h"
+                        )
                     await asyncio.sleep(60)
                     continue
 
@@ -625,30 +688,56 @@ class LinkedInBot:
                 if now.hour == HORARIO_INICIO and now.minute < 5:
                     self.conexoes_hoje = 0
                     self.msgs_hoje = 0
+                    self._log("Reset diário — contadores zerados para hoje")
 
-                # Fase 1: busca + conexões
+                self._ciclo += 1
+                self._log(
+                    f"━━━ Ciclo #{self._ciclo} "
+                    f"| {now.strftime('%H:%M')} BRT "
+                    f"| Conexões: {self.conexoes_hoje}/{LINKEDIN_MAX_CONEXOES_DIA} "
+                    f"| DMs: {self.msgs_hoje}/{LINKEDIN_MAX_MENSAGENS_DIA} ━━━"
+                )
+
+                # ── Fase 1: busca + conexões ──
                 if self.conexoes_hoje < LINKEDIN_MAX_CONEXOES_DIA:
                     termo = termos[termo_idx % len(termos)]
                     termo_idx += 1
                     pagina = random.randint(1, 4)
                     leads = await self.buscar_pessoas(termo, pagina)
 
-                    for lead in leads:
-                        if self.conexoes_hoje >= LINKEDIN_MAX_CONEXOES_DIA:
-                            break
-                        await self.enviar_conexao(lead)
-                        pausa = random.randint(45, 120)
-                        await asyncio.sleep(pausa)
+                    if leads:
+                        self._log(f"Fase 1: {len(leads)} leads — enviando conexões...")
+                        for lead in leads:
+                            if self.conexoes_hoje >= LINKEDIN_MAX_CONEXOES_DIA:
+                                self._log("Limite de conexões do dia atingido")
+                                break
+                            await self.enviar_conexao(lead)
+                            pausa = random.randint(45, 120)
+                            self._log(f"Aguardando {pausa}s antes do próximo...")
+                            await asyncio.sleep(pausa)
+                    else:
+                        self._log("Fase 1: nenhum lead qualificado nesta busca")
+                else:
+                    self._log("Fase 1: limite de conexões já atingido hoje — pulando busca")
 
-                # Fase 2: DMs para novas conexões
+                # ── Fase 2: DMs para novas conexões ──
                 if self.msgs_hoje < LINKEDIN_MAX_MENSAGENS_DIA:
+                    self._log("Fase 2: verificando DMs iniciais para novas conexões...")
                     await self.enviar_dm_novos_contatos()
+                else:
+                    self._log("Fase 2: limite de DMs já atingido hoje — pulando")
 
-                # Fase 3: monitorar respostas e reply via IA
+                # ── Fase 3: monitorar respostas e reply via IA ──
+                self._log("Fase 3: monitorando inbox para respostas...")
                 await self.monitorar_inbox()
 
                 # Pausa entre ciclos
-                await asyncio.sleep(random.randint(300, 600))  # 5–10 min
+                prox = random.randint(300, 600)
+                self._log(
+                    f"Ciclo #{self._ciclo} concluído. "
+                    f"Próximo em {prox // 60} min {prox % 60}s."
+                )
+                await asyncio.sleep(prox)
 
             except Exception as e:
                 self._log(f"Erro no loop principal: {e}", 'erro')
@@ -660,8 +749,11 @@ class LinkedInBot:
         return HORARIO_INICIO <= now.hour < HORARIO_FIM
 
     def _log(self, msg: str, tipo: str = 'info'):
-        ts = datetime.now().strftime('%H:%M:%S')
-        print(f"[LinkedIn/Prisma {ts}] [{tipo.upper()}] {msg}")
+        ts = datetime.now(_BRT).strftime('%H:%M:%S')
+        icone = {
+            'info': 'ℹ', 'sucesso': '✓', 'aviso': '⚠', 'erro': '✗'
+        }.get(tipo, 'ℹ')
+        print(f"[LI/Prisma {ts}] {icone} {msg}", flush=True)
         if HAS_DB:
             try:
                 registrar_log(tipo, f"[LinkedIn] {msg}")

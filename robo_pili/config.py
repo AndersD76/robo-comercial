@@ -11,9 +11,20 @@ import os
 # =============================================================================
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 
-# LinkedIn — definir no Railway como variáveis de ambiente (nunca no código)
+# LinkedIn — variáveis de ambiente ou arquivo linkedin_creds.json (dashboard)
 LINKEDIN_EMAIL    = os.environ.get('LINKEDIN_EMAIL', '')
 LINKEDIN_PASSWORD = os.environ.get('LINKEDIN_PASSWORD', '')
+
+# Lê credenciais do arquivo local se existir (salvo pelo dashboard)
+_creds_file = os.path.join(os.path.dirname(__file__), 'linkedin_creds.json')
+if os.path.exists(_creds_file):
+    try:
+        import json as _json
+        _creds = _json.load(open(_creds_file, encoding='utf-8'))
+        LINKEDIN_EMAIL    = _creds.get('email', LINKEDIN_EMAIL)
+        LINKEDIN_PASSWORD = _creds.get('password', LINKEDIN_PASSWORD)
+    except Exception:
+        pass
 
 # Limites diários LinkedIn (anti-ban)
 LINKEDIN_MAX_CONEXOES_DIA  = int(os.environ.get('LINKEDIN_MAX_CONEXOES', '20'))

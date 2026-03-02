@@ -5,6 +5,7 @@ Prisma (PrismaBiz) + Pili (Equipamentos para Grãos)
 Um único serviço Railway, uma página, dois cards.
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -427,6 +428,25 @@ def api_bot_console(bot):
         return jsonify({'lines': []})
     except Exception as e:
         return jsonify({'lines': [], 'error': str(e)})
+
+
+# --- Salvar credenciais LinkedIn ---
+@app.route('/api/<bot>/linkedin-config', methods=['POST'])
+def api_linkedin_config(bot):
+    if bot not in _procs:
+        return jsonify({'error': 'bot invalido'}), 400
+    data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip()
+    password = data.get('password') or ''
+    if not email or not password:
+        return jsonify({'error': 'email e senha obrigatórios'}), 400
+    creds_file = os.path.join(_bot_dir(bot), 'linkedin_creds.json')
+    try:
+        with open(creds_file, 'w', encoding='utf-8') as f:
+            json.dump({'email': email, 'password': password}, f)
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 # --- Health check ---
