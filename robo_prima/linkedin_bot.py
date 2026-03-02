@@ -11,8 +11,7 @@ Estratégia:
 
 import asyncio
 import random
-import re
-from datetime import datetime, time as dt_time
+from datetime import datetime
 
 from config import (
     ANTHROPIC_API_KEY, DEMO_CAL_LINK,
@@ -54,6 +53,7 @@ class LinkedInBot:
         self.conectado = False
         self.conexoes_hoje = 0
         self.msgs_hoje = 0
+        self._msgs_respondidas: set = set()  # hashes já respondidos na sessão
         self.ai = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) \
             if HAS_AI and ANTHROPIC_API_KEY else None
 
@@ -104,7 +104,9 @@ class LinkedInBot:
         Faz login se não estiver autenticado.
         Retorna True se já estava logado ou logou com sucesso.
         """
-        await self.page.goto(f'{LINKEDIN_URL}/feed/', wait_until='domcontentloaded')
+        await self.page.goto(
+            f'{LINKEDIN_URL}/feed/', wait_until='domcontentloaded'
+        )
         await asyncio.sleep(random.uniform(2, 4))
 
         # Verifica se já está logado (feed carregou)
@@ -180,11 +182,20 @@ class LinkedInBot:
                         'a.app-aware-link[href*="/in/"]'
                     )
 
-                    nome = (await nome_el.inner_text()).strip() if nome_el else ''
-                    cargo = (await cargo_el.inner_text()).strip() if cargo_el else ''
+                    nome = (
+                        (await nome_el.inner_text()).strip()
+                        if nome_el else ''
+                    )
+                    cargo = (
+                        (await cargo_el.inner_text()).strip()
+                        if cargo_el else ''
+                    )
                     empresa = (await empresa_el.inner_text()).strip() \
                         if empresa_el else ''
-                    url = await link_el.get_attribute('href') if link_el else ''
+                    url = (
+                        await link_el.get_attribute('href')
+                        if link_el else ''
+                    )
 
                     # Filtra: "LinkedIn Member" = perfil privado, pula
                     if not nome or 'LinkedIn Member' in nome:
@@ -248,7 +259,8 @@ class LinkedInBot:
                     await mais_btn.click()
                     await asyncio.sleep(1)
                     conectar_btn = await self.page.query_selector(
-                        'div[aria-label*="Conectar"], div[aria-label*="Connect"]'
+                        'div[aria-label*="Conectar"],'
+                        ' div[aria-label*="Connect"]'
                     )
 
             if not conectar_btn:
@@ -305,12 +317,20 @@ class LinkedInBot:
                 r = self.ai.messages.create(
                     model='claude-3-haiku-20240307',
                     max_tokens=80,
-                    system="""Escreva uma nota CURTA (max 200 chars) de pedido de
-conexão no LinkedIn para um profissional de qualidade/gestão industrial.
-Mencione PrismaBiz (gestão da qualidade). Seja direto e profissional.
-Retorne APENAS a nota, sem aspas.""",
-                    messages=[{'role': 'user', 'content':
-                        f'Nome: {nome}, Cargo: {cargo}, Empresa: {empresa}'}],
+                    system=(
+                        "Escreva uma nota CURTA (max 200 chars) de pedido "
+                        "de conexão no LinkedIn para um profissional de "
+                        "qualidade/gestão industrial. Mencione PrismaBiz "
+                        "(gestão da qualidade). Seja direto e profissional. "
+                        "Retorne APENAS a nota, sem aspas."
+                    ),
+                    messages=[{
+                        'role': 'user',
+                        'content': (
+                            f'Nome: {nome}, Cargo: {cargo}, '
+                            f'Empresa: {empresa}'
+                        ),
+                    }],
                 )
                 nota = r.content[0].text.strip()
                 return nota[:295]  # LinkedIn limita a 300 chars
@@ -385,7 +405,8 @@ Retorne APENAS a nota, sem aspas.""",
         return (
             f"Oi {primeiro}, obrigado por conectar! 👋\n\n"
             "Trabalho com o PrismaBiz — sistema de gestão da qualidade com "
-            "11 ferramentas gratuitas (Auditoria, Plano de Ação, SWOT, PDCA…).\n\n"
+            "11 ferramentas gratuitas "
+            "(Auditoria, Plano de Ação, SWOT, PDCA…).\n\n"
             "Faz sentido para vocês? Se quiser ver ao vivo:\n"
             f"📅 {DEMO_CAL_LINK}\n\n"
             "Qualquer dúvida, é só chamar!"
@@ -407,6 +428,175 @@ Retorne APENAS a nota, sem aspas.""",
         await asyncio.sleep(0.5)
         await self.page.keyboard.press('Enter')
         await asyncio.sleep(random.uniform(1, 2))
+
+    # =========================================================================
+    # MONITORAR INBOX — RESPOSTAS DOS LEADS
+    # =========================================================================
+
+    async def monitorar_inbox(self):
+        """
+        Varre o inbox buscando mensagens de leads não respondidas por nós.
+        Para cada resposta recebida, gera reply via Claude Haiku e envia.
+        Objetivo final: marcar demo/reunião.
+        """
+        if self.msgs_hoje >= LINKEDIN_MAX_MENSAGENS_DIA:
+            return
+        try:
+            await self.page.goto(
+                f'{LINKEDIN_URL}/messaging/', wait_until='domcontentloaded'
+            )
+            await asyncio.sleep(random.uniform(2, 3))
+
+            threads = await self.page.query_selector_all(
+                'li.msg-conversation-listitem'
+            )
+            for thread in threads[:20]:
+                try:
+                    preview_el = await thread.query_selector(
+                        '.msg-conversation-card__message-snippet'
+                    )
+                    preview = (await preview_el.inner_text()).strip() \
+                        if preview_el else ''
+
+                    # Pula se última msg foi nossa ou thread vazia
+                    if preview.startswith('Você:') or not preview:
+                        continue
+
+                    await thread.click()
+                    await asyncio.sleep(random.uniform(1.5, 2.5))
+
+                    nome_el = await self.page.query_selector(
+                        '.msg-entity-lockup__entity-title'
+                    )
+                    nome = (await nome_el.inner_text()).strip() \
+                        if nome_el else 'contato'
+
+                    historico = await self._ler_conversa()
+                    if not historico:
+                        continue
+
+                    ultima = historico[-1]
+                    # Pula se última msg foi nossa
+                    if ultima.get('de_nos'):
+                        continue
+
+                    # Pula se já respondemos esta msg na sessão atual
+                    msg_hash = hash(ultima.get('texto', ''))
+                    if msg_hash in self._msgs_respondidas:
+                        continue
+
+                    resposta = await self._gerar_resposta_inbox(
+                        nome, historico
+                    )
+                    if not resposta:
+                        continue
+
+                    await self._digitar_e_enviar(resposta)
+                    self.msgs_hoje += 1
+                    self._msgs_respondidas.add(msg_hash)
+                    self._log(
+                        f"Reply IA para {nome}: {resposta[:60]}...", 'sucesso'
+                    )
+                    self._atualizar_resposta_db(nome, ultima['texto'])
+
+                    if self.msgs_hoje >= LINKEDIN_MAX_MENSAGENS_DIA:
+                        break
+                    await asyncio.sleep(random.uniform(20, 40))
+
+                except Exception:
+                    continue
+        except Exception as e:
+            self._log(f"Erro no monitoramento do inbox: {e}", 'erro')
+
+    async def _ler_conversa(self) -> list[dict]:
+        """
+        Extrai histórico de mensagens do thread aberto via JavaScript.
+        Retorna lista de dicts: {texto: str, de_nos: bool}
+        """
+        try:
+            await asyncio.sleep(1)
+            dados = await self.page.evaluate("""() => {
+                const groups = [
+                    ...document.querySelectorAll('.msg-s-message-group')
+                ];
+                return groups.map(g => ({
+                    de_nos: g.classList.contains(
+                        'msg-s-message-group--outgoing'
+                    ),
+                    texto: [...g.querySelectorAll(
+                        '.msg-s-event-listitem__body'
+                    )].map(b => b.textContent.trim())
+                      .filter(Boolean).join(' ')
+                })).filter(m => m.texto.length > 0);
+            }""")
+            return dados or []
+        except Exception as e:
+            self._log(f"Erro ao ler conversa: {e}", 'aviso')
+            return []
+
+    async def _gerar_resposta_inbox(
+        self, nome: str, historico: list[dict]
+    ) -> str:
+        """Gera resposta via Claude Haiku com foco em agendar demo Prisma."""
+        primeiro = nome.split()[0]
+        hist_txt = '\n'.join([
+            f"{'Eu' if m['de_nos'] else nome}: {m['texto']}"
+            for m in historico[-6:]
+        ])
+
+        if self.ai:
+            try:
+                r = self.ai.messages.create(
+                    model='claude-3-haiku-20240307',
+                    max_tokens=150,
+                    system=(
+                        "Você é Daniel, vendedor do PrismaBiz — sistema de "
+                        "gestão da qualidade com Auditoria, Plano de Ação, "
+                        "SWOT, PDCA e mais 7 módulos, todos 100% gratuitos. "
+                        f"Link para demo: {DEMO_CAL_LINK}\n"
+                        "OBJETIVO: Agendar demo de 20 min.\n"
+                        "REGRAS: resposta curta (2-3 frases), natural e "
+                        "profissional. Interesse → convide para o link. "
+                        "Objeção preço → é GRATUITO. "
+                        "Objeção tempo → são 20 min apenas. "
+                        "Desinteresse claro → agradeça e encerre. "
+                        "Retorne APENAS a mensagem, sem aspas."
+                    ),
+                    messages=[{
+                        'role': 'user',
+                        'content': (
+                            f"Histórico:\n{hist_txt}"
+                            f"\n\nResponda para {primeiro}:"
+                        ),
+                    }],
+                )
+                return r.content[0].text.strip()
+            except Exception:
+                pass
+
+        return (
+            f"Oi {primeiro}! Fico feliz com o retorno. "
+            "Que tal uma demo de 20 min para ver o PrismaBiz ao vivo? "
+            f"É gratuito e você agenda aqui: {DEMO_CAL_LINK}"
+        )
+
+    def _atualizar_resposta_db(self, nome: str, ultima_msg: str):
+        """Registra no banco que o lead respondeu."""
+        if not HAS_DB:
+            return
+        try:
+            conn = get_connection()
+            c = conn.cursor()
+            c.execute(
+                """UPDATE leads_linkedin
+                   SET respondeu = 1, ultima_resposta = %s
+                   WHERE LOWER(nome) LIKE LOWER(%s)""",
+                (ultima_msg[:500], f'%{nome.split()[0]}%')
+            )
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
 
     # =========================================================================
     # LOOP PRINCIPAL
@@ -453,6 +643,9 @@ Retorne APENAS a nota, sem aspas.""",
                 # Fase 2: DMs para novas conexões
                 if self.msgs_hoje < LINKEDIN_MAX_MENSAGENS_DIA:
                     await self.enviar_dm_novos_contatos()
+
+                # Fase 3: monitorar respostas e reply via IA
+                await self.monitorar_inbox()
 
                 # Pausa entre ciclos
                 await asyncio.sleep(random.randint(300, 600))  # 5–10 min

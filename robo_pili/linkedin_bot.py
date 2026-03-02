@@ -27,7 +27,9 @@ except ImportError:
     HAS_AI = False
 
 try:
-    from database import get_connection, salvar_lead_linkedin, registrar_log
+    from database import (
+        get_connection, salvar_lead_linkedin, registrar_log
+    )
     HAS_DB = True
 except ImportError:
     HAS_DB = False
@@ -50,6 +52,7 @@ class LinkedInBot:
         self.conectado = False
         self.conexoes_hoje = 0
         self.msgs_hoje = 0
+        self._msgs_respondidas: set = set()  # hashes já respondidos na sessão
         self.ai = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) \
             if HAS_AI and ANTHROPIC_API_KEY else None
 
@@ -95,7 +98,9 @@ class LinkedInBot:
     # =========================================================================
 
     async def fazer_login(self) -> bool:
-        await self.page.goto(f'{LINKEDIN_URL}/feed/', wait_until='domcontentloaded')
+        await self.page.goto(
+            f'{LINKEDIN_URL}/feed/', wait_until='domcontentloaded'
+        )
         await asyncio.sleep(random.uniform(2, 4))
 
         if '/feed' in self.page.url or '/in/' in self.page.url:
@@ -162,12 +167,20 @@ class LinkedInBot:
                         'a.app-aware-link[href*="/in/"]'
                     )
 
-                    nome = (await nome_el.inner_text()).strip() if nome_el else ''
-                    cargo = (await cargo_el.inner_text()).strip() if cargo_el else ''
+                    nome = (
+                        (await nome_el.inner_text()).strip()
+                        if nome_el else ''
+                    )
+                    cargo = (
+                        (await cargo_el.inner_text()).strip()
+                        if cargo_el else ''
+                    )
                     empresa = (await empresa_el.inner_text()).strip() \
                         if empresa_el else ''
-                    url_perfil = await link_el.get_attribute('href') \
+                    url_perfil = (
+                        await link_el.get_attribute('href')
                         if link_el else ''
+                    )
 
                     if not nome or 'LinkedIn Member' in nome:
                         continue
@@ -178,13 +191,17 @@ class LinkedInBot:
                         'nome': nome,
                         'cargo': cargo,
                         'empresa': empresa,
-                        'url_perfil': url_perfil.split('?')[0] if url_perfil else '',
+                        'url_perfil': (
+                            url_perfil.split('?')[0] if url_perfil else ''
+                        ),
                         'termo_busca': termo,
                     })
                 except Exception:
                     continue
 
-            self._log(f"Busca '{termo}' p.{pagina}: {len(resultados)} encontrados")
+            self._log(
+                f"Busca '{termo}' p.{pagina}: {len(resultados)} encontrados"
+            )
         except Exception as e:
             self._log(f"Erro na busca: {e}", 'erro')
         return resultados
@@ -221,7 +238,8 @@ class LinkedInBot:
                     await mais_btn.click()
                     await asyncio.sleep(1)
                     conectar_btn = await self.page.query_selector(
-                        'div[aria-label*="Conectar"], div[aria-label*="Connect"]'
+                        'div[aria-label*="Conectar"],'
+                        ' div[aria-label*="Connect"]'
                     )
 
             if not conectar_btn:
@@ -272,12 +290,20 @@ class LinkedInBot:
                 r = self.ai.messages.create(
                     model='claude-3-haiku-20240307',
                     max_tokens=80,
-                    system="""Escreva uma nota CURTA (max 200 chars) de pedido de
-conexao no LinkedIn para responsável por operações em cerealista/cooperativa.
-Mencione Pili Equipamentos (tombadores e coletores de graos).
-Retorne APENAS a nota, sem aspas.""",
-                    messages=[{'role': 'user', 'content':
-                        f'Nome: {nome}, Cargo: {cargo}, Empresa: {empresa}'}],
+                    system=(
+                        "Escreva uma nota CURTA (max 200 chars) de pedido "
+                        "de conexao no LinkedIn para responsável por "
+                        "operações em cerealista/cooperativa. Mencione Pili "
+                        "Equipamentos (tombadores e coletores de graos). "
+                        "Retorne APENAS a nota, sem aspas."
+                    ),
+                    messages=[{
+                        'role': 'user',
+                        'content': (
+                            f'Nome: {nome}, Cargo: {cargo}, '
+                            f'Empresa: {empresa}'
+                        ),
+                    }],
                 )
                 return r.content[0].text.strip()[:295]
             except Exception:
@@ -364,6 +390,169 @@ Retorne APENAS a nota, sem aspas.""",
         await asyncio.sleep(random.uniform(1, 2))
 
     # =========================================================================
+    # MONITORAR INBOX — RESPOSTAS DOS LEADS
+    # =========================================================================
+
+    async def monitorar_inbox(self):
+        """
+        Varre o inbox buscando respostas de leads.
+        Gera reply via Claude Haiku com foco em marcar demo/reunião.
+        """
+        if self.msgs_hoje >= LINKEDIN_MAX_MENSAGENS_DIA:
+            return
+        try:
+            await self.page.goto(
+                f'{LINKEDIN_URL}/messaging/', wait_until='domcontentloaded'
+            )
+            await asyncio.sleep(random.uniform(2, 3))
+
+            threads = await self.page.query_selector_all(
+                'li.msg-conversation-listitem'
+            )
+            for thread in threads[:20]:
+                try:
+                    preview_el = await thread.query_selector(
+                        '.msg-conversation-card__message-snippet'
+                    )
+                    preview = (await preview_el.inner_text()).strip() \
+                        if preview_el else ''
+
+                    if preview.startswith('Você:') or not preview:
+                        continue
+
+                    await thread.click()
+                    await asyncio.sleep(random.uniform(1.5, 2.5))
+
+                    nome_el = await self.page.query_selector(
+                        '.msg-entity-lockup__entity-title'
+                    )
+                    nome = (await nome_el.inner_text()).strip() \
+                        if nome_el else 'contato'
+
+                    historico = await self._ler_conversa()
+                    if not historico:
+                        continue
+
+                    ultima = historico[-1]
+                    if ultima.get('de_nos'):
+                        continue
+
+                    msg_hash = hash(ultima.get('texto', ''))
+                    if msg_hash in self._msgs_respondidas:
+                        continue
+
+                    resposta = await self._gerar_resposta_inbox(
+                        nome, historico
+                    )
+                    if not resposta:
+                        continue
+
+                    await self._digitar_e_enviar(resposta)
+                    self.msgs_hoje += 1
+                    self._msgs_respondidas.add(msg_hash)
+                    self._log(
+                        f"Reply IA para {nome}: {resposta[:60]}...",
+                        'sucesso'
+                    )
+                    self._atualizar_resposta_db(nome, ultima['texto'])
+
+                    if self.msgs_hoje >= LINKEDIN_MAX_MENSAGENS_DIA:
+                        break
+                    await asyncio.sleep(random.uniform(20, 40))
+
+                except Exception:
+                    continue
+        except Exception as e:
+            self._log(f"Erro no monitoramento do inbox: {e}", 'erro')
+
+    async def _ler_conversa(self) -> list[dict]:
+        """Extrai histórico do thread aberto via JavaScript."""
+        try:
+            await asyncio.sleep(1)
+            dados = await self.page.evaluate("""() => {
+                const groups = [
+                    ...document.querySelectorAll('.msg-s-message-group')
+                ];
+                return groups.map(g => ({
+                    de_nos: g.classList.contains(
+                        'msg-s-message-group--outgoing'
+                    ),
+                    texto: [...g.querySelectorAll(
+                        '.msg-s-event-listitem__body'
+                    )].map(b => b.textContent.trim())
+                      .filter(Boolean).join(' ')
+                })).filter(m => m.texto.length > 0);
+            }""")
+            return dados or []
+        except Exception as e:
+            self._log(f"Erro ao ler conversa: {e}", 'aviso')
+            return []
+
+    async def _gerar_resposta_inbox(
+        self, nome: str, historico: list[dict]
+    ) -> str:
+        """Gera resposta via Claude Haiku com foco em demo Pili."""
+        primeiro = nome.split()[0]
+        hist_txt = '\n'.join([
+            f"{'Eu' if m['de_nos'] else nome}: {m['texto']}"
+            for m in historico[-6:]
+        ])
+
+        if self.ai:
+            try:
+                r = self.ai.messages.create(
+                    model='claude-3-haiku-20240307',
+                    max_tokens=150,
+                    system=(
+                        "Você é Marcos, vendedor da Pili Equipamentos — "
+                        "tombadores e coletores de grãos para cerealistas "
+                        "e cooperativas. Benefícios: reduz perdas no "
+                        "recebimento em 30%+ e ROI em menos de 1 safra. "
+                        f"Link para demo: {DEMO_CAL_LINK}\n"
+                        "OBJETIVO: Agendar uma demo/visita.\n"
+                        "REGRAS: resposta curta (2-3 frases), natural e "
+                        "focada em resultado. Interesse → peça pra agendar. "
+                        "Objeção preço → fale do ROI < 1 safra. "
+                        "Desinteresse claro → agradeça e encerre. "
+                        "Retorne APENAS a mensagem, sem aspas."
+                    ),
+                    messages=[{
+                        'role': 'user',
+                        'content': (
+                            f"Histórico:\n{hist_txt}"
+                            f"\n\nResponda para {primeiro}:"
+                        ),
+                    }],
+                )
+                return r.content[0].text.strip()
+            except Exception:
+                pass
+
+        return (
+            f"Oi {primeiro}! Fico feliz com o retorno. "
+            "Que tal uma demo rápida para ver os equipamentos ao vivo? "
+            f"ROI em menos de 1 safra. Agende aqui: {DEMO_CAL_LINK}"
+        )
+
+    def _atualizar_resposta_db(self, nome: str, ultima_msg: str):
+        """Registra no banco que o lead respondeu."""
+        if not HAS_DB:
+            return
+        try:
+            conn = get_connection()
+            c = conn.cursor()
+            c.execute(
+                """UPDATE leads_linkedin
+                   SET respondeu = 1, ultima_resposta = %s
+                   WHERE LOWER(nome) LIKE LOWER(%s)""",
+                (ultima_msg[:500], f'%{nome.split()[0]}%')
+            )
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+
+    # =========================================================================
     # LOOP PRINCIPAL
     # =========================================================================
 
@@ -403,6 +592,9 @@ Retorne APENAS a nota, sem aspas.""",
 
                 if self.msgs_hoje < LINKEDIN_MAX_MENSAGENS_DIA:
                     await self.enviar_dm_novos_contatos()
+
+                # Fase 3: monitorar respostas e reply via IA
+                await self.monitorar_inbox()
 
                 await asyncio.sleep(random.randint(300, 600))
             except Exception as e:
