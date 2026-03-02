@@ -312,6 +312,31 @@
     .m-val { color:var(--text); font-weight:500; }
     .m-hr  { height:1px; background:var(--border); margin:16px 0; }
 
+    /* ════ BOT CONTROLS ════ */
+    .bot-ctrls { display:flex; flex-direction:column; gap:6px; align-items:flex-end; }
+    .bot-ctrl  { display:flex; align-items:center; gap:7px; }
+    .ctrl-lbl  { font-size:10.5px; color:var(--muted); min-width:72px; text-align:right; }
+    .ctrl-dot  {
+      width:7px; height:7px; border-radius:50%; flex-shrink:0;
+      background:#e2e8f0; transition:background .3s;
+    }
+    .ctrl-dot.on {
+      background:#22c55e;
+      box-shadow:0 0 6px rgba(34,197,94,.55);
+      animation:pulse 1.4s infinite;
+    }
+    .ctrl-btn {
+      font-family:inherit; font-size:10.5px; font-weight:600;
+      padding:3px 11px; border-radius:6px; cursor:pointer;
+      border:1px solid transparent; transition:all .15s;
+      line-height:1.4;
+    }
+    .ctrl-btn.go  { background:#dcfce7; color:#15803d; border-color:rgba(21,128,61,.18); }
+    .ctrl-btn.go:hover  { background:#22c55e; color:#fff; border-color:#22c55e; }
+    .ctrl-btn.stp { background:#fee2e2; color:#b91c1c; border-color:rgba(185,28,28,.18); }
+    .ctrl-btn.stp:hover { background:#ef4444; color:#fff; border-color:#ef4444; }
+    .ctrl-btn:disabled { opacity:.45; cursor:not-allowed; }
+
     /* Scrollbar */
     ::-webkit-scrollbar { width:4px; height:4px; }
     ::-webkit-scrollbar-track { background:transparent; }
@@ -348,7 +373,20 @@
           <h2>Prisma <span style="font-size:13px;font-weight:500;color:var(--sub)">PrismaBiz</span></h2>
           <p>Gestão da Qualidade — WhatsApp + LinkedIn</p>
         </div>
-        <div class="bot-bdg"><i class="fa fa-industry"></i>WhatsApp + LI</div>
+        <div class="bot-ctrls">
+          <div class="bot-ctrl">
+            <span class="ctrl-lbl"><i class="fa-brands fa-whatsapp"></i> WhatsApp</span>
+            <div class="ctrl-dot" id="p-wa-dot"></div>
+            <button class="ctrl-btn go"  onclick="botStart('prisma','wa',this)">&#9654; Start</button>
+            <button class="ctrl-btn stp" onclick="botStop('prisma','wa',this)">&#9632; Stop</button>
+          </div>
+          <div class="bot-ctrl">
+            <span class="ctrl-lbl"><i class="fa-brands fa-linkedin"></i> LinkedIn</span>
+            <div class="ctrl-dot" id="p-li-dot"></div>
+            <button class="ctrl-btn go"  onclick="botStart('prisma','li',this)">&#9654; Start</button>
+            <button class="ctrl-btn stp" onclick="botStop('prisma','li',this)">&#9632; Stop</button>
+          </div>
+        </div>
       </div>
 
       <div class="kpi-row">
@@ -415,7 +453,20 @@
           <h2>Pili <span style="font-size:13px;font-weight:500;color:var(--sub)">Equipamentos</span></h2>
           <p>Tombadores &amp; Coletores de Grãos — WhatsApp + LinkedIn</p>
         </div>
-        <div class="bot-bdg"><i class="fa fa-wheat-awn"></i>WhatsApp + LI</div>
+        <div class="bot-ctrls">
+          <div class="bot-ctrl">
+            <span class="ctrl-lbl"><i class="fa-brands fa-whatsapp"></i> WhatsApp</span>
+            <div class="ctrl-dot" id="l-wa-dot"></div>
+            <button class="ctrl-btn go"  onclick="botStart('pili','wa',this)">&#9654; Start</button>
+            <button class="ctrl-btn stp" onclick="botStop('pili','wa',this)">&#9632; Stop</button>
+          </div>
+          <div class="bot-ctrl">
+            <span class="ctrl-lbl"><i class="fa-brands fa-linkedin"></i> LinkedIn</span>
+            <div class="ctrl-dot" id="l-li-dot"></div>
+            <button class="ctrl-btn go"  onclick="botStart('pili','li',this)">&#9654; Start</button>
+            <button class="ctrl-btn stp" onclick="botStop('pili','li',this)">&#9632; Stop</button>
+          </div>
+        </div>
       </div>
 
       <div class="kpi-row">
@@ -694,12 +745,48 @@ function refreshStats(){
   }).catch(()=>{});
 }
 
+// Bot Start / Stop
+function botStart(bot, canal, btn){
+  btn.disabled=true;
+  fetch(`/api/${bot}/start`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({canal})
+  }).then(r=>r.json()).then(()=>{
+    btn.disabled=false;
+    loadBotStatus(bot);
+  }).catch(()=>{btn.disabled=false;});
+}
+function botStop(bot, canal, btn){
+  btn.disabled=true;
+  fetch(`/api/${bot}/stop`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({canal})
+  }).then(r=>r.json()).then(()=>{
+    btn.disabled=false;
+    loadBotStatus(bot);
+  }).catch(()=>{btn.disabled=false;});
+}
+function loadBotStatus(bot){
+  const px=bot==='prisma'?'p':'l';
+  fetch(`/api/${bot}/status`).then(r=>r.json()).then(d=>{
+    const wa=document.getElementById(`${px}-wa-dot`);
+    const li=document.getElementById(`${px}-li-dot`);
+    if(wa) wa.className='ctrl-dot'+(d.wa?' on':'');
+    if(li) li.className='ctrl-dot'+(d.li?' on':'');
+  }).catch(()=>{});
+}
+
 // Init
 loadWA('prisma');
 loadWA('pili');
 loadPipe();
+loadBotStatus('prisma');
+loadBotStatus('pili');
 setInterval(refreshStats,30000);
 setInterval(loadPipe,60000);
+setInterval(()=>{loadBotStatus('prisma');loadBotStatus('pili');},10000);
 </script>
 </body>
 </html>

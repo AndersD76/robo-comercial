@@ -6,6 +6,8 @@ Um único serviço Railway, uma página, dois cards.
 """
 
 import os
+import subprocess
+import sys
 import psycopg2
 import psycopg2.extras
 from flask import Flask, jsonify, render_template, request
@@ -14,6 +16,21 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'robo-comercial-2024')
 
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
+
+# Processos em background — { 'prisma': {'wa': Popen|None, 'li': Popen|None}, ... }
+_procs: dict = {
+    'prisma': {'wa': None, 'li': None},
+    'pili':   {'wa': None, 'li': None},
+}
+
+
+def _bot_dir(bot: str) -> str:
+    base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, f'robo_{bot}')
+
+
+def _is_running(proc) -> bool:
+    return proc is not None and proc.poll() is None
 
 
 # =============================================================================
@@ -287,6 +304,55 @@ def api_pipeline():
         except Exception as e:
             print(f"[pipeline/{schema}] erro: {e}")
     return jsonify(stages)
+
+
+# --- Controle dos bots (start / stop / status) ---
+
+@app.route('/api/<bot>/status')
+def api_bot_status(bot):
+    if bot not in _procs:
+        return jsonify({'error': 'bot invalido'}), 400
+    return jsonify({
+        'wa': _is_running(_procs[bot]['wa']),
+        'li': _is_running(_procs[bot]['li']),
+    })
+
+
+@app.route('/api/<bot>/start', methods=['POST'])
+def api_bot_start(bot):
+    if bot not in _procs:
+        return jsonify({'error': 'bot invalido'}), 400
+    data = request.get_json(silent=True) or {}
+    canal = data.get('canal', 'wa')
+    if canal not in ('wa', 'li'):
+        return jsonify({'error': 'canal invalido'}), 400
+    if _is_running(_procs[bot][canal]):
+        return jsonify({'status': 'already_running'})
+    script = 'whatsapp.py' if canal == 'wa' else 'linkedin_bot.py'
+    bot_dir = _bot_dir(bot)
+    proc = subprocess.Popen(
+        [sys.executable, script],
+        cwd=bot_dir,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    _procs[bot][canal] = proc
+    return jsonify({'status': 'started', 'pid': proc.pid})
+
+
+@app.route('/api/<bot>/stop', methods=['POST'])
+def api_bot_stop(bot):
+    if bot not in _procs:
+        return jsonify({'error': 'bot invalido'}), 400
+    data = request.get_json(silent=True) or {}
+    canal = data.get('canal', 'wa')
+    proc = _procs[bot].get(canal)
+    if not _is_running(proc):
+        _procs[bot][canal] = None
+        return jsonify({'status': 'not_running'})
+    proc.terminate()
+    _procs[bot][canal] = None
+    return jsonify({'status': 'stopped'})
 
 
 # --- Health check ---
