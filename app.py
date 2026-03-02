@@ -17,7 +17,7 @@ app.secret_key = os.environ.get('SECRET_KEY', 'robo-comercial-2024')
 
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 
-# Processos em background — { 'prisma': {'wa': Popen|None, 'li': Popen|None}, ... }
+# Processos em background — {bot: {'wa': Popen|None, 'li': Popen|None}}
 _procs: dict = {
     'prisma': {'wa': None, 'li': None},
     'pili':   {'wa': None, 'li': None},
@@ -362,13 +362,15 @@ def api_bot_start(bot):
         return jsonify({'error': 'canal invalido'}), 400
     if _is_running(_procs[bot][canal]):
         return jsonify({'status': 'already_running'})
-    script = 'whatsapp.py' if canal == 'wa' else 'linkedin_bot.py'
+    script = 'run_wa.py' if canal == 'wa' else 'linkedin_bot.py'
     bot_dir = _bot_dir(bot)
+    log_path = os.path.join(bot_dir, f'{canal}.log')
+    log_file = open(log_path, 'a', encoding='utf-8')
     proc = subprocess.Popen(
-        [sys.executable, script],
+        [sys.executable, '-u', script],
         cwd=bot_dir,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=log_file,
+        stderr=log_file,
     )
     _procs[bot][canal] = proc
     return jsonify({'status': 'started', 'pid': proc.pid})
