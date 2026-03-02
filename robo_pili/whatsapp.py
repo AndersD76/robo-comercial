@@ -46,9 +46,8 @@ class WhatsAppBot:
 
         os.makedirs(SESSION_DIR, exist_ok=True)
 
-        # headless=True em Linux/Railway (sem display); False no Windows local
-        import sys as _sys
-        _headless = _sys.platform != 'win32'
+        # Sempre headless — QR Code é exibido no dashboard
+        _headless = True
 
         # Contexto persistente: salva cookies/sessão em disco → não pede QR toda vez
         self.context = await self._pw.chromium.launch_persistent_context(
