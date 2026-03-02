@@ -385,6 +385,7 @@
           Terminal
         </span>
         <div class="console-actions">
+          <button class="con-btn" id="con-copy-btn" onclick="copyConsole(this)"><i class="fa fa-copy"></i> Copiar</button>
           <button class="con-btn" onclick="clearConsole()">Limpar</button>
           <button class="con-btn" onclick="toggleConsole()">Minimizar</button>
         </div>
@@ -772,6 +773,26 @@ function stopConsolePolling(){
 function clearConsole(){
   document.getElementById('console-out').innerHTML='';
   _conLastLine=0;
+}
+function copyConsole(btn){
+  const out=document.getElementById('console-out');
+  const text=Array.from(out.querySelectorAll('.ln')).map(s=>s.textContent).join('\n');
+  navigator.clipboard.writeText(text).then(()=>{
+    const orig=btn.innerHTML;
+    btn.innerHTML='<i class="fa fa-check"></i> Copiado!';
+    btn.style.color='#4ade80';
+    setTimeout(()=>{ btn.innerHTML=orig; btn.style.color=''; },1800);
+  }).catch(()=>{
+    // fallback para ambientes sem clipboard API
+    const ta=document.createElement('textarea');
+    ta.value=text; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    const orig=btn.innerHTML;
+    btn.innerHTML='<i class="fa fa-check"></i> Copiado!';
+    btn.style.color='#4ade80';
+    setTimeout(()=>{ btn.innerHTML=orig; btn.style.color=''; },1800);
+  });
 }
 function toggleConsole(){
   const body=document.getElementById('console-out');
