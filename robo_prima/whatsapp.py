@@ -76,20 +76,35 @@ class WhatsAppBot:
         # Verifica se já está conectado (sessão salva)
         ja_conectado = await self._verificar_ja_conectado()
         if not ja_conectado:
-            print("\n  " + "=" * 50)
-            print("  ESCANEIE O QR CODE NO SEU CELULAR")
-            print("  (WhatsApp > Aparelhos Conectados > Conectar)")
-            print("  " + "=" * 50)
-
-        conectado = await self._aguardar_conexao(timeout=180)
+            print("\n  ESCANEIE O QR CODE NO DASHBOARD > QR Code")
+            # Salva screenshots do QR enquanto aguarda
+            qr_task = asyncio.ensure_future(self._salvar_qr_loop())
+            conectado = await self._aguardar_conexao(timeout=300)
+            qr_task.cancel()
+            # Remove arquivo QR após autenticação
+            try:
+                os.remove('./wa_qr.png')
+            except OSError:
+                pass
+        else:
+            conectado = True
 
         if conectado:
             self.conectado = True
             print("\n  [OK] WhatsApp conectado!")
             return True
         else:
-            print("\n  [ERRO] WhatsApp não conectou em 3 minutos")
+            print("\n  [ERRO] WhatsApp nao conectou em 5 minutos")
             return False
+
+    async def _salvar_qr_loop(self):
+        """Salva screenshot do QR Code a cada 3s para o dashboard servir."""
+        while True:
+            try:
+                await self.page.screenshot(path='./wa_qr.png', full_page=False)
+            except Exception:
+                pass
+            await asyncio.sleep(3)
 
     async def _verificar_ja_conectado(self):
         """Verifica se a sessão já está ativa (sem precisar de QR)"""

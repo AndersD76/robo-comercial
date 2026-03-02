@@ -10,7 +10,7 @@ import subprocess
 import sys
 import psycopg2
 import psycopg2.extras
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_file
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'robo-comercial-2024')
@@ -396,6 +396,18 @@ def api_bot_stop(bot):
     proc.terminate()
     _procs[bot][canal] = None
     return jsonify({'status': 'stopped'})
+
+
+# --- QR Code do WhatsApp (screenshot salvo pelo subprocess) ---
+@app.route('/api/<bot>/qr')
+def api_bot_qr(bot):
+    if bot not in _procs:
+        return ('', 404)
+    qr_path = os.path.join(_bot_dir(bot), 'wa_qr.png')
+    if os.path.exists(qr_path):
+        return send_file(qr_path, mimetype='image/png',
+                         max_age=0, conditional=False)
+    return ('', 404)
 
 
 # --- Console (últimas linhas do log) ---

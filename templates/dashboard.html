@@ -232,6 +232,50 @@
     .lcard-score{ font-size:10.5px; color:var(--muted); }
     .col-empty  { padding:20px 14px; text-align:center; color:var(--muted); font-size:11px; }
 
+    /* ════ QR OVERLAY ════ */
+    .qr-overlay {
+      display:none; position:fixed; inset:0;
+      background:rgba(2,6,23,.82); backdrop-filter:blur(8px);
+      z-index:600; align-items:center; justify-content:center;
+      flex-direction:column; gap:20px;
+    }
+    .qr-overlay.open { display:flex; }
+    .qr-card {
+      background:#1e293b; border:1px solid rgba(255,255,255,.12);
+      border-radius:20px; padding:28px; text-align:center;
+      max-width:360px; width:92vw;
+      box-shadow:0 40px 100px rgba(0,0,0,.7);
+    }
+    .qr-title {
+      font-size:16px; font-weight:800; color:#fff;
+      margin-bottom:4px; letter-spacing:-.3px;
+    }
+    .qr-sub { font-size:12px; color:#64748b; margin-bottom:20px; }
+    .qr-img-wrap {
+      background:#fff; border-radius:12px; padding:10px;
+      display:inline-block; margin-bottom:16px;
+    }
+    .qr-img-wrap img { display:block; width:220px; height:220px; object-fit:contain; }
+    .qr-pulse {
+      font-size:11px; color:#22c55e; font-weight:600;
+      display:flex; align-items:center; justify-content:center; gap:6px;
+    }
+    .qr-pulse-dot {
+      width:7px; height:7px; border-radius:50%; background:#22c55e;
+      animation:pulse 1.4s infinite;
+    }
+    .qr-steps {
+      text-align:left; font-size:11.5px; color:#94a3b8;
+      margin-top:16px; display:flex; flex-direction:column; gap:5px;
+    }
+    .qr-steps li { display:flex; align-items:center; gap:7px; }
+    .qr-steps .step-n {
+      width:18px; height:18px; border-radius:50%;
+      background:rgba(34,197,94,.15); color:#22c55e;
+      font-size:10px; font-weight:700;
+      display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    }
+
     /* Modal */
     .overlay { display:none; position:fixed; inset:0; background:rgba(2,6,23,.7); backdrop-filter:blur(6px); z-index:500; align-items:center; justify-content:center; }
     .overlay.open { display:flex; }
@@ -427,6 +471,24 @@
 
 </main>
 
+<!-- QR CODE OVERLAY -->
+<div class="qr-overlay" id="qr-overlay">
+  <div class="qr-card">
+    <div class="qr-title">Escaneie o QR Code</div>
+    <div class="qr-sub">Autentique o WhatsApp uma vez — sessão salva automaticamente</div>
+    <div class="qr-img-wrap">
+      <img id="qr-img" src="" alt="QR Code WhatsApp">
+    </div>
+    <div class="qr-pulse"><span class="qr-pulse-dot"></span> Aguardando escaneamento...</div>
+    <ol class="qr-steps">
+      <li><span class="step-n">1</span>Abra o WhatsApp no celular</li>
+      <li><span class="step-n">2</span>Toque em Aparelhos Conectados</li>
+      <li><span class="step-n">3</span>Toque em Conectar um Aparelho</li>
+      <li><span class="step-n">4</span>Aponte para este QR Code</li>
+    </ol>
+  </div>
+</div>
+
 <div class="overlay" id="overlay" onclick="closeModal(event)">
   <div class="modal">
     <div class="modal-hd">
@@ -571,6 +633,8 @@ function botStartSel(btn){
     btn.disabled=false;
     loadBotStatus();
     startConsolePolling(canal);
+    // Se WhatsApp, verifica QR após 4s (tempo para subprocess abrir browser)
+    if(_tipo!=='li') setTimeout(startQrPolling,4000);
   }).catch(()=>{btn.disabled=false;});
 }
 function botStopSel(btn){
@@ -580,6 +644,7 @@ function botStopSel(btn){
     btn.disabled=false;
     loadBotStatus();
     stopConsolePolling();
+    stopQrPolling();
   }).catch(()=>{btn.disabled=false;});
 }
 function loadBotStatus(){
@@ -615,6 +680,36 @@ function openLead(l){
   document.getElementById('overlay').classList.add('open');
 }
 function closeModal(e){ if(e.target===document.getElementById('overlay')) document.getElementById('overlay').classList.remove('open'); }
+
+// ── QR Code ──────────────────────────────────────────────────────────────────
+let _qrTimer=null;
+
+function startQrPolling(){
+  if(_qrTimer) return;
+  _qrTimer=setInterval(pollQr,3000);
+  pollQr();
+}
+function stopQrPolling(){
+  if(_qrTimer){ clearInterval(_qrTimer); _qrTimer=null; }
+  document.getElementById('qr-overlay').classList.remove('open');
+}
+function pollQr(){
+  fetch(`/api/${BOT}/qr?t=${Date.now()}`)
+    .then(r=>{
+      if(r.ok){
+        r.blob().then(b=>{
+          const url=URL.createObjectURL(b);
+          const img=document.getElementById('qr-img');
+          img.src=url;
+          document.getElementById('qr-overlay').classList.add('open');
+        });
+      } else {
+        // QR file gone → bot connected or timed out
+        stopQrPolling();
+        loadBotStatus();
+      }
+    }).catch(()=>{});
+}
 
 // ── Console ──────────────────────────────────────────────────────────────────
 let _conCanal='wa', _conMinimized=false, _conLastLine=0, _conTimer=null;
