@@ -83,7 +83,9 @@ class WhatsAppBot:
             qr_task.cancel()
             # Remove arquivo QR após autenticação
             try:
-                os.remove('./wa_qr.png')
+                import os as _os2
+                _qr = _os2.path.join(_os2.path.dirname(_os2.path.abspath(__file__)), 'wa_qr.png')
+                _os2.remove(_qr)
             except OSError:
                 pass
         else:
@@ -99,9 +101,11 @@ class WhatsAppBot:
 
     async def _salvar_qr_loop(self):
         """Salva screenshot do QR Code a cada 3s para o dashboard servir."""
+        import os as _os
+        qr_path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'wa_qr.png')
         while True:
             try:
-                await self.page.screenshot(path='./wa_qr.png', full_page=False)
+                await self.page.screenshot(path=qr_path, full_page=False)
             except Exception:
                 pass
             await asyncio.sleep(3)

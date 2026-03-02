@@ -683,15 +683,17 @@ function openLead(l){
 function closeModal(e){ if(e.target===document.getElementById('overlay')) document.getElementById('overlay').classList.remove('open'); }
 
 // ── QR Code ──────────────────────────────────────────────────────────────────
-let _qrTimer=null;
+let _qrTimer=null, _qrSeen=false;
 
 function startQrPolling(){
   if(_qrTimer) return;
+  _qrSeen=false;
   _qrTimer=setInterval(pollQr,3000);
   pollQr();
 }
 function stopQrPolling(){
   if(_qrTimer){ clearInterval(_qrTimer); _qrTimer=null; }
+  _qrSeen=false;
   document.getElementById('qr-overlay').classList.remove('open');
 }
 function pollQr(){
@@ -702,12 +704,16 @@ function pollQr(){
           const url=URL.createObjectURL(b);
           const img=document.getElementById('qr-img');
           img.src=url;
+          _qrSeen=true;
           document.getElementById('qr-overlay').classList.add('open');
         });
       } else {
-        // QR file gone → bot connected or timed out
-        stopQrPolling();
-        loadBotStatus();
+        if(_qrSeen){
+          // QR sumiu após ter aparecido → foi escaneado
+          stopQrPolling();
+          loadBotStatus();
+        }
+        // Se _qrSeen=false, QR ainda não ficou pronto → continua polling
       }
     }).catch(()=>{});
 }
