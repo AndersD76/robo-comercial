@@ -15,7 +15,14 @@ from flask import Flask, jsonify, render_template, request
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'robo-comercial-2024')
 
-DATABASE_URL = os.environ.get('DATABASE_URL', '')
+def _norm_db_url(url):
+    if url and url.startswith('psql://'):
+        return 'postgresql://' + url[7:]
+    if url and url.startswith('postgres://'):
+        return 'postgresql://' + url[11:]
+    return url
+
+DATABASE_URL = _norm_db_url(os.environ.get('DATABASE_URL', ''))
 
 # Processos em background — {bot: {'wa': Popen|None, 'li': Popen|None}}
 _procs: dict = {

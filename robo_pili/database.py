@@ -6,7 +6,16 @@ Banco de dados do Agente de Prospecção — PostgreSQL (Neon)
 import psycopg2
 import psycopg2.extras
 
-from config import DATABASE_URL, DB_SCHEMA
+from config import DATABASE_URL as _RAW_URL, DB_SCHEMA
+
+def _normalize_url(url):
+    if url and url.startswith('psql://'):
+        return 'postgresql://' + url[7:]
+    if url and url.startswith('postgres://'):
+        return 'postgresql://' + url[11:]
+    return url
+
+DATABASE_URL = _normalize_url(_RAW_URL)
 
 
 def get_connection():
