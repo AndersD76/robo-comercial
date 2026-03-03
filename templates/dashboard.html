@@ -243,19 +243,27 @@
     .qr-card {
       background:#1e293b; border:1px solid rgba(255,255,255,.12);
       border-radius:20px; padding:28px; text-align:center;
-      max-width:360px; width:92vw;
+      max-width:420px; width:92vw; position:relative;
       box-shadow:0 40px 100px rgba(0,0,0,.7);
     }
+    .qr-close {
+      position:absolute; top:14px; right:14px;
+      background:rgba(255,255,255,.08); border:none; border-radius:50%;
+      width:30px; height:30px; font-size:14px; cursor:pointer;
+      color:#94a3b8; display:flex; align-items:center; justify-content:center;
+      transition:background .15s;
+    }
+    .qr-close:hover { background:rgba(255,255,255,.18); color:#fff; }
     .qr-title {
       font-size:16px; font-weight:800; color:#fff;
       margin-bottom:4px; letter-spacing:-.3px;
     }
     .qr-sub { font-size:12px; color:#64748b; margin-bottom:20px; }
     .qr-img-wrap {
-      background:#fff; border-radius:12px; padding:10px;
+      background:#fff; border-radius:12px; padding:12px;
       display:inline-block; margin-bottom:16px;
     }
-    .qr-img-wrap img { display:block; width:220px; height:220px; object-fit:contain; }
+    .qr-img-wrap img { display:block; width:280px; height:280px; object-fit:contain; }
     .qr-pulse {
       font-size:11px; color:#22c55e; font-weight:600;
       display:flex; align-items:center; justify-content:center; gap:6px;
@@ -537,6 +545,7 @@
 <!-- QR CODE OVERLAY -->
 <div class="qr-overlay" id="qr-overlay">
   <div class="qr-card">
+    <button class="qr-close" onclick="stopQrPolling()" title="Fechar">✕</button>
     <div class="qr-title">Escaneie o QR Code</div>
     <div class="qr-sub">Autentique o WhatsApp uma vez — sessão salva automaticamente</div>
     <div class="qr-img-wrap">

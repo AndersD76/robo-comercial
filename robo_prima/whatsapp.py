@@ -134,14 +134,25 @@ class WhatsAppBot:
             return False
 
     async def _salvar_qr_loop(self):
-        """Salva screenshot do QR Code a cada 3s para o dashboard servir."""
+        """Salva screenshot do QR Code a cada 3s para o dashboard servir.
+        Captura apenas o elemento QR para exibição em tamanho grande."""
         import os as _os
         qr_path = _os.path.join(
             _os.path.dirname(_os.path.abspath(__file__)), 'wa_qr.png'
         )
         while True:
             try:
-                await self.page.screenshot(path=qr_path, full_page=False)
+                # Tenta capturar só o elemento do QR (evita página inteira)
+                qr_el = (
+                    await self.page.query_selector('div[data-ref]')
+                    or await self.page.query_selector('canvas[aria-label*="QR"]')
+                    or await self.page.query_selector('canvas[role="img"]')
+                    or await self.page.query_selector('canvas')
+                )
+                if qr_el:
+                    await qr_el.screenshot(path=qr_path)
+                else:
+                    await self.page.screenshot(path=qr_path, full_page=False)
             except Exception:
                 pass
             await asyncio.sleep(3)
