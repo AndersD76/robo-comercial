@@ -156,7 +156,12 @@ _PAT_WA = [
 _PAT_TEL = [
     re.compile(r'tel:(\+?[\d\s\-\(\)]{8,})'),
     re.compile(r'\((\d{2})\)\s*(\d{4,5})[-.\s]?(\d{4})'),
-    re.compile(r'(\d{2})\s(\d{4,5})[-.\s](\d{4})'),
+    re.compile(r'(\d{2})\s*[-.]?\s*(\d{4,5})[-.\s](\d{4})'),
+    re.compile(r'\b((?:55)?(?:11|12|13|14|15|16|17|18|19|21|22|24|27|28|'
+               r'31|32|33|34|35|37|38|41|42|43|44|45|46|47|48|49|51|53|54|'
+               r'55|61|62|63|64|65|66|67|68|69|71|73|74|75|77|79|81|82|83|'
+               r'84|85|86|87|88|89|91|92|93|94|95|96|97|98|99)'
+               r'\d{8,9})\b'),
 ]
 
 
@@ -333,6 +338,16 @@ async def ciclo_busca():
             except Exception:
                 site = {}
 
+            wa = site.get('whatsapp')
+            tel = site.get('telefone')
+            email = site.get('email')
+            print(
+                f"  [DBG] {url[:55]}\n"
+                f"        wa={wa} tel={tel} email={email} "
+                f"cnpj={site.get('cnpj')}",
+                flush=True
+            )
+
             # 2. Monta lead base
             tel_busca = r['telefones'][0] if r.get('telefones') else None
             lead = {
@@ -340,9 +355,9 @@ async def ciclo_busca():
                     site.get('nome') or r.get('titulo', '')
                 )[:100],
                 'website': url,
-                'whatsapp': site.get('whatsapp'),
-                'telefone': site.get('telefone') or tel_busca,
-                'email': site.get('email'),
+                'whatsapp': wa,
+                'telefone': tel or tel_busca,
+                'email': email,
                 'cnpj': site.get('cnpj'),
                 'fonte': r.get('fonte', 'bing'),
                 'score': r.get('relevancia', 0),
@@ -378,7 +393,19 @@ async def ciclo_busca():
 
             # 4. Descarta sem contato ou já existente
             numero = lead.get('whatsapp') or lead.get('telefone')
-            if not numero or telefone_existe(numero):
+            if not numero:
+                print(
+                    f"  [DBG] descartado (sem telefone/WA): "
+                    f"{lead['nome_fantasia'][:50]}",
+                    flush=True
+                )
+                continue
+            if telefone_existe(numero):
+                print(
+                    f"  [DBG] descartado (já existe no DB): "
+                    f"{lead['nome_fantasia'][:50]}",
+                    flush=True
+                )
                 continue
 
             # 5. Score final e salva
