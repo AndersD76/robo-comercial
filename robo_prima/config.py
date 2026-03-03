@@ -95,29 +95,29 @@ DIAS_ATIVOS = [0, 1, 2, 3, 4]
 # TERMOS DE BUSCA — Empresas industriais que precisam de gestão da qualidade
 # =============================================================================
 TERMOS_BUSCA = [
-    # Sites industriais com contato WhatsApp direto
-    'metalurgica "fale conosco" site:.com.br "whatsapp"',
-    'usinagem CNC "fale conosco" site:.com.br "telefone"',
-    'ferramentaria "contato" site:.com.br "wa.me"',
-    'caldeiraria soldagem "fale conosco" site:.com.br',
-    'injecao plastica "fale conosco" site:.com.br',
-    'fabrica pecas metal "whatsapp" site:.com.br',
-    'fabrica embalagens "fale conosco" site:.com.br',
-    'industria alimentos "fale conosco" site:.com.br',
-    'frigorifico abatedouro "fale conosco" site:.com.br',
-    'autopecas sistemista "fale conosco" site:.com.br',
-    'industria quimica "contato" site:.com.br "whatsapp"',
-    'borracha industrial "fale conosco" site:.com.br',
-    'tratamento superficial "contato" site:.com.br',
-    'montagem mecanica "fale conosco" site:.com.br',
-    # Por estado (SP, MG, PR, SC, RS)
-    'metalurgica "Sao Paulo" SP "wa.me" contato',
-    'usinagem SP MG "whatsapp" "fale conosco" site:.com.br',
-    'industria PR SC "fale conosco" site:.com.br telefone',
-    'metalurgica RS "contato" "whatsapp" site:.com.br',
+    # Metalúrgica / usinagem
+    'metalurgica SP contato site:.com.br',
+    'metalurgica MG contato site:.com.br',
+    'metalurgica PR contato site:.com.br',
+    'metalurgica RS site:.com.br telefone',
+    'usinagem CNC SP site:.com.br contato',
+    'usinagem CNC MG site:.com.br',
+    'ferramentaria SP contato site:.com.br',
+    'caldeiraria soldagem SP site:.com.br',
+    # Outros segmentos industriais
+    'injecao plastica SP site:.com.br contato',
+    'fabrica pecas metal SP site:.com.br',
+    'fabrica embalagens SP site:.com.br contato',
+    'industria alimentos SP site:.com.br contato',
+    'frigorifico abatedouro SP site:.com.br',
+    'autopecas SP site:.com.br contato',
+    'industria quimica SP site:.com.br',
+    'borracha industrial SP site:.com.br',
+    'tratamento superficial SP site:.com.br',
     # ISO 9001 / gestão da qualidade
-    'industria "ISO 9001" "fale conosco" site:.com.br',
-    'fabricante "gestao da qualidade" "whatsapp" site:.com.br',
+    'industria ISO 9001 SP site:.com.br',
+    'fabricante gestao qualidade SP site:.com.br',
+    'empresa certificada ISO 9001 SP site:.com.br',
 ]
 
 # =============================================================================

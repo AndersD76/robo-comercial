@@ -94,38 +94,30 @@ DIAS_ATIVOS = [0, 1, 2, 3, 4]
 # TERMOS DE BUSCA — Cerealistas, cooperativas e silos de grãos
 # =============================================================================
 TERMOS_BUSCA = [
-    # Cerealistas com contato direto
-    'cerealista "fale conosco" site:.com.br "whatsapp"',
-    'cerealista "fale conosco" site:.com.br "telefone"',
-    'cerealista compra soja milho "fale conosco" site:.com.br',
-    'recebimento graos soja milho "contato" site:.com.br',
-
+    # Cerealistas
+    'cerealista MT site:.com.br contato',
+    'cerealista PR site:.com.br contato',
+    'cerealista RS site:.com.br contato',
+    'cerealista GO site:.com.br contato',
+    'cerealista MS site:.com.br contato',
+    'cerealista MG site:.com.br contato',
+    'cerealista SP site:.com.br contato',
     # Cooperativas agrícolas
-    'cooperativa agricola "fale conosco" site:.com.br',
-    'cooperativa graos "contato" site:.com.br "whatsapp"',
-    'cooperativa armazenagem "fale conosco" site:.com.br',
-
+    'cooperativa agricola MT site:.com.br',
+    'cooperativa graos PR site:.com.br',
+    'cooperativa armazenagem RS site:.com.br',
+    'cooperativa soja milho GO site:.com.br',
     # Silos e armazéns
-    'silo armazenagem graos "fale conosco" site:.com.br',
-    'armazem agricola "contato" site:.com.br "whatsapp"',
-    'unidade recebimento graos "fale conosco" site:.com.br',
-
-    # Por estado — cinturão de grãos
-    'cerealista "Mato Grosso" MT "wa.me" contato',
-    'cerealista Parana PR "fale conosco" site:.com.br',
-    'cerealista "Rio Grande do Sul" RS "whatsapp" contato',
-    'cooperativa "Goias" GO "fale conosco" site:.com.br',
-    'cerealista "Mato Grosso do Sul" MS "contato" site:.com.br',
-    'cooperativa graos MG "fale conosco" site:.com.br',
-
-    # Compradores de grãos
-    'comprador soja milho trigo "fale conosco" site:.com.br',
-    'trading graos "contato" site:.com.br "whatsapp"',
-    'agropecuaria graos "fale conosco" site:.com.br',
-
-    # Transportadoras e fazendas
-    'transportadora graos "fale conosco" site:.com.br',
-    'produtor rural soja "contato" "whatsapp" site:.com.br',
+    'silo armazenagem graos MT site:.com.br',
+    'armazem agricola PR site:.com.br',
+    'unidade recebimento graos RS site:.com.br',
+    # Compradores / tradings
+    'comprador soja milho MT site:.com.br',
+    'trading graos MT site:.com.br',
+    'agropecuaria graos MT site:.com.br',
+    # Tombadores e equipamentos
+    'tombador graos equipamento site:.com.br',
+    'recebimento graos soja milho site:.com.br contato',
 ]
 
 # =============================================================================
