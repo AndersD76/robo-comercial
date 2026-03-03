@@ -168,30 +168,50 @@ class LinkedInBot:
             await self.page.evaluate('window.scrollTo(0, 800)')
             await asyncio.sleep(1)
 
-            cards = await self.page.query_selector_all(
-                'li.reusable-search__result-container'
+            cards = (
+                await self.page.query_selector_all(
+                    'li.reusable-search__result-container'
+                )
+                or await self.page.query_selector_all(
+                    'li[class*="result-container"]'
+                )
+                or []
             )
             self._log(f"  {len(cards)} perfis encontrados na página")
 
             for card in cards[:10]:
                 try:
-                    nome_el = await card.query_selector(
-                        'span.entity-result__title-text a'
-                    )
+                    # Nome via JS — mais robusto que CSS (LinkedIn muda classes)
+                    nome = await card.evaluate("""el => {
+                        const candidates = [
+                            el.querySelector(
+                                'span.entity-result__title-text'
+                                ' a span[aria-hidden="true"]'
+                            ),
+                            el.querySelector(
+                                'span.entity-result__title-text a'
+                            ),
+                            el.querySelector(
+                                'a[href*="/in/"] span[aria-hidden="true"]'
+                            ),
+                            el.querySelector('a[href*="/in/"]'),
+                        ];
+                        for (const c of candidates) {
+                            const t = c?.textContent?.trim();
+                            if (t && t !== 'LinkedIn Member') return t;
+                        }
+                        return '';
+                    }""")
                     cargo_el = await card.query_selector(
-                        '.entity-result__primary-subtitle'
+                        '.entity-result__primary-subtitle,'
+                        ' [class*="primary-subtitle"]'
                     )
                     empresa_el = await card.query_selector(
-                        '.entity-result__secondary-subtitle'
+                        '.entity-result__secondary-subtitle,'
+                        ' [class*="secondary-subtitle"]'
                     )
-                    link_el = await card.query_selector(
-                        'a.app-aware-link[href*="/in/"]'
-                    )
+                    link_el = await card.query_selector('a[href*="/in/"]')
 
-                    nome = (
-                        (await nome_el.inner_text()).strip()
-                        if nome_el else ''
-                    )
                     cargo = (
                         (await cargo_el.inner_text()).strip()
                         if cargo_el else ''
@@ -360,8 +380,17 @@ class LinkedInBot:
             )
             await asyncio.sleep(random.uniform(2, 3))
 
-            threads = await self.page.query_selector_all(
-                'li.msg-conversation-listitem'
+            threads = (
+                await self.page.query_selector_all(
+                    'li.msg-conversation-listitem'
+                )
+                or await self.page.query_selector_all(
+                    'li[class*="msg-conversation"]'
+                )
+                or await self.page.query_selector_all(
+                    '[data-control-name="conversation"]'
+                )
+                or []
             )
             self._log(
                 f"Inbox: {len(threads)} threads — verificando DMs iniciais"
@@ -370,23 +399,37 @@ class LinkedInBot:
             enviadas = 0
             for thread in threads[:5]:
                 try:
-                    preview = await thread.query_selector(
-                        '.msg-conversation-card__message-snippet'
-                    )
-                    preview_txt = (
-                        await preview.inner_text() if preview else ''
-                    )
+                    preview_txt = await thread.evaluate("""el => {
+                        const sels = [
+                            '.msg-conversation-card__message-snippet',
+                            '[class*="message-snippet"]',
+                            '[class*="conversation-card"] span',
+                        ];
+                        for (const s of sels) {
+                            const e = el.querySelector(s);
+                            if (e) return e.textContent.trim();
+                        }
+                        return '';
+                    }""")
                     if preview_txt.startswith('Você:'):
                         continue
 
                     await thread.click()
                     await asyncio.sleep(random.uniform(1, 2))
 
-                    nome_el = await self.page.query_selector(
-                        '.msg-entity-lockup__entity-title'
-                    )
-                    nome = (await nome_el.inner_text()).strip() \
-                        if nome_el else 'contato'
+                    nome = await self.page.evaluate("""() => {
+                        const sels = [
+                            '.msg-entity-lockup__entity-title',
+                            '[class*="entity-title"]',
+                            '.msg-thread-top-bar h2',
+                            'h2[class*="conversation"] span',
+                        ];
+                        for (const s of sels) {
+                            const e = document.querySelector(s);
+                            if (e) return e.textContent.trim();
+                        }
+                        return 'contato';
+                    }""")
 
                     self._log(f"  Enviando DM inicial para {nome}...")
                     msg = self._gerar_dm_inicial(nome)
@@ -425,10 +468,15 @@ class LinkedInBot:
         )
 
     async def _digitar_e_enviar(self, texto: str):
-        caixa = await self.page.query_selector(
-            'div.msg-form__contenteditable'
+        caixa = (
+            await self.page.query_selector('div.msg-form__contenteditable')
+            or await self.page.query_selector(
+                'div[contenteditable="true"][role="textbox"]'
+            )
+            or await self.page.query_selector('div[contenteditable="true"]')
         )
         if not caixa:
+            self._log("Caixa de mensagem não encontrada", 'aviso')
             return
         await caixa.click()
         for linha in texto.split('\n'):
@@ -456,19 +504,35 @@ class LinkedInBot:
             )
             await asyncio.sleep(random.uniform(2, 3))
 
-            threads = await self.page.query_selector_all(
-                'li.msg-conversation-listitem'
+            threads = (
+                await self.page.query_selector_all(
+                    'li.msg-conversation-listitem'
+                )
+                or await self.page.query_selector_all(
+                    'li[class*="msg-conversation"]'
+                )
+                or await self.page.query_selector_all(
+                    '[data-control-name="conversation"]'
+                )
+                or []
             )
             self._log(f"Monitorando inbox: {len(threads)} threads")
 
             replies = 0
             for thread in threads[:20]:
                 try:
-                    preview_el = await thread.query_selector(
-                        '.msg-conversation-card__message-snippet'
-                    )
-                    preview = (await preview_el.inner_text()).strip() \
-                        if preview_el else ''
+                    preview = await thread.evaluate("""el => {
+                        const sels = [
+                            '.msg-conversation-card__message-snippet',
+                            '[class*="message-snippet"]',
+                            '[class*="conversation-card"] span',
+                        ];
+                        for (const s of sels) {
+                            const e = el.querySelector(s);
+                            if (e) return e.textContent.trim();
+                        }
+                        return '';
+                    }""")
 
                     if preview.startswith('Você:') or not preview:
                         continue
@@ -476,11 +540,19 @@ class LinkedInBot:
                     await thread.click()
                     await asyncio.sleep(random.uniform(1.5, 2.5))
 
-                    nome_el = await self.page.query_selector(
-                        '.msg-entity-lockup__entity-title'
-                    )
-                    nome = (await nome_el.inner_text()).strip() \
-                        if nome_el else 'contato'
+                    nome = await self.page.evaluate("""() => {
+                        const sels = [
+                            '.msg-entity-lockup__entity-title',
+                            '[class*="entity-title"]',
+                            '.msg-thread-top-bar h2',
+                            'h2[class*="conversation"] span',
+                        ];
+                        for (const s of sels) {
+                            const e = document.querySelector(s);
+                            if (e) return e.textContent.trim();
+                        }
+                        return 'contato';
+                    }""")
 
                     self._log(
                         f"  Resposta de {nome}: \"{preview[:70]}\""
@@ -532,10 +604,33 @@ class LinkedInBot:
             self._log(f"Erro no monitoramento do inbox: {e}", 'erro')
 
     async def _ler_conversa(self) -> list[dict]:
-        """Extrai histórico do thread aberto via JavaScript."""
+        """
+        Extrai histórico do thread aberto via JavaScript.
+        Tenta seletores novos e antigos do LinkedIn para robustez.
+        """
         try:
             await asyncio.sleep(1)
             dados = await self.page.evaluate("""() => {
+                // Tenta estrutura nova primeiro
+                const newGroups = [
+                    ...document.querySelectorAll('[class*="message-group"]')
+                ];
+                if (newGroups.length > 0) {
+                    return newGroups.map(g => ({
+                        de_nos: (
+                            g.className.includes('outgoing') ||
+                            g.getAttribute('data-outgoing') === 'true'
+                        ),
+                        texto: [
+                            ...g.querySelectorAll(
+                                '[class*="message-body"],'
+                                '[class*="msg-s-event"]'
+                            )
+                        ].map(b => b.textContent.trim())
+                         .filter(Boolean).join(' ')
+                    })).filter(m => m.texto.length > 0);
+                }
+                // Fallback estrutura antiga
                 const groups = [
                     ...document.querySelectorAll('.msg-s-message-group')
                 ];

@@ -81,6 +81,81 @@ class Buscador:
             await self._pw.stop()
 
     # =========================================================================
+    # BUSCA GOOGLE (motor principal)
+    # =========================================================================
+
+    async def buscar_google(self, termo, max_resultados=20):
+        """Busca no Google Brasil via JS — melhor cobertura para .com.br"""
+        resultados = []
+        try:
+            url = (
+                f'https://www.google.com.br/search'
+                f'?q={quote_plus(termo)}&num={max_resultados}&hl=pt-BR&gl=br'
+            )
+            await self.page.goto(url, wait_until='domcontentloaded', timeout=30000)
+            await asyncio.sleep(random.uniform(3, 5))
+
+            # Detecta CAPTCHA / bloqueio
+            pg_url = self.page.url
+            if 'sorry' in pg_url or 'captcha' in pg_url.lower():
+                print('  [AVISO] Google pediu CAPTCHA — pulando para Bing')
+                return []
+
+            # Extrai via JS: mais robusto que CSS (Google muda classes constantemente)
+            dados = await self.page.evaluate("""() => {
+                const items = [];
+                const seen = new Set();
+                document.querySelectorAll('#search a[href^="http"]').forEach(a => {
+                    const href = a.href;
+                    if (!href || href.includes('google.com') || seen.has(href)) return;
+                    seen.add(href);
+                    const h3 = a.closest('div')?.querySelector('h3') || a.querySelector('h3');
+                    const titulo = (h3?.textContent || a.textContent || '').trim();
+                    const container = a.closest('[data-hveid]') || a.closest('div.g');
+                    let snippet = '';
+                    if (container) {
+                        const texts = [...container.querySelectorAll('span')]
+                            .filter(e => !e.children.length && e.textContent.trim().length > 30)
+                            .map(e => e.textContent.trim());
+                        snippet = texts.slice(0, 3).join(' ');
+                    }
+                    if (titulo.length > 3) {
+                        items.push({
+                            url: href,
+                            titulo: titulo.slice(0, 200),
+                            snippet: snippet.slice(0, 500)
+                        });
+                    }
+                });
+                return items.slice(0, 20);
+            }""")
+
+            for d in (dados or []):
+                url_real = d.get('url', '')
+                if not url_real:
+                    continue
+                try:
+                    dominio = urlparse(url_real).netloc.lower()
+                except Exception:
+                    continue
+                if any(s in dominio for s in self.sites_ignorar):
+                    continue
+                titulo = d.get('titulo', '')
+                snippet = d.get('snippet', '')
+                telefones = self._extrair_telefones(snippet + ' ' + titulo)
+                resultados.append({
+                    'url': url_real,
+                    'dominio': dominio,
+                    'titulo': titulo,
+                    'snippet': snippet,
+                    'telefones': telefones,
+                    'fonte': 'google',
+                })
+        except Exception as e:
+            print(f'  [ERRO] Google: {e}')
+        return resultados
+
+    # =========================================================================
     # BUSCA BING (motor principal)
     # =========================================================================
 
@@ -228,20 +303,32 @@ class Buscador:
     # =========================================================================
 
     async def buscar_leads(self, termo=None, max_resultados=20):
-        """Busca leads usando Bing (com fallback DuckDuckGo)"""
+        """Busca leads: Google → Bing → DuckDuckGo"""
         if not termo:
             termo = random.choice(TERMOS_BUSCA)
 
         print(f"\n  Buscando: '{termo}'")
 
-        # Tenta Bing primeiro
-        resultados = await self.buscar_bing(termo, max_resultados)
+        # Google primeiro (melhor cobertura .com.br)
+        resultados = await self.buscar_google(termo, max_resultados)
 
-        # Fallback DuckDuckGo se Bing falhou
-        if len(resultados) < 3:
-            print("  Bing retornou poucos resultados, tentando DuckDuckGo...")
+        # Fallback Bing
+        if len(resultados) < 5:
+            msg = (
+                f"  Google retornou {len(resultados)} — complementando com Bing..."
+                if resultados else "  Google bloqueado/vazio, tentando Bing..."
+            )
+            print(msg)
+            resultados_bing = await self.buscar_bing(termo, max_resultados)
+            urls_vistas = {r['url'] for r in resultados}
+            for r in resultados_bing:
+                if r['url'] not in urls_vistas:
+                    resultados.append(r)
+
+        # Fallback DuckDuckGo
+        if len(resultados) < 5:
+            print("  Bing retornou poucos — tentando DuckDuckGo...")
             resultados_ddg = await self.buscar_duckduckgo(termo, max_resultados)
-            # Merge sem duplicatas
             urls_vistas = {r['url'] for r in resultados}
             for r in resultados_ddg:
                 if r['url'] not in urls_vistas:
