@@ -136,11 +136,23 @@ class LinkedInBot:
                 self._log("Login LinkedIn OK — feed carregado", 'sucesso')
                 return True
             elif '/checkpoint' in self.page.url:
-                self.conectado = True
                 self._log(
-                    "Login OK (checkpoint — verifique o email/app)", 'aviso'
+                    "LinkedIn exige verificação — salvando screenshot do "
+                    "checkpoint no dashboard. Resolva no site/app do LinkedIn.",
+                    'aviso'
                 )
-                return True
+                resolvido = await self._aguardar_checkpoint()
+                if resolvido:
+                    self.conectado = True
+                    self._log(
+                        "Checkpoint resolvido — sessão ativa", 'sucesso'
+                    )
+                    return True
+                self._log(
+                    "Checkpoint não foi resolvido em 10 min — abortando.",
+                    'erro'
+                )
+                return False
             else:
                 self._log(
                     f"Falha no login — URL atual: {self.page.url}", 'erro'
@@ -149,6 +161,33 @@ class LinkedInBot:
         except Exception as e:
             self._log(f"Erro no login: {e}", 'erro')
             return False
+
+    async def _aguardar_checkpoint(self, timeout_min: int = 10) -> bool:
+        """
+        Salva screenshot do checkpoint a cada 5s e aguarda resolução.
+        Retorna True se a sessão ficou autenticada antes do timeout.
+        """
+        import os
+        chk_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), 'li_checkpoint.png'
+        )
+        timeout_s = timeout_min * 60
+        elapsed = 0
+        while elapsed < timeout_s:
+            try:
+                await self.page.screenshot(path=chk_path, full_page=False)
+            except Exception:
+                pass
+            cur = self.page.url
+            if '/feed' in cur or ('/in/' in cur and '/checkpoint' not in cur):
+                try:
+                    os.remove(chk_path)
+                except Exception:
+                    pass
+                return True
+            await asyncio.sleep(5)
+            elapsed += 5
+        return False
 
     # =========================================================================
     # BUSCA

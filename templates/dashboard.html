@@ -561,6 +561,27 @@
   </div>
 </div>
 
+<!-- LINKEDIN CHECKPOINT OVERLAY -->
+<div class="qr-overlay" id="li-chk-overlay">
+  <div class="qr-card">
+    <button class="qr-close" onclick="stopChkPolling()" title="Fechar">✕</button>
+    <div class="qr-title" style="color:#f59e0b">&#9888; Verificação LinkedIn</div>
+    <div class="qr-sub">O LinkedIn bloqueou o login — veja o que ele está pedindo abaixo</div>
+    <div class="qr-img-wrap" style="background:#0f172a">
+      <img id="li-chk-img" src="" alt="LinkedIn Checkpoint" style="width:380px;height:240px;object-fit:contain">
+    </div>
+    <div class="qr-pulse" style="color:#f59e0b">
+      <span class="qr-pulse-dot" style="background:#f59e0b"></span> Aguardando resolução...
+    </div>
+    <ol class="qr-steps" style="margin-top:14px">
+      <li><span class="step-n" style="background:rgba(245,158,11,.15);color:#f59e0b">1</span>Abra o LinkedIn no celular ou navegador</li>
+      <li><span class="step-n" style="background:rgba(245,158,11,.15);color:#f59e0b">2</span>Se pediu CAPTCHA: resolva manualmente no perfil</li>
+      <li><span class="step-n" style="background:rgba(245,158,11,.15);color:#f59e0b">3</span>Se pediu e-mail/app: aprove a notificação recebida</li>
+      <li><span class="step-n" style="background:rgba(245,158,11,.15);color:#f59e0b">4</span>O bot vai reiniciar automaticamente ao resolver</li>
+    </ol>
+  </div>
+</div>
+
 <!-- LINKEDIN CREDENTIALS MODAL -->
 <div class="li-cfg-overlay" id="li-cfg-overlay" onclick="closeLiConfig(event)">
   <div class="li-cfg-card">
@@ -737,6 +758,8 @@ function botStartSel(btn){
     startConsolePolling(canal);
     // Se WhatsApp, verifica QR após 4s (tempo para subprocess abrir browser)
     if(_tipo!=='li') setTimeout(startQrPolling,4000);
+    // Se LinkedIn (ou all), verifica checkpoint após 15s
+    if(_tipo!=='wa') setTimeout(startChkPolling,15000);
   }).catch(()=>{btn.disabled=false;});
 }
 function botStopSel(btn){
@@ -747,6 +770,7 @@ function botStopSel(btn){
     loadBotStatus();
     stopConsolePolling();
     stopQrPolling();
+    stopChkPolling();
   }).catch(()=>{btn.disabled=false;});
 }
 function loadBotStatus(){
@@ -815,6 +839,41 @@ function pollQr(){
           loadBotStatus();
         }
         // Se _qrSeen=false, QR ainda não ficou pronto → continua polling
+      }
+    }).catch(()=>{});
+}
+
+// ── LinkedIn Checkpoint ───────────────────────────────────────────────────────
+let _chkTimer=null, _chkSeen=false;
+
+function startChkPolling(){
+  if(_chkTimer) return;
+  _chkSeen=false;
+  _chkTimer=setInterval(pollChk,5000);
+  pollChk();
+}
+function stopChkPolling(){
+  if(_chkTimer){ clearInterval(_chkTimer); _chkTimer=null; }
+  _chkSeen=false;
+  document.getElementById('li-chk-overlay').classList.remove('open');
+}
+function pollChk(){
+  fetch(`/api/${BOT}/li-checkpoint?t=${Date.now()}`)
+    .then(r=>{
+      if(r.ok){
+        r.blob().then(b=>{
+          const url=URL.createObjectURL(b);
+          const img=document.getElementById('li-chk-img');
+          img.src=url;
+          _chkSeen=true;
+          document.getElementById('li-chk-overlay').classList.add('open');
+        });
+      } else {
+        if(_chkSeen){
+          // Screenshot sumiu → checkpoint foi resolvido
+          stopChkPolling();
+          loadBotStatus();
+        }
       }
     }).catch(()=>{});
 }

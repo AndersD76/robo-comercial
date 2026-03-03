@@ -449,6 +449,18 @@ def api_linkedin_config(bot):
         return jsonify({'error': str(e)}), 500
 
 
+# --- LinkedIn checkpoint screenshot ---
+@app.route('/api/<bot>/li-checkpoint')
+def api_li_checkpoint(bot):
+    if bot not in _procs:
+        return ('', 404)
+    chk_path = os.path.join(_bot_dir(bot), 'li_checkpoint.png')
+    if os.path.exists(chk_path):
+        return send_file(chk_path, mimetype='image/png',
+                         max_age=0, conditional=False)
+    return ('', 404)
+
+
 # --- Health check ---
 @app.route('/health')
 def health():
