@@ -62,6 +62,7 @@ class WhatsAppBot:
             args=[
                 '--disable-blink-features=AutomationControlled',
                 '--no-sandbox',
+                '--disable-dev-shm-usage',
                 '--start-maximized',
             ],
             user_agent=(
