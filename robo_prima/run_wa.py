@@ -182,10 +182,15 @@ async def _extrair_site(page, url_base: str) -> dict:
     for pag in paginas:
         try:
             await page.goto(
-                pag, timeout=12000, wait_until='domcontentloaded'
+                pag, timeout=20000, wait_until='domcontentloaded'
             )
-            await asyncio.sleep(random.uniform(0.7, 1.4))
+            await asyncio.sleep(random.uniform(1.2, 2.0))
             html = await page.content()
+            try:
+                body_text = await page.inner_text('body')
+            except Exception:
+                body_text = ''
+            conteudo = html + '\n' + body_text
         except Exception:
             continue
 
@@ -200,7 +205,7 @@ async def _extrair_site(page, url_base: str) -> dict:
         # WhatsApp — wa.me links (maior confiabilidade)
         if not dados['whatsapp']:
             for pat in _PAT_WA:
-                m = pat.search(html)
+                m = pat.search(conteudo)
                 if m:
                     num = ''.join(m.groups())
                     w = _tel_para_wa(num)
@@ -211,7 +216,7 @@ async def _extrair_site(page, url_base: str) -> dict:
         # Telefone
         if not dados['telefone']:
             for pat in _PAT_TEL:
-                for m in pat.finditer(html):
+                for m in pat.finditer(conteudo):
                     v = _valida_telefone(''.join(m.groups()))
                     if v:
                         dados['telefone'] = v
@@ -221,7 +226,7 @@ async def _extrair_site(page, url_base: str) -> dict:
 
         # Email
         if not dados['email']:
-            for e in _PAT_EMAIL.findall(html):
+            for e in _PAT_EMAIL.findall(conteudo):
                 e = e.lower()
                 if not any(x in e for x in _EMAILS_INVALIDOS):
                     dados['email'] = e
@@ -229,7 +234,7 @@ async def _extrair_site(page, url_base: str) -> dict:
 
         # CNPJ
         if not dados['cnpj']:
-            for raw in _PAT_CNPJ.findall(html):
+            for raw in _PAT_CNPJ.findall(conteudo):
                 v = _valida_cnpj(raw)
                 if v:
                     dados['cnpj'] = v

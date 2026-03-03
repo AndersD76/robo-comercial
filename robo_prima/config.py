@@ -95,26 +95,29 @@ DIAS_ATIVOS = [0, 1, 2, 3, 4]
 # TERMOS DE BUSCA — Empresas industriais que precisam de gestão da qualidade
 # =============================================================================
 TERMOS_BUSCA = [
-    'metalurgica site:.com.br whatsapp',
-    'usinagem CNC site:.com.br contato whatsapp',
-    'ferramentaria site:.com.br whatsapp',
-    'caldeiraria site:.com.br contato',
-    'industria site:.com.br contato whatsapp',
-    'injecao plastica site:.com.br contato',
-    'fabrica embalagens site:.com.br whatsapp',
-    'industria alimentos site:.com.br contato',
-    'frigorifico site:.com.br whatsapp',
-    'fabrica autopecas site:.com.br whatsapp',
-    'industria quimica site:.com.br contato',
-    'empresa certificada ISO 9001 contato site:.com.br',
-    'industria ISO 9001 site:.com.br whatsapp',
-    'consultoria ISO 9001 site:.com.br contato',
-    'lista metalurgicas SP telefone endereco',
-    'lista industrias Joinville telefone',
-    'lista industrias Caxias do Sul telefone',
-    'lista fabricas Curitiba contato telefone',
-    'fabrica "contato" "whatsapp" OR "wa.me"',
-    'metalurgica "wa.me" OR "api.whatsapp"',
+    # Sites industriais com contato WhatsApp direto
+    'metalurgica "fale conosco" site:.com.br "whatsapp"',
+    'usinagem CNC "fale conosco" site:.com.br "telefone"',
+    'ferramentaria "contato" site:.com.br "wa.me"',
+    'caldeiraria soldagem "fale conosco" site:.com.br',
+    'injecao plastica "fale conosco" site:.com.br',
+    'fabrica pecas metal "whatsapp" site:.com.br',
+    'fabrica embalagens "fale conosco" site:.com.br',
+    'industria alimentos "fale conosco" site:.com.br',
+    'frigorifico abatedouro "fale conosco" site:.com.br',
+    'autopecas sistemista "fale conosco" site:.com.br',
+    'industria quimica "contato" site:.com.br "whatsapp"',
+    'borracha industrial "fale conosco" site:.com.br',
+    'tratamento superficial "contato" site:.com.br',
+    'montagem mecanica "fale conosco" site:.com.br',
+    # Por estado (SP, MG, PR, SC, RS)
+    'metalurgica "Sao Paulo" SP "wa.me" contato',
+    'usinagem SP MG "whatsapp" "fale conosco" site:.com.br',
+    'industria PR SC "fale conosco" site:.com.br telefone',
+    'metalurgica RS "contato" "whatsapp" site:.com.br',
+    # ISO 9001 / gestão da qualidade
+    'industria "ISO 9001" "fale conosco" site:.com.br',
+    'fabricante "gestao da qualidade" "whatsapp" site:.com.br',
 ]
 
 # =============================================================================

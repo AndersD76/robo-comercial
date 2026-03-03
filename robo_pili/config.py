@@ -94,45 +94,38 @@ DIAS_ATIVOS = [0, 1, 2, 3, 4]
 # TERMOS DE BUSCA — Cerealistas, cooperativas e silos de grãos
 # =============================================================================
 TERMOS_BUSCA = [
-    # Cerealistas e compra de grãos
-    'cerealista site:.com.br whatsapp contato',
-    'cerealista compra graos site:.com.br telefone',
-    'compra venda graos site:.com.br whatsapp',
-    'recebimento graos soja milho site:.com.br contato',
+    # Cerealistas com contato direto
+    'cerealista "fale conosco" site:.com.br "whatsapp"',
+    'cerealista "fale conosco" site:.com.br "telefone"',
+    'cerealista compra soja milho "fale conosco" site:.com.br',
+    'recebimento graos soja milho "contato" site:.com.br',
 
     # Cooperativas agrícolas
-    'cooperativa agricola site:.com.br whatsapp',
-    'cooperativa graos soja site:.com.br contato',
-    'cooperativa armazenagem site:.com.br telefone',
+    'cooperativa agricola "fale conosco" site:.com.br',
+    'cooperativa graos "contato" site:.com.br "whatsapp"',
+    'cooperativa armazenagem "fale conosco" site:.com.br',
 
     # Silos e armazéns
-    'silo armazenagem graos site:.com.br contato',
-    'armazem agricola site:.com.br whatsapp',
-    'unidade recebimento graos site:.com.br',
+    'silo armazenagem graos "fale conosco" site:.com.br',
+    'armazem agricola "contato" site:.com.br "whatsapp"',
+    'unidade recebimento graos "fale conosco" site:.com.br',
 
     # Por estado — cinturão de grãos
-    'cerealista Mato Grosso MT telefone whatsapp',
-    'cerealista Parana PR site:.com.br contato',
-    'cerealista Rio Grande do Sul RS telefone',
-    'cooperativa agricola Goias GO whatsapp',
-    'cerealista Mato Grosso do Sul MS contato',
-    'cooperativa graos Minas Gerais MG telefone',
+    'cerealista "Mato Grosso" MT "wa.me" contato',
+    'cerealista Parana PR "fale conosco" site:.com.br',
+    'cerealista "Rio Grande do Sul" RS "whatsapp" contato',
+    'cooperativa "Goias" GO "fale conosco" site:.com.br',
+    'cerealista "Mato Grosso do Sul" MS "contato" site:.com.br',
+    'cooperativa graos MG "fale conosco" site:.com.br',
 
-    # Equipamentos para grãos
-    'tombador graos caminhonete comprar',
-    'coletor graos equipamento site:.com.br',
-    'equipamento descarga graos site:.com.br',
-    'descarregamento graos soja milho equipamento',
+    # Compradores de grãos
+    'comprador soja milho trigo "fale conosco" site:.com.br',
+    'trading graos "contato" site:.com.br "whatsapp"',
+    'agropecuaria graos "fale conosco" site:.com.br',
 
     # Transportadoras e fazendas
-    'transportadora graos site:.com.br whatsapp',
-    'fazenda producao soja milho MT PR GO site:.com.br',
-    'produtor rural graos site:.com.br contato',
-
-    # Diretórios
-    'lista cerealistas MT MS GO PR RS telefone',
-    'diretorio cooperativas agricolas Brasil',
-    'cerealista "fale conosco" OR "whatsapp" soja milho',
+    'transportadora graos "fale conosco" site:.com.br',
+    'produtor rural soja "contato" "whatsapp" site:.com.br',
 ]
 
 # =============================================================================

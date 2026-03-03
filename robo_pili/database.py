@@ -248,7 +248,10 @@ def get_empresas_sem_contato(limite=10):
     c = conn.cursor()
     c.execute("""SELECT e.* FROM empresas e LEFT JOIN interacoes i ON e.id = i.empresa_id
         WHERE i.id IS NULL AND e.status IN ('novo', 'enriquecido')
-        AND e.whatsapp IS NOT NULL AND e.whatsapp != ''
+        AND (
+            (e.whatsapp IS NOT NULL AND e.whatsapp != '')
+            OR (e.telefone IS NOT NULL AND e.telefone != '')
+        )
         ORDER BY e.score DESC, e.encontrado_em ASC LIMIT %s""", (limite,))
     results = [dict(row) for row in c.fetchall()]
     conn.close()
