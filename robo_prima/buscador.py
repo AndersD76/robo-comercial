@@ -48,13 +48,13 @@ class Buscador:
         from playwright.async_api import async_playwright
         self._pw = await async_playwright().start()
 
-        # Usa Chrome instalado (não Chromium) - muito melhor contra detecção
+        # Usa Chromium do Playwright (compatível com Railway/Linux)
         self.browser = await self._pw.chromium.launch(
             headless=True,
-            channel='chrome',
             args=[
                 '--disable-blink-features=AutomationControlled',
                 '--no-sandbox',
+                '--disable-dev-shm-usage',
             ]
         )
         self.context = await self.browser.new_context(
