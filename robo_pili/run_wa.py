@@ -10,6 +10,7 @@ import time
 import asyncio
 import random
 from datetime import datetime, timezone, timedelta
+from urllib.parse import urlparse
 
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -134,6 +135,17 @@ _PAGINAS_CONTATO = (
     '/contato', '/contact', '/fale-conosco', '/sobre', '/quem-somos',
 )
 
+
+def _url_raiz(url: str) -> str:
+    """Extrai URL raiz (protocolo + domínio). Bing retorna subpages via cite."""
+    try:
+        p = urlparse(url)
+        if p.scheme and p.netloc:
+            return f"{p.scheme}://{p.netloc}"
+    except Exception:
+        pass
+    return url
+
 _EMAILS_INVALIDOS = (
     'example', 'test', 'noreply', 'no-reply', '.js', '.css',
     '.png', '.jpg', 'sentry', 'wix', 'jquery', 'mailer-daemon',
@@ -176,6 +188,9 @@ async def _extrair_site(page, url_base: str) -> dict:
         'nome': None, 'whatsapp': None,
         'telefone': None, 'email': None, 'cnpj': None,
     }
+
+    # Normaliza para raiz do domínio (Bing via cite retorna subpages)
+    url_base = _url_raiz(url_base)
 
     paginas = [url_base] + [
         url_base.rstrip('/') + p for p in _PAGINAS_CONTATO

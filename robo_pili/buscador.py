@@ -251,7 +251,7 @@ class Buscador:
         leads = []
         for r in resultados:
             relevancia = self._calcular_relevancia(r)
-            if relevancia > 0:
+            if relevancia >= 0:
                 r['relevancia'] = relevancia
                 leads.append(r)
 
