@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Buscador de Leads v2 - PrismaBiz
+Buscador de Leads v2 - Pili Equipamentos
 Usa Playwright (Chrome real) para buscar no Bing/DuckDuckGo sem ser bloqueado
 """
 

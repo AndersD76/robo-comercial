@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Integração Google Calendar - PrismaBiz
+Integração Google Calendar - Pili Equipamentos
 Cria eventos de demonstração quando lead confirma agendamento.
 
 SETUP (uma vez só):
@@ -147,9 +147,9 @@ def criar_evento_demo(nome_empresa, whatsapp, mensagem_confirmacao):
     fim = inicio + timedelta(minutes=DEMO_DURACAO_MIN)
 
     evento = {
-        'summary': f'Demo PrismaBiz — {nome_empresa}',
+        'summary': f'Demo Pili Equipamentos — {nome_empresa}',
         'description': (
-            f'Demonstração do PrismaBiz para {nome_empresa}\n'
+            f'Demonstração da Pili Equipamentos para {nome_empresa}\n'
             f'WhatsApp: {whatsapp}\n'
             f'Agendado via bot de prospecção.'
         ),
