@@ -162,74 +162,59 @@ class Buscador:
     # =========================================================================
 
     async def buscar_bing(self, termo, max_resultados=20):
-        """Busca no Bing - funciona bem com Chrome headless"""
+        """Busca no Bing — sem site:, locale BR, JS evaluate"""
         resultados = []
-
         try:
-            url = f'https://www.bing.com/search?q={quote_plus(termo)}&count={max_resultados}'
+            termo_bing = re.sub(r'site:\S+\s*', '', termo).strip()
+            url = (
+                f'https://www.bing.com/search?q={quote_plus(termo_bing)}'
+                f'&count={max_resultados}&cc=BR&setlang=pt-BR&FORM=QBLH'
+            )
             await self.page.goto(url, wait_until='domcontentloaded', timeout=30000)
-            await asyncio.sleep(random.uniform(3, 5))
+            await asyncio.sleep(random.uniform(2, 4))
 
-            items = await self.page.query_selector_all('li.b_algo')
+            dados = await self.page.evaluate("""() => {
+                const items = [];
+                document.querySelectorAll('li.b_algo').forEach(li => {
+                    const a = li.querySelector('h2 a');
+                    if (!a || !a.href) return;
+                    const titulo = a.textContent.trim();
+                    const snipEl = li.querySelector('.b_caption p, p.b_algoSlug, .b_algoSlug');
+                    const snippet = snipEl ? snipEl.textContent.trim() : '';
+                    if (titulo.length > 3) {
+                        items.push({
+                            url: a.href,
+                            titulo: titulo.slice(0, 200),
+                            snippet: snippet.slice(0, 500)
+                        });
+                    }
+                });
+                return items;
+            }""")
 
-            for item in items[:max_resultados]:
+            for d in (dados or []):
+                url_real = d.get('url', '')
+                if not url_real or not url_real.startswith('http'):
+                    continue
                 try:
-                    # Título e link
-                    link_el = await item.query_selector('h2 a')
-                    if not link_el:
-                        continue
-
-                    titulo = await link_el.inner_text()
-
-                    # URL real: cite mostra URL legível (ex: "site.com › path › page")
-                    cite_el = await item.query_selector('cite')
-                    if cite_el:
-                        url_real = await cite_el.inner_text()
-                        # Bing usa " › " como separador de path
-                        url_real = url_real.replace(' › ', '/').replace('›', '/')
-                        url_real = url_real.replace('…', '').replace(' ', '').strip()
-                        if not url_real.startswith('http'):
-                            url_real = 'https://' + url_real
-                    else:
-                        url_real = await link_el.get_attribute('href')
-
-                    if not url_real:
-                        continue
-
-                    # Domínio
-                    try:
-                        dominio = urlparse(url_real).netloc.lower()
-                    except Exception:
-                        continue
-
-                    # Ignora sites conhecidos
-                    if any(s in dominio for s in self.sites_ignorar):
-                        continue
-
-                    # Snippet
-                    snippet = ''
-                    snippet_el = await item.query_selector('.b_caption p, .b_algoSlug, .b_paractl')
-                    if snippet_el:
-                        snippet = await snippet_el.inner_text()
-
-                    # Extrai telefones do snippet
-                    telefones = self._extrair_telefones(snippet + ' ' + titulo)
-
-                    resultados.append({
-                        'url': url_real,
-                        'dominio': dominio,
-                        'titulo': titulo[:200],
-                        'snippet': snippet[:500],
-                        'telefones': telefones,
-                        'fonte': 'bing',
-                    })
-
+                    dominio = urlparse(url_real).netloc.lower()
                 except Exception:
                     continue
-
+                if any(s in dominio for s in self.sites_ignorar):
+                    continue
+                titulo  = d.get('titulo', '')
+                snippet = d.get('snippet', '')
+                telefones = self._extrair_telefones(snippet + ' ' + titulo)
+                resultados.append({
+                    'url': url_real,
+                    'dominio': dominio,
+                    'titulo': titulo,
+                    'snippet': snippet,
+                    'telefones': telefones,
+                    'fonte': 'bing',
+                })
         except Exception as e:
             print(f"  [ERRO] Bing: {e}")
-
         return resultados
 
     # =========================================================================
@@ -237,67 +222,72 @@ class Buscador:
     # =========================================================================
 
     async def buscar_duckduckgo(self, termo, max_resultados=15):
-        """Busca no DuckDuckGo Lite como fallback"""
+        """Busca no DuckDuckGo Lite — sem site:, região BR"""
         resultados = []
-
         try:
-            url = f'https://lite.duckduckgo.com/lite/?q={quote_plus(termo)}'
-            await self.page.goto(url, wait_until='domcontentloaded', timeout=15000)
+            termo_ddg = re.sub(r'site:\S+\s*', '', termo).strip()
+            url = (
+                f'https://lite.duckduckgo.com/lite/'
+                f'?q={quote_plus(termo_ddg)}&kl=br-pt'
+            )
+            await self.page.goto(
+                url, wait_until='domcontentloaded', timeout=20000
+            )
             await asyncio.sleep(random.uniform(2, 4))
 
-            links = await self.page.query_selector_all('a.result-link')
+            dados = await self.page.evaluate("""() => {
+                const items = [];
+                document.querySelectorAll('a.result-link').forEach(a => {
+                    const href = a.getAttribute('href') || '';
+                    const titulo = a.textContent.trim();
+                    let url_real = href;
+                    if (href.includes('uddg=')) {
+                        try {
+                            const base = href.startsWith('//')
+                                ? 'https:' + href : href;
+                            const p = new URL(base);
+                            url_real = p.searchParams.get('uddg') || href;
+                        } catch(e) {}
+                    }
+                    if (!url_real.startsWith('http')) return;
+                    const row = a.closest('tr');
+                    const nextRow = row ? row.nextElementSibling : null;
+                    const snippet = nextRow
+                        ? nextRow.textContent.trim() : '';
+                    if (titulo.length > 3) {
+                        items.push({
+                            url: url_real,
+                            titulo: titulo.slice(0, 200),
+                            snippet: snippet.slice(0, 500)
+                        });
+                    }
+                });
+                return items;
+            }""")
 
-            for link_el in links[:max_resultados]:
+            for d in (dados or []):
+                url_real = d.get('url', '')
+                if not url_real or not url_real.startswith('http'):
+                    continue
                 try:
-                    href = await link_el.get_attribute('href')
-                    titulo = await link_el.inner_text()
-
-                    if not href:
-                        continue
-
-                    # DDG Lite usa redirect: //duckduckgo.com/l/?uddg=https%3A%2F%2F...
-                    url_real = href
-                    if 'uddg=' in href:
-                        parsed = parse_qs(urlparse(href).query)
-                        if 'uddg' in parsed:
-                            url_real = unquote(parsed['uddg'][0])
-
-                    # Ignora ads e non-http
-                    if not url_real.startswith('http'):
-                        continue
-
                     dominio = urlparse(url_real).netloc.lower()
-                    if any(s in dominio for s in self.sites_ignorar):
-                        continue
-
-                    # Snippet (próximo elemento de texto)
-                    snippet = ''
-                    try:
-                        parent = await link_el.evaluate_handle('el => el.closest("tr")')
-                        if parent:
-                            next_row = await parent.evaluate_handle('el => el.nextElementSibling')
-                            if next_row:
-                                snippet = await next_row.inner_text()
-                    except Exception:
-                        pass
-
-                    telefones = self._extrair_telefones(snippet + ' ' + titulo)
-
-                    resultados.append({
-                        'url': url_real,
-                        'dominio': dominio,
-                        'titulo': titulo[:200],
-                        'snippet': snippet[:500],
-                        'telefones': telefones,
-                        'fonte': 'duckduckgo',
-                    })
-
                 except Exception:
                     continue
-
+                if any(s in dominio for s in self.sites_ignorar):
+                    continue
+                titulo  = d.get('titulo', '')
+                snippet = d.get('snippet', '')
+                telefones = self._extrair_telefones(snippet + ' ' + titulo)
+                resultados.append({
+                    'url': url_real,
+                    'dominio': dominio,
+                    'titulo': titulo,
+                    'snippet': snippet,
+                    'telefones': telefones,
+                    'fonte': 'duckduckgo',
+                })
         except Exception as e:
             print(f"  [ERRO] DuckDuckGo: {e}")
-
         return resultados
 
     # =========================================================================

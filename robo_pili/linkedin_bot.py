@@ -165,85 +165,105 @@ class LinkedInBot:
             self._log(f"Buscando: \"{termo}\" (página {pagina})...")
             await self.page.goto(url, wait_until='domcontentloaded')
             await asyncio.sleep(random.uniform(2, 4))
+
+            # Detecta checkpoint / muro de login após navegação
+            cur_url = self.page.url
+            if '/checkpoint' in cur_url or '/login' in cur_url or '/authwall' in cur_url:
+                self._log(
+                    "Redirecionado para checkpoint/login — sessão expirada. "
+                    "Verifique credenciais e aprovação 2FA.", 'aviso'
+                )
+                return resultados
+
             await self.page.evaluate('window.scrollTo(0, 800)')
             await asyncio.sleep(1)
 
-            cards = (
-                await self.page.query_selector_all(
-                    'li.reusable-search__result-container'
-                )
-                or await self.page.query_selector_all(
-                    'li[class*="result-container"]'
-                )
-                or []
-            )
-            self._log(f"  {len(cards)} perfis encontrados na página")
+            # Extrai todos os dados em um único evaluate — mais robusto que
+            # múltiplas chamadas CSS (LinkedIn muda classes constantemente)
+            perfis_data = await self.page.evaluate("""() => {
+                const extrairNome = (el) => {
+                    const cands = [
+                        el.querySelector('span.entity-result__title-text a span[aria-hidden="true"]'),
+                        el.querySelector('a[href*="/in/"] span[aria-hidden="true"]'),
+                        el.querySelector('span.entity-result__title-text a'),
+                        el.querySelector('a[href*="/in/"]'),
+                    ];
+                    for (const c of cands) {
+                        const t = c?.textContent?.trim();
+                        if (t && t !== 'LinkedIn Member') return t;
+                    }
+                    return '';
+                };
+                const extrairTexto = (el, sels) => {
+                    for (const s of sels) {
+                        const t = el.querySelector(s)?.textContent?.trim();
+                        if (t) return t;
+                    }
+                    return '';
+                };
+                const extrairUrl = (el) => {
+                    const a = el.querySelector('a[href*="/in/"]');
+                    return a ? a.href.split('?')[0] : '';
+                };
 
-            for card in cards[:10]:
-                try:
-                    # Nome via JS — mais robusto que CSS (LinkedIn muda classes)
-                    nome = await card.evaluate("""el => {
-                        const candidates = [
-                            el.querySelector(
-                                'span.entity-result__title-text'
-                                ' a span[aria-hidden="true"]'
-                            ),
-                            el.querySelector(
-                                'span.entity-result__title-text a'
-                            ),
-                            el.querySelector(
-                                'a[href*="/in/"] span[aria-hidden="true"]'
-                            ),
-                            el.querySelector('a[href*="/in/"]'),
-                        ];
-                        for (const c of candidates) {
-                            const t = c?.textContent?.trim();
-                            if (t && t !== 'LinkedIn Member') return t;
-                        }
-                        return '';
-                    }""")
-                    cargo_el = await card.query_selector(
-                        '.entity-result__primary-subtitle,'
-                        ' [class*="primary-subtitle"]'
-                    )
-                    empresa_el = await card.query_selector(
-                        '.entity-result__secondary-subtitle,'
-                        ' [class*="secondary-subtitle"]'
-                    )
-                    link_el = await card.query_selector('a[href*="/in/"]')
+                let cards = [];
+                const strats = [
+                    () => [...document.querySelectorAll('li.reusable-search__result-container')],
+                    () => [...document.querySelectorAll('li[class*="reusable-search__result-container"]')],
+                    () => [...document.querySelectorAll('li[class*="result-container"]')],
+                    () => [...document.querySelectorAll('li.scaffold-finite-scroll__list-item')]
+                            .filter(li => li.querySelector('a[href*="/in/"]')),
+                    () => [...document.querySelectorAll('li')]
+                            .filter(li => li.querySelector('a[href*="/in/"]')
+                                && li.querySelector('span[aria-hidden="true"]')
+                                && li.offsetHeight > 40),
+                ];
+                for (const s of strats) {
+                    cards = s();
+                    if (cards.length > 0) break;
+                }
 
-                    cargo = (
-                        (await cargo_el.inner_text()).strip()
-                        if cargo_el else ''
-                    )
-                    empresa = (await empresa_el.inner_text()).strip() \
-                        if empresa_el else ''
-                    url_perfil = (
-                        await link_el.get_attribute('href')
-                        if link_el else ''
-                    )
+                return cards.slice(0, 12).map(card => ({
+                    nome:    extrairNome(card),
+                    cargo:   extrairTexto(card, [
+                        '.entity-result__primary-subtitle',
+                        '[class*="primary-subtitle"]',
+                        '[class*="entity-result__summary"]',
+                    ]),
+                    empresa: extrairTexto(card, [
+                        '.entity-result__secondary-subtitle',
+                        '[class*="secondary-subtitle"]',
+                    ]),
+                    url: extrairUrl(card),
+                }));
+            }""")
 
-                    if not nome or 'LinkedIn Member' in nome:
-                        continue
-                    if not self._cargo_alvo(cargo):
-                        continue
+            n_total = len(perfis_data or [])
+            self._log(f"  {n_total} perfis encontrados na página")
 
-                    self._log(f"  → {nome} | {cargo} @ {empresa}")
-                    resultados.append({
-                        'nome': nome,
-                        'cargo': cargo,
-                        'empresa': empresa,
-                        'url_perfil': (
-                            url_perfil.split('?')[0] if url_perfil else ''
-                        ),
-                        'termo_busca': termo,
-                    })
-                except Exception:
+            for p in (perfis_data or []):
+                nome    = (p.get('nome') or '').strip()
+                cargo   = (p.get('cargo') or '').strip()
+                empresa = (p.get('empresa') or '').strip()
+                url_p   = (p.get('url') or '').strip()
+
+                if not nome or 'LinkedIn Member' in nome:
                     continue
+                if not self._cargo_alvo(cargo):
+                    continue
+
+                self._log(f"  → {nome} | {cargo} @ {empresa}")
+                resultados.append({
+                    'nome': nome,
+                    'cargo': cargo,
+                    'empresa': empresa,
+                    'url_perfil': url_p,
+                    'termo_busca': termo,
+                })
 
             self._log(
                 f"Resultado: {len(resultados)} leads qualificados "
-                f"(cargo-alvo) de {len(cards)} perfis"
+                f"(cargo-alvo) de {n_total} perfis"
             )
         except Exception as e:
             self._log(f"Erro na busca: {e}", 'erro')
