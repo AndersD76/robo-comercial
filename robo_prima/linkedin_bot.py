@@ -18,6 +18,7 @@ from config import (
     LINKEDIN_EMAIL, LINKEDIN_PASSWORD,
     LINKEDIN_MAX_CONEXOES_DIA, LINKEDIN_MAX_MENSAGENS_DIA,
     LINKEDIN_TERMOS_BUSCA, LINKEDIN_CARGOS_ALVO,
+    HORARIO_INICIO, HORARIO_FIM, DIAS_ATIVOS,
 )
 
 try:
@@ -1183,16 +1184,22 @@ class LinkedInBot:
                 else:
                     self._log("Fase 1: limite de conexões já atingido hoje — pulando busca")
 
-                # ── Fase 2: DMs para novas conexões ──
-                if self.msgs_hoje < LINKEDIN_MAX_MENSAGENS_DIA:
-                    self._log("Fase 2: verificando DMs iniciais para novas conexões...")
-                    await self.enviar_dm_novos_contatos()
-                else:
-                    self._log("Fase 2: limite de DMs já atingido hoje — pulando")
+                # ── Fase 2 e 3: DMs e respostas só no horário comercial ──
+                if self._horario_mensagens(now):
+                    if self.msgs_hoje < LINKEDIN_MAX_MENSAGENS_DIA:
+                        self._log("Fase 2: verificando DMs iniciais para novas conexões...")
+                        await self.enviar_dm_novos_contatos()
+                    else:
+                        self._log("Fase 2: limite de DMs já atingido hoje — pulando")
 
-                # ── Fase 3: monitorar respostas e reply via IA ──
-                self._log("Fase 3: monitorando inbox para respostas...")
-                await self.monitorar_inbox()
+                    self._log("Fase 3: monitorando inbox para respostas...")
+                    await self.monitorar_inbox()
+                else:
+                    self._log(
+                        f"Fase 2-3: fora do horário de mensagens "
+                        f"({HORARIO_INICIO}h-22h seg-sex) — "
+                        f"apenas prospecção ativa"
+                    )
 
                 # Pausa entre ciclos
                 prox = random.randint(300, 600)
@@ -1205,6 +1212,12 @@ class LinkedInBot:
             except Exception as e:
                 self._log(f"Erro no loop principal: {e}", 'erro')
                 await asyncio.sleep(60)
+
+    def _horario_mensagens(self, now: datetime) -> bool:
+        """Retorna True se pode enviar DMs/respostas (seg-sex, 8h-22h BRT)."""
+        if now.weekday() not in DIAS_ATIVOS:
+            return False
+        return HORARIO_INICIO <= now.hour < 22
 
     def _log(self, msg: str, tipo: str = 'info'):
         ts = datetime.now(_BRT).strftime('%H:%M:%S')
