@@ -571,24 +571,30 @@
   </div>
 </div>
 
-<!-- LINKEDIN CHECKPOINT OVERLAY -->
+<!-- LINKEDIN CHECKPOINT OVERLAY (interativo) -->
 <div class="qr-overlay" id="li-chk-overlay">
-  <div class="qr-card">
+  <div class="qr-card" style="max-width:820px">
     <button class="qr-close" onclick="stopChkPolling()" title="Fechar">✕</button>
-    <div class="qr-title" style="color:#f59e0b">&#9888; Verificação LinkedIn</div>
-    <div class="qr-sub">O LinkedIn bloqueou o login — veja o que ele está pedindo abaixo</div>
-    <div class="qr-img-wrap" style="background:#0f172a">
-      <img id="li-chk-img" src="" alt="LinkedIn Checkpoint" style="width:380px;height:240px;object-fit:contain">
+    <div class="qr-title" style="color:#f59e0b">&#9888; Verificação LinkedIn — clique na página abaixo</div>
+    <div class="qr-sub">Interaja diretamente: clique nos campos, digite e pressione Enter</div>
+    <div style="background:#0f172a;border-radius:10px;padding:8px;position:relative;cursor:crosshair;display:inline-block">
+      <img id="li-chk-img" src="" alt="LinkedIn Checkpoint"
+           style="width:760px;height:auto;max-height:520px;object-fit:contain;display:block;border-radius:6px"
+           onclick="liChkClick(event)">
     </div>
-    <div class="qr-pulse" style="color:#f59e0b">
-      <span class="qr-pulse-dot" style="background:#f59e0b"></span> Aguardando resolução...
+    <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+      <input id="li-chk-input" type="text" placeholder="Digite aqui e pressione Enter..."
+             style="flex:1;padding:10px 14px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:14px"
+             onkeydown="liChkKey(event)">
+      <button onclick="liChkSendText()" style="padding:10px 18px;border-radius:8px;background:#3b82f6;color:#fff;border:none;cursor:pointer;font-size:14px">
+        <i class="fa fa-paper-plane"></i> Enviar
+      </button>
+      <button onclick="liChkPress('Tab')" style="padding:10px 12px;border-radius:8px;background:#334155;color:#e2e8f0;border:none;cursor:pointer;font-size:13px" title="Tab">Tab</button>
+      <button onclick="liChkPress('Enter')" style="padding:10px 12px;border-radius:8px;background:#334155;color:#e2e8f0;border:none;cursor:pointer;font-size:13px" title="Enter">Enter</button>
     </div>
-    <ol class="qr-steps" style="margin-top:14px">
-      <li><span class="step-n" style="background:rgba(245,158,11,.15);color:#f59e0b">1</span>Abra o LinkedIn no celular ou navegador</li>
-      <li><span class="step-n" style="background:rgba(245,158,11,.15);color:#f59e0b">2</span>Se pediu CAPTCHA: resolva manualmente no perfil</li>
-      <li><span class="step-n" style="background:rgba(245,158,11,.15);color:#f59e0b">3</span>Se pediu e-mail/app: aprove a notificação recebida</li>
-      <li><span class="step-n" style="background:rgba(245,158,11,.15);color:#f59e0b">4</span>O bot vai reiniciar automaticamente ao resolver</li>
-    </ol>
+    <div class="qr-pulse" style="color:#f59e0b;margin-top:10px">
+      <span class="qr-pulse-dot" style="background:#f59e0b"></span> Aguardando resolução... (atualiza a cada 2s)
+    </div>
   </div>
 </div>
 
@@ -871,7 +877,7 @@ let _chkTimer=null, _chkSeen=false;
 function startChkPolling(){
   if(_chkTimer) return;
   _chkSeen=false;
-  _chkTimer=setInterval(pollChk,5000);
+  _chkTimer=setInterval(pollChk,2000);
   pollChk();
 }
 function stopChkPolling(){
@@ -886,18 +892,54 @@ function pollChk(){
         r.blob().then(b=>{
           const url=URL.createObjectURL(b);
           const img=document.getElementById('li-chk-img');
+          if(img._prevUrl) URL.revokeObjectURL(img._prevUrl);
+          img._prevUrl=url;
           img.src=url;
           _chkSeen=true;
           document.getElementById('li-chk-overlay').classList.add('open');
         });
       } else {
         if(_chkSeen){
-          // Screenshot sumiu → checkpoint foi resolvido
           stopChkPolling();
           loadBotStatus();
         }
       }
     }).catch(()=>{});
+}
+
+// ── LinkedIn Checkpoint: interação remota ────────────────────────────────────
+function _liAction(data){
+  fetch(`/api/${BOT}/li-action`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(data)
+  }).then(()=>{ setTimeout(pollChk,800); });
+}
+
+function liChkClick(e){
+  const img=e.target;
+  const rect=img.getBoundingClientRect();
+  const scaleX=img.naturalWidth/rect.width;
+  const scaleY=img.naturalHeight/rect.height;
+  const x=Math.round((e.clientX-rect.left)*scaleX);
+  const y=Math.round((e.clientY-rect.top)*scaleY);
+  _liAction({action:'click',x,y});
+}
+
+function liChkSendText(){
+  const inp=document.getElementById('li-chk-input');
+  const txt=inp.value;
+  if(!txt) return;
+  _liAction({action:'type',text:txt});
+  inp.value='';
+}
+
+function liChkKey(e){
+  if(e.key==='Enter'){ e.preventDefault(); liChkSendText(); }
+}
+
+function liChkPress(key){
+  _liAction({action:'press',key});
 }
 
 // ── Console ──────────────────────────────────────────────────────────────────

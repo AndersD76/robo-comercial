@@ -461,6 +461,21 @@ def api_li_checkpoint(bot):
     return ('', 404)
 
 
+# --- LinkedIn checkpoint interaction (click/type/press) ---
+@app.route('/api/<bot>/li-action', methods=['POST'])
+def api_li_action(bot):
+    if bot not in _procs:
+        return ('', 404)
+    data = request.get_json(silent=True) or {}
+    action = data.get('action')
+    if action not in ('click', 'type', 'press'):
+        return jsonify({'error': 'action must be click, type or press'}), 400
+    action_path = os.path.join(_bot_dir(bot), 'li_action.json')
+    with open(action_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f)
+    return jsonify({'ok': True})
+
+
 # --- Health check ---
 @app.route('/health')
 def health():

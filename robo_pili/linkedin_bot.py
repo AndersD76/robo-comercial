@@ -164,13 +164,14 @@ class LinkedInBot:
 
     async def _aguardar_checkpoint(self, timeout_min: int = 10) -> bool:
         """
-        Salva screenshot do checkpoint a cada 5s e aguarda resolução.
-        Retorna True se a sessão ficou autenticada antes do timeout.
+        Salva screenshot a cada 2s, processa ações do dashboard (click/type)
+        e aguarda resolução. Retorna True se autenticou antes do timeout.
         """
         import os
-        chk_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), 'li_checkpoint.png'
-        )
+        import json as _json
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        chk_path = os.path.join(base_dir, 'li_checkpoint.png')
+        action_path = os.path.join(base_dir, 'li_action.json')
         timeout_s = timeout_min * 60
         elapsed = 0
         while elapsed < timeout_s:
@@ -178,6 +179,24 @@ class LinkedInBot:
                 await self.page.screenshot(path=chk_path, full_page=False)
             except Exception:
                 pass
+
+            # Processa ação do dashboard (click / type / press)
+            if os.path.exists(action_path):
+                try:
+                    with open(action_path, 'r') as f:
+                        act = _json.load(f)
+                    os.remove(action_path)
+                    await self._executar_acao(act)
+                    await asyncio.sleep(0.5)
+                    try:
+                        await self.page.screenshot(
+                            path=chk_path, full_page=False
+                        )
+                    except Exception:
+                        pass
+                except Exception as e:
+                    self._log(f"Erro ao processar ação: {e}", 'erro')
+
             cur = self.page.url
             if '/feed' in cur or ('/in/' in cur and '/checkpoint' not in cur):
                 try:
@@ -185,9 +204,23 @@ class LinkedInBot:
                 except Exception:
                     pass
                 return True
-            await asyncio.sleep(5)
-            elapsed += 5
+            await asyncio.sleep(2)
+            elapsed += 2
         return False
+
+    async def _executar_acao(self, act: dict):
+        """Executa click/type/press vindo do dashboard."""
+        action = act.get('action')
+        if action == 'click':
+            x, y = act.get('x', 0), act.get('y', 0)
+            await self.page.mouse.click(x, y)
+        elif action == 'type':
+            texto = act.get('text', '')
+            if texto:
+                await self.page.keyboard.type(texto, delay=50)
+        elif action == 'press':
+            key = act.get('key', 'Enter')
+            await self.page.keyboard.press(key)
 
     # =========================================================================
     # BUSCA
