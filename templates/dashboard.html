@@ -407,6 +407,12 @@
     .console-body .ln-warn { color:#fbbf24; }
     .console-body .ln-conn { color:#38bdf8; }
     .console-body .ln-ts   { color:#475569; }
+    .console-split { display:flex; }
+    .console-col { flex:1; min-width:0; }
+    .console-col-hd { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.8px; padding:3px 14px; border-bottom:1px solid rgba(255,255,255,.04); display:flex; align-items:center; gap:5px; }
+    .console-col-hd.hd-wa { color:#22c55e; }
+    .console-col-hd.hd-li { color:#60a5fa; }
+    .console-split .console-col + .console-col { border-left:1px solid rgba(255,255,255,.08); }
 
     ::-webkit-scrollbar { width:4px; height:4px; }
     ::-webkit-scrollbar-track { background:transparent; }
@@ -470,8 +476,24 @@
           <button class="con-btn" onclick="toggleConsole()">Minimizar</button>
         </div>
       </div>
-      <div class="console-body" id="console-out">
-        <span class="ln ln-ts">$ aguardando início do robô...</span>
+      <div id="console-single">
+        <div class="console-body" id="console-out">
+          <span class="ln ln-ts">$ aguardando início do robô...</span>
+        </div>
+      </div>
+      <div id="console-dual" style="display:none" class="console-split">
+        <div class="console-col">
+          <div class="console-col-hd hd-wa"><i class="fa-brands fa-whatsapp"></i> WhatsApp</div>
+          <div class="console-body" id="console-out-wa">
+            <span class="ln ln-ts">$ aguardando...</span>
+          </div>
+        </div>
+        <div class="console-col">
+          <div class="console-col-hd hd-li"><i class="fa-brands fa-linkedin"></i> LinkedIn</div>
+          <div class="console-body" id="console-out-li">
+            <span class="ln ln-ts">$ aguardando...</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -655,6 +677,18 @@ function setTipo(tipo,btn){
   _tipo=tipo;
   document.querySelectorAll('#seg-ctrl .seg-btn').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
+  updateConsoleLayout();
+}
+function updateConsoleLayout(){
+  const single=document.getElementById('console-single');
+  const dual=document.getElementById('console-dual');
+  if(_tipo==='all'){
+    single.style.display='none';
+    dual.style.display='';
+  } else {
+    single.style.display='';
+    dual.style.display='none';
+  }
 }
 
 function statusChip(s,d){
@@ -775,15 +809,13 @@ function botFetch(canal,action){
 }
 function botStartSel(btn){
   btn.disabled=true;
-  const canal=_tipo==='li'?'li':'wa';
+  updateConsoleLayout();
   const calls=_tipo==='all'?[botFetch('wa','start'),botFetch('li','start')]:[botFetch(_tipo,'start')];
   Promise.all(calls).then(()=>{
     btn.disabled=false;
     loadBotStatus();
-    startConsolePolling(canal);
-    // Se WhatsApp, verifica QR após 4s (tempo para subprocess abrir browser)
+    startConsolePolling();
     if(_tipo!=='li') setTimeout(startQrPolling,4000);
-    // Se LinkedIn (ou all), verifica checkpoint após 15s
     if(_tipo!=='wa') setTimeout(startChkPolling,15000);
   }).catch(()=>{btn.disabled=false;});
 }
@@ -948,11 +980,10 @@ function pollChk(){
 }
 
 // ── Console ──────────────────────────────────────────────────────────────────
-let _conCanal='wa', _conMinimized=false, _conLastLine=0, _conTimer=null;
+let _conMinimized=false, _conTimer=null;
 
 function colorLine(txt){
   const t=txt.toLowerCase();
-  // Emoji-based log format (new)
   if(txt.includes('✗')||t.includes('erro')||t.includes('error')||t.includes('falha')) return 'ln-err';
   if(txt.includes('⚠')||t.includes('warn')||t.includes('aviso'))  return 'ln-warn';
   if(txt.includes('━━━')||t.includes('[ok]')||t.includes('conectad')||t.includes('iniciand')) return 'ln-conn';
@@ -960,10 +991,10 @@ function colorLine(txt){
   return '';
 }
 
-function renderConsole(lines){
+function renderTo(el,lines){
   if(!lines||!lines.length) return;
-  const out=document.getElementById('console-out');
-  const atBottom=out.scrollHeight-out.clientHeight<=out.scrollTop+20;
+  const atBottom=el.scrollHeight-el.clientHeight<=el.scrollTop+30;
+  el.innerHTML='';
   const frag=document.createDocumentFragment();
   lines.forEach(txt=>{
     const span=document.createElement('span');
@@ -972,29 +1003,25 @@ function renderConsole(lines){
     frag.appendChild(span);
     frag.appendChild(document.createTextNode('\n'));
   });
-  out.appendChild(frag);
-  if(atBottom) out.scrollTop=out.scrollHeight;
-  _conLastLine+=lines.length;
+  el.appendChild(frag);
+  if(atBottom) el.scrollTop=el.scrollHeight;
 }
 
 function pollConsole(){
-  const canal=_conCanal==='li'?'li':'wa';
-  fetch(`/api/${BOT}/console?canal=${canal}&n=200`)
-    .then(r=>r.json()).then(d=>{
-      const lines=d.lines||[];
-      if(lines.length===0) return;
-      const out=document.getElementById('console-out');
-      // replace full content periodically (simple approach)
-      const atBottom=out.scrollHeight-out.clientHeight<=out.scrollTop+30;
-      out.innerHTML='';
-      _conLastLine=0;
-      renderConsole(lines);
-      if(atBottom) out.scrollTop=out.scrollHeight;
-    }).catch(()=>{});
+  if(_tipo==='all'){
+    // Split mode: fetch both
+    fetch(`/api/${BOT}/console?canal=wa&n=200`)
+      .then(r=>r.json()).then(d=>{ renderTo(document.getElementById('console-out-wa'),d.lines||[]); }).catch(()=>{});
+    fetch(`/api/${BOT}/console?canal=li&n=200`)
+      .then(r=>r.json()).then(d=>{ renderTo(document.getElementById('console-out-li'),d.lines||[]); }).catch(()=>{});
+  } else {
+    const canal=_tipo==='li'?'li':'wa';
+    fetch(`/api/${BOT}/console?canal=${canal}&n=200`)
+      .then(r=>r.json()).then(d=>{ renderTo(document.getElementById('console-out'),d.lines||[]); }).catch(()=>{});
+  }
 }
 
-function startConsolePolling(canal){
-  _conCanal=canal;
+function startConsolePolling(){
   if(_conTimer) clearInterval(_conTimer);
   _conTimer=setInterval(pollConsole,2000);
   pollConsole();
@@ -1008,18 +1035,25 @@ function stopConsolePolling(){
 }
 function clearConsole(){
   document.getElementById('console-out').innerHTML='';
-  _conLastLine=0;
+  document.getElementById('console-out-wa').innerHTML='';
+  document.getElementById('console-out-li').innerHTML='';
 }
 function copyConsole(btn){
-  const out=document.getElementById('console-out');
-  const text=Array.from(out.querySelectorAll('.ln')).map(s=>s.textContent).join('\n');
+  let text='';
+  if(_tipo==='all'){
+    const wa=Array.from(document.getElementById('console-out-wa').querySelectorAll('.ln')).map(s=>s.textContent).join('\n');
+    const li=Array.from(document.getElementById('console-out-li').querySelectorAll('.ln')).map(s=>s.textContent).join('\n');
+    text='── WhatsApp ──\n'+wa+'\n\n── LinkedIn ──\n'+li;
+  } else {
+    const out=document.getElementById('console-out');
+    text=Array.from(out.querySelectorAll('.ln')).map(s=>s.textContent).join('\n');
+  }
   navigator.clipboard.writeText(text).then(()=>{
     const orig=btn.innerHTML;
     btn.innerHTML='<i class="fa fa-check"></i> Copiado!';
     btn.style.color='#4ade80';
     setTimeout(()=>{ btn.innerHTML=orig; btn.style.color=''; },1800);
   }).catch(()=>{
-    // fallback para ambientes sem clipboard API
     const ta=document.createElement('textarea');
     ta.value=text; ta.style.position='fixed'; ta.style.opacity='0';
     document.body.appendChild(ta); ta.select();
@@ -1031,9 +1065,11 @@ function copyConsole(btn){
   });
 }
 function toggleConsole(){
-  const body=document.getElementById('console-out');
+  const single=document.getElementById('console-single');
+  const dual=document.getElementById('console-dual');
   _conMinimized=!_conMinimized;
-  body.style.display=_conMinimized?'none':'';
+  if(_tipo==='all'){ dual.style.display=_conMinimized?'none':''; }
+  else { single.style.display=_conMinimized?'none':''; }
   event.target.textContent=_conMinimized?'Expandir':'Minimizar';
 }
 
@@ -1041,15 +1077,27 @@ loadWA();
 loadPipe();
 
 // On page load: show last log + start console if bot running
-pollConsole();  // carrega log histórico imediatamente
+pollConsole();
 fetch(`/api/${BOT}/status`).then(r=>r.json()).then(d=>{
   const badge=document.getElementById('status-badge');
   const txt=document.getElementById('status-txt');
   if(d.wa||d.li){
     badge.classList.add('running');
-    if(d.wa&&d.li){ txt.textContent='WA + LinkedIn'; startConsolePolling('wa'); }
-    else if(d.wa){ txt.textContent='Internet ativo'; startConsolePolling('wa'); }
-    else{ txt.textContent='LinkedIn ativo'; startConsolePolling('li'); }
+    if(d.wa&&d.li){
+      txt.textContent='WA + LinkedIn';
+      _tipo='all';
+      const btns=document.querySelectorAll('#seg-ctrl .seg-btn');
+      btns.forEach(b=>b.classList.remove('on'));
+      btns[2].classList.add('on');
+      updateConsoleLayout();
+    } else if(d.wa){
+      txt.textContent='Internet ativo';
+      _tipo='wa';
+    } else {
+      txt.textContent='LinkedIn ativo';
+      _tipo='li';
+    }
+    startConsolePolling();
   }
 }).catch(()=>{});
 
