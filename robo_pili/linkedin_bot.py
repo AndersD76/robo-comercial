@@ -17,7 +17,6 @@ from config import (
     LINKEDIN_EMAIL, LINKEDIN_PASSWORD,
     LINKEDIN_MAX_CONEXOES_DIA, LINKEDIN_MAX_MENSAGENS_DIA,
     LINKEDIN_TERMOS_BUSCA, LINKEDIN_CARGOS_ALVO,
-    HORARIO_INICIO, HORARIO_FIM, DIAS_ATIVOS,
 )
 
 try:
@@ -1094,18 +1093,8 @@ class LinkedInBot:
             try:
                 now = datetime.now(_BRT)
 
-                if not self._horario_ativo(now):
-                    if now.minute == 0:
-                        self._log(
-                            f"Fora do horário ativo "
-                            f"({now.strftime('%H:%M')} BRT). "
-                            f"Ativo: seg-sex "
-                            f"{HORARIO_INICIO:02d}h–{HORARIO_FIM:02d}h"
-                        )
-                    await asyncio.sleep(60)
-                    continue
-
-                if now.hour == HORARIO_INICIO and now.minute < 5:
+                # Reset diário (meia-noite)
+                if now.hour == 0 and now.minute < 5:
                     self.conexoes_hoje = 0
                     self.msgs_hoje = 0
                     self._log("Reset diário — contadores zerados para hoje")
@@ -1177,11 +1166,6 @@ class LinkedInBot:
             except Exception as e:
                 self._log(f"Erro no loop: {e}", 'erro')
                 await asyncio.sleep(60)
-
-    def _horario_ativo(self, now: datetime) -> bool:
-        if now.weekday() not in DIAS_ATIVOS:
-            return False
-        return HORARIO_INICIO <= now.hour < HORARIO_FIM
 
     def _log(self, msg: str, tipo: str = 'info'):
         ts = datetime.now(_BRT).strftime('%H:%M:%S')
