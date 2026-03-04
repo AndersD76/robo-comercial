@@ -64,6 +64,48 @@ class LinkedInBot:
     # SESSÃO
     # =========================================================================
 
+    @staticmethod
+    def _tem_display() -> bool:
+        """Verifica se há display disponível (X11/Wayland/Xvfb)."""
+        import os, sys
+        if sys.platform == 'win32':
+            return True
+        return bool(os.environ.get('DISPLAY') or
+                    os.environ.get('WAYLAND_DISPLAY'))
+
+    # ── VNC remoto (noVNC) ────────────────────────────────────────────────
+    _vnc_procs: list = []
+
+    def _iniciar_vnc(self):
+        """Inicia x11vnc + websockify para acesso remoto via noVNC."""
+        import subprocess, os
+        if self._vnc_procs:
+            return
+        display = os.environ.get('DISPLAY', ':99')
+        try:
+            p_vnc = subprocess.Popen(
+                ['x11vnc', '-display', display, '-nopw', '-forever',
+                 '-shared', '-rfbport', '5900', '-noxdamage'],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+            p_ws = subprocess.Popen(
+                ['websockify', '--web', '/usr/share/novnc',
+                 '6080', 'localhost:5900'],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+            self._vnc_procs = [p_vnc, p_ws]
+            self._log("noVNC ativo para verificação", 'aviso')
+        except FileNotFoundError:
+            self._log("x11vnc/websockify não instalados", 'aviso')
+
+    def _parar_vnc(self):
+        for p in self._vnc_procs:
+            try:
+                p.terminate()
+            except Exception:
+                pass
+        self._vnc_procs = []
+
     async def iniciar(self):
         import os
         from playwright.async_api import async_playwright
@@ -71,9 +113,13 @@ class LinkedInBot:
         self._pw = await async_playwright().start()
         os.makedirs(SESSION_DIR, exist_ok=True)
 
+        # Se tem display (Xvfb), abre visível para noVNC funcionar
+        tem_display = self._tem_display()
+        usar_headless = not tem_display
+
         self.context = await self._pw.chromium.launch_persistent_context(
             user_data_dir=SESSION_DIR,
-            headless=True,
+            headless=usar_headless,
             args=[
                 '--disable-blink-features=AutomationControlled',
                 '--no-sandbox',
@@ -89,13 +135,15 @@ class LinkedInBot:
         )
         self.page = self.context.pages[0] if self.context.pages \
             else await self.context.new_page()
-        self._log("LinkedIn bot Pili iniciado (headless)")
+        modo = 'visível (Xvfb)' if not usar_headless else 'headless'
+        self._log(f"LinkedIn bot Pili iniciado ({modo})")
 
     async def fechar(self):
         if self.context:
             await self.context.close()
         if self._pw:
             await self._pw.stop()
+        self._parar_vnc()
 
     # =========================================================================
     # LOGIN
@@ -190,8 +238,9 @@ class LinkedInBot:
                 return True
             elif '/checkpoint' in self.page.url:
                 self._log(
-                    "LinkedIn exige verificação — salvando screenshot do "
-                    "checkpoint no dashboard. Resolva no site/app do LinkedIn.",
+                    "LinkedIn exige verificação — resolva pelo "
+                    "navegador interativo no dashboard (noVNC). "
+                    "Bot aguarda até 10 min.",
                     'aviso'
                 )
                 resolvido = await self._aguardar_checkpoint()
@@ -217,86 +266,80 @@ class LinkedInBot:
 
     async def _aguardar_checkpoint(self, timeout_min: int = 10) -> bool:
         """
-        Salva screenshot a cada 2s, processa ações do dashboard (click/type)
-        e aguarda resolução. A cada 15s navega para /feed/ para detectar se
-        o usuário confirmou a verificação de outro navegador/dispositivo.
+        Inicia noVNC para o usuário resolver CAPTCHA/verificação interativamente
+        no browser real do bot. Salva screenshot como fallback.
         """
         import os
-        import json as _json
         base_dir = os.path.dirname(os.path.abspath(__file__))
         chk_path = os.path.join(base_dir, 'li_checkpoint.png')
-        action_path = os.path.join(base_dir, 'li_action.json')
         timeout_s = timeout_min * 60
         elapsed = 0
-        desde_ultimo_reload = 0
+        captcha_tentado = False
+
+        if self._tem_display():
+            self._iniciar_vnc()
+            self._log(
+                "noVNC ativo — acesse pelo dashboard para resolver "
+                "a verificação no browser real",
+                'aviso'
+            )
+
         while elapsed < timeout_s:
             try:
                 await self.page.screenshot(path=chk_path, full_page=False)
             except Exception:
                 pass
 
-            # Processa ação do dashboard (click / type / press)
-            if os.path.exists(action_path):
-                try:
-                    with open(action_path, 'r') as f:
-                        act = _json.load(f)
-                    os.remove(action_path)
-                    await self._executar_acao(act)
-                    await asyncio.sleep(0.5)
-                    try:
-                        await self.page.screenshot(
-                            path=chk_path, full_page=False
-                        )
-                    except Exception:
-                        pass
-                except Exception as e:
-                    self._log(f"Erro ao processar ação: {e}", 'erro')
+            if not captcha_tentado:
+                captcha_tentado = True
+                await self._tentar_resolver_captcha()
 
-            # Verifica se resolveu (URL mudou na própria página)
             cur = self.page.url
             if '/feed' in cur or ('/in/' in cur and '/checkpoint' not in cur):
+                self._parar_vnc()
                 try:
                     os.remove(chk_path)
                 except Exception:
                     pass
                 return True
 
-            # A cada 15s, navega para /feed/ para detectar login feito
-            # em outro navegador/dispositivo (cookies da sessão já válidos)
-            desde_ultimo_reload += 2
-            if desde_ultimo_reload >= 15:
-                desde_ultimo_reload = 0
-                self._log("Verificando se sessão foi validada...")
-                try:
-                    await self.page.goto(
-                        f'{LINKEDIN_URL}/feed/',
-                        wait_until='domcontentloaded',
-                        timeout=10000,
-                    )
-                    await asyncio.sleep(2)
-                    cur = self.page.url
-                    if '/feed' in cur or (
-                        '/in/' in cur and '/checkpoint' not in cur
-                    ):
-                        self._log("Sessão validada!", 'sucesso')
-                        try:
-                            os.remove(chk_path)
-                        except Exception:
-                            pass
-                        return True
-                    # Ainda no checkpoint — tira screenshot atualizado
-                    try:
-                        await self.page.screenshot(
-                            path=chk_path, full_page=False
-                        )
-                    except Exception:
-                        pass
-                except Exception:
-                    pass
+            await asyncio.sleep(3)
+            elapsed += 3
 
-            await asyncio.sleep(2)
-            elapsed += 2
+        self._parar_vnc()
         return False
+
+    async def _tentar_resolver_captcha(self):
+        """Tenta clicar no checkbox do reCAPTCHA dentro do iframe."""
+        try:
+            for frame in self.page.frames:
+                if 'recaptcha' in (frame.url or ''):
+                    try:
+                        checkbox = await frame.query_selector(
+                            '.recaptcha-checkbox-border, #recaptcha-anchor'
+                        )
+                        if checkbox:
+                            self._log("Tentando resolver reCAPTCHA...")
+                            await checkbox.click()
+                            await asyncio.sleep(5)
+                            return
+                    except Exception:
+                        continue
+            for sel in [
+                'button[type="submit"]',
+                'button:has-text("Verificar")',
+                'button:has-text("Verify")',
+            ]:
+                try:
+                    btn = await self.page.query_selector(sel)
+                    if btn:
+                        await btn.click()
+                        await asyncio.sleep(3)
+                        return
+                except Exception:
+                    continue
+        except Exception as e:
+            self._log(f"Erro ao tentar resolver CAPTCHA: {e}", 'aviso')
 
     async def _executar_acao(self, act: dict):
         """Executa click/type/press vindo do dashboard."""

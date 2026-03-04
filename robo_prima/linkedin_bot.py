@@ -66,17 +66,22 @@ class LinkedInBot:
     # =========================================================================
 
     async def iniciar(self, headless: bool = True):
-        """Abre browser com sessão persistente."""
+        """Abre browser com sessão persistente.
+        Se DISPLAY está configurado (Xvfb), abre visível para permitir noVNC."""
         import os
         from playwright.async_api import async_playwright
 
         self._pw = await async_playwright().start()
         os.makedirs(SESSION_DIR, exist_ok=True)
-        self._headless = headless
+
+        # Se tem display (Xvfb no container), abre visível para noVNC funcionar
+        tem_display = self._tem_display()
+        usar_headless = not tem_display if headless else False
+        self._headless = usar_headless
 
         self.context = await self._pw.chromium.launch_persistent_context(
             user_data_dir=SESSION_DIR,
-            headless=headless,
+            headless=usar_headless,
             args=[
                 '--disable-blink-features=AutomationControlled',
                 '--no-sandbox',
@@ -92,7 +97,7 @@ class LinkedInBot:
         )
         self.page = self.context.pages[0] if self.context.pages \
             else await self.context.new_page()
-        modo = 'visível' if not headless else 'headless'
+        modo = 'visível (Xvfb)' if not usar_headless else 'headless'
         self._log(f"LinkedIn bot Prisma iniciado ({modo})")
 
     async def fechar(self):
@@ -218,38 +223,15 @@ class LinkedInBot:
 
             if not campo_email:
                 self._log(
-                    f"Campo de login não encontrado — URL: {self.page.url}",
+                    f"Campo de login não encontrado — URL: {self.page.url}. "
+                    "Abrindo noVNC no dashboard para login manual.",
                     'erro'
                 )
-                if self._headless and self._tem_display():
-                    await self._reabrir_visivel()
-                    await self.page.goto(
-                        f'{LINKEDIN_URL}/login',
-                        wait_until='domcontentloaded'
-                    )
-                    await asyncio.sleep(3)
-                    self._log(
-                        "Navegador aberto — faça login manualmente. "
-                        "Bot aguarda até 10 min.",
-                        'aviso'
-                    )
-                    resolvido = await self._aguardar_checkpoint()
-                    if resolvido:
-                        self.conectado = True
-                        self._log("Login manual OK", 'sucesso')
-                        return True
-                elif self._headless:
-                    # Servidor sem display — usa interação via dashboard
-                    self._log(
-                        "Use a tela interativa no dashboard para "
-                        "fazer login. Bot aguarda até 10 min.",
-                        'aviso'
-                    )
-                    resolvido = await self._aguardar_checkpoint()
-                    if resolvido:
-                        self.conectado = True
-                        self._log("Login via dashboard OK", 'sucesso')
-                        return True
+                resolvido = await self._aguardar_checkpoint()
+                if resolvido:
+                    self.conectado = True
+                    self._log("Login manual via noVNC OK", 'sucesso')
+                    return True
                 return False
 
             await self.page.fill(campo_email, LINKEDIN_EMAIL)
@@ -275,34 +257,12 @@ class LinkedInBot:
                 self._log("Login LinkedIn OK — feed carregado", 'sucesso')
                 return True
             elif '/checkpoint' in self.page.url:
-                if self._headless and self._tem_display():
-                    # Xvfb ou desktop — abre browser visível + noVNC
-                    await self._reabrir_visivel()
-                    await self.page.goto(
-                        f'{LINKEDIN_URL}/feed/',
-                        wait_until='domcontentloaded'
-                    )
-                    await asyncio.sleep(3)
-                    self._iniciar_vnc()
-                    self._log(
-                        "LinkedIn exige verificação — resolva pelo "
-                        "navegador no dashboard. Bot aguarda até 10 min.",
-                        'aviso'
-                    )
-                elif self._headless:
-                    # Sem display nenhum — screenshot + cliques
-                    self._log(
-                        "LinkedIn exige verificação — use a tela "
-                        "interativa no dashboard para resolver. "
-                        "Bot aguarda até 10 min.",
-                        'aviso'
-                    )
-                else:
-                    self._log(
-                        "LinkedIn exige verificação — resolva no "
-                        "navegador que abriu. Bot aguarda até 10 min.",
-                        'aviso'
-                    )
+                self._log(
+                    "LinkedIn exige verificação — resolva pelo "
+                    "navegador interativo no dashboard (noVNC). "
+                    "Bot aguarda até 10 min.",
+                    'aviso'
+                )
                 resolvido = await self._aguardar_checkpoint()
                 if resolvido:
                     self.conectado = True
@@ -320,98 +280,42 @@ class LinkedInBot:
             self._log(f"Erro no login: {e}", 'erro')
             return False
 
-    async def _reabrir_visivel(self):
-        """Fecha contexto headless e reabre em modo visível (mesma sessão).
-        Se não houver display (servidor Linux), reabre headless e usa screenshots."""
-        self._log("Reabrindo navegador em modo visível...")
-        try:
-            await self.context.close()
-        except Exception:
-            pass
-
-        # Tenta modo visível; se não houver display, volta headless
-        for tentativa_headless in (False, True):
-            try:
-                self.context = await self._pw.chromium.launch_persistent_context(
-                    user_data_dir=SESSION_DIR,
-                    headless=tentativa_headless,
-                    args=[
-                        '--disable-blink-features=AutomationControlled',
-                        '--no-sandbox',
-                        '--disable-dev-shm-usage',
-                    ],
-                    user_agent=(
-                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                        'AppleWebKit/537.36 (KHTML, like Gecko) '
-                        'Chrome/121.0.0.0 Safari/537.36'
-                    ),
-                    viewport={'width': 1366, 'height': 768},
-                    locale='pt-BR',
-                )
-                self.page = self.context.pages[0] if self.context.pages \
-                    else await self.context.new_page()
-                self._headless = tentativa_headless
-                if tentativa_headless:
-                    self._log(
-                        "Servidor sem display — usando screenshots no dashboard. "
-                        "Resolva a verificação pelo dashboard.",
-                        'aviso'
-                    )
-                else:
-                    self._log(
-                        "Navegador reaberto em modo visível — resolva "
-                        "a verificação na janela"
-                    )
-                return
-            except Exception:
-                if not tentativa_headless:
-                    self._log(
-                        "Sem display (servidor headless) — "
-                        "voltando headless com screenshots...",
-                        'aviso'
-                    )
-                    continue
-                raise
-
     async def _aguardar_checkpoint(self, timeout_min: int = 10) -> bool:
         """
-        Salva screenshot a cada 2s, processa ações do dashboard (click/type)
-        e aguarda resolução. A cada 15s navega para /feed/ para detectar se
-        o usuário confirmou a verificação de outro navegador/dispositivo.
+        Inicia noVNC para o usuário resolver CAPTCHA/verificação interativamente
+        no browser real do bot. Salva screenshot como fallback.
         """
-        import os, json as _json
+        import os
         base_dir = os.path.dirname(os.path.abspath(__file__))
         chk_path = os.path.join(base_dir, 'li_checkpoint.png')
-        action_path = os.path.join(base_dir, 'li_action.json')
         timeout_s = timeout_min * 60
         elapsed = 0
-        desde_ultimo_reload = 0
+
+        # Tenta resolver reCAPTCHA automaticamente (checkbox simples)
+        captcha_tentado = False
+
+        # Inicia noVNC se display disponível
+        if self._tem_display():
+            self._iniciar_vnc()
+            self._log(
+                "noVNC ativo — acesse pelo dashboard para resolver "
+                "a verificação no browser real",
+                'aviso'
+            )
+
         while elapsed < timeout_s:
-            # Screenshot
+            # Screenshot para fallback no dashboard
             try:
                 await self.page.screenshot(path=chk_path, full_page=False)
             except Exception:
                 pass
 
-            # Processa ação do dashboard (click / type / press)
-            if os.path.exists(action_path):
-                try:
-                    with open(action_path, 'r') as f:
-                        act = _json.load(f)
-                    os.remove(action_path)
-                    await self._executar_acao(act)
-                    # Screenshot imediato após ação
-                    await asyncio.sleep(0.5)
-                    try:
-                        await self.page.screenshot(
-                            path=chk_path, full_page=False
-                        )
-                    except Exception:
-                        pass
-                except Exception as e:
-                    self._log(f"Erro ao processar ação: {e}", 'erro')
+            # Tenta clicar reCAPTCHA checkbox automaticamente (1x)
+            if not captcha_tentado:
+                captcha_tentado = True
+                await self._tentar_resolver_captcha()
 
-            # Verifica se resolveu (URL mudou na própria página)
+            # Verifica se resolveu
             cur = self.page.url
             if '/feed' in cur or ('/in/' in cur and '/checkpoint' not in cur):
                 self._parar_vnc()
@@ -421,44 +325,51 @@ class LinkedInBot:
                     pass
                 return True
 
-            # A cada 15s, navega para /feed/ para detectar login feito
-            # em outro navegador/dispositivo (cookies da sessão já válidos)
-            desde_ultimo_reload += 2
-            if desde_ultimo_reload >= 15:
-                desde_ultimo_reload = 0
-                self._log("Verificando se sessão foi validada...")
-                try:
-                    await self.page.goto(
-                        f'{LINKEDIN_URL}/feed/',
-                        wait_until='domcontentloaded',
-                        timeout=10000,
-                    )
-                    await asyncio.sleep(2)
-                    cur = self.page.url
-                    if '/feed' in cur or (
-                        '/in/' in cur and '/checkpoint' not in cur
-                    ):
-                        self._log("Sessão validada!", 'sucesso')
-                        self._parar_vnc()
-                        try:
-                            os.remove(chk_path)
-                        except Exception:
-                            pass
-                        return True
-                    # Ainda no checkpoint — tira screenshot atualizado
-                    try:
-                        await self.page.screenshot(
-                            path=chk_path, full_page=False
-                        )
-                    except Exception:
-                        pass
-                except Exception:
-                    pass
+            await asyncio.sleep(3)
+            elapsed += 3
 
-            await asyncio.sleep(2)
-            elapsed += 2
         self._parar_vnc()
         return False
+
+    async def _tentar_resolver_captcha(self):
+        """Tenta clicar no checkbox do reCAPTCHA dentro do iframe."""
+        try:
+            # reCAPTCHA fica dentro de um iframe
+            for frame in self.page.frames:
+                if 'recaptcha' in (frame.url or ''):
+                    try:
+                        checkbox = await frame.query_selector(
+                            '.recaptcha-checkbox-border, '
+                            '#recaptcha-anchor'
+                        )
+                        if checkbox:
+                            self._log("Tentando resolver reCAPTCHA...")
+                            await checkbox.click()
+                            await asyncio.sleep(5)
+                            # Verifica se resolveu (às vezes só o click resolve)
+                            cur = self.page.url
+                            if '/feed' in cur:
+                                self._log("reCAPTCHA resolvido!", 'sucesso')
+                            return
+                    except Exception:
+                        continue
+            # Tenta também botão de submit/verificar na página principal
+            for sel in [
+                'button[type="submit"]',
+                'button:has-text("Verificar")',
+                'button:has-text("Verify")',
+                'input[type="submit"]',
+            ]:
+                try:
+                    btn = await self.page.query_selector(sel)
+                    if btn:
+                        await btn.click()
+                        await asyncio.sleep(3)
+                        return
+                except Exception:
+                    continue
+        except Exception as e:
+            self._log(f"Erro ao tentar resolver CAPTCHA: {e}", 'aviso')
 
     async def _executar_acao(self, act: dict):
         """Executa click/type/press vindo do dashboard."""

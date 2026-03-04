@@ -573,22 +573,24 @@
 
 <!-- LINKEDIN CHECKPOINT OVERLAY -->
 <div class="qr-overlay" id="li-chk-overlay">
-  <div class="qr-card" style="max-width:520px">
+  <div class="qr-card" style="max-width:900px;width:95vw">
     <button class="qr-close" onclick="stopChkPolling()" title="Fechar">✕</button>
     <div class="qr-title" style="color:#f59e0b">&#9888; Verificação LinkedIn</div>
-    <div class="qr-sub">O LinkedIn pediu confirmação de segurança</div>
-    <div class="qr-img-wrap" style="background:#0f172a">
-      <img id="li-chk-img" src="" alt="LinkedIn Checkpoint"
-           style="width:460px;height:auto;max-height:340px;object-fit:contain;display:block;border-radius:6px">
+    <div class="qr-sub">Resolva a verificação diretamente no navegador do bot</div>
+    <!-- noVNC iframe (browser real interativo) -->
+    <div id="vnc-container" style="display:none;margin-top:10px">
+      <iframe id="vnc-iframe" style="width:100%;height:500px;border:1px solid #334155;border-radius:8px;background:#000" allowfullscreen></iframe>
     </div>
-    <ol class="qr-steps" style="margin-top:14px">
-      <li><span class="step-n" style="background:rgba(245,158,11,.15);color:#f59e0b">1</span>Abra o <a href="https://www.linkedin.com/login" target="_blank" style="color:#3b82f6;text-decoration:underline">LinkedIn</a> no celular ou navegador</li>
-      <li><span class="step-n" style="background:rgba(245,158,11,.15);color:#f59e0b">2</span>Faça login com a mesma conta do bot</li>
-      <li><span class="step-n" style="background:rgba(245,158,11,.15);color:#f59e0b">3</span>Se receber e-mail/SMS de confirmação, aprove</li>
-      <li><span class="step-n" style="background:rgba(245,158,11,.15);color:#f59e0b">4</span>O bot detecta e continua automaticamente</li>
-    </ol>
+    <!-- Fallback: screenshot estático -->
+    <div id="chk-fallback" style="margin-top:10px">
+      <div class="qr-img-wrap" style="background:#0f172a">
+        <img id="li-chk-img" src="" alt="LinkedIn Checkpoint"
+             style="width:100%;max-width:860px;height:auto;max-height:480px;object-fit:contain;display:block;border-radius:6px">
+      </div>
+      <p style="color:#94a3b8;font-size:13px;margin-top:8px;text-align:center">Aguardando noVNC conectar...</p>
+    </div>
     <div class="qr-pulse" style="color:#f59e0b;margin-top:10px">
-      <span class="qr-pulse-dot" style="background:#f59e0b"></span> Aguardando confirmação...
+      <span class="qr-pulse-dot" style="background:#f59e0b"></span> Aguardando resolução...
     </div>
   </div>
 </div>
@@ -878,8 +880,17 @@ function startChkPolling(){
 function stopChkPolling(){
   if(_chkTimer){ clearInterval(_chkTimer); _chkTimer=null; }
   _chkSeen=false;
+  _vncLoaded=false;
   document.getElementById('li-chk-overlay').classList.remove('open');
+  // Limpa iframe noVNC
+  const vf=document.getElementById('vnc-iframe');
+  if(vf) vf.src='';
+  const vc=document.getElementById('vnc-container');
+  if(vc) vc.style.display='none';
+  const cf=document.getElementById('chk-fallback');
+  if(cf) cf.style.display='block';
 }
+let _vncLoaded=false;
 function pollChk(){
   fetch(`/api/${BOT}/li-checkpoint?t=${Date.now()}`)
     .then(r=>{
@@ -892,9 +903,25 @@ function pollChk(){
           img.src=url;
           _chkSeen=true;
           document.getElementById('li-chk-overlay').classList.add('open');
+
+          // Tenta carregar noVNC (browser interativo real)
+          if(!_vncLoaded){
+            fetch(`/api/${BOT}/li-vnc-status`)
+              .then(r2=>r2.json())
+              .then(d=>{
+                if(d.vnc){
+                  _vncLoaded=true;
+                  const vncUrl=location.origin+'/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true&reconnect_delay=2000';
+                  document.getElementById('vnc-iframe').src=vncUrl;
+                  document.getElementById('vnc-container').style.display='block';
+                  document.getElementById('chk-fallback').style.display='none';
+                }
+              }).catch(()=>{});
+          }
         });
       } else {
         if(_chkSeen){
+          _vncLoaded=false;
           stopChkPolling();
           loadBotStatus();
         }
