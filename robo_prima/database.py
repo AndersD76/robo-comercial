@@ -225,8 +225,15 @@ def salvar_empresa(dados):
         return empresa_id
     except psycopg2.IntegrityError:
         conn.rollback()
+        # Re-setar search_path após rollback (rollback reverte SET)
+        c.execute(
+            f"SET search_path TO {DB_SCHEMA}, public"
+        )
         if dados.get('cnpj'):
-            c.execute("SELECT id FROM empresas WHERE cnpj = %s", (dados['cnpj'],))
+            c.execute(
+                "SELECT id FROM empresas WHERE cnpj = %s",
+                (dados['cnpj'],)
+            )
             result = c.fetchone()
             if result:
                 return result['id']
@@ -295,12 +302,19 @@ def get_empresa_por_whatsapp(numero):
     if not numero:
         return None
     digitos = ''.join(filter(str.isdigit, str(numero)))
+    if len(digitos) < 10:
+        return None
     conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT * FROM empresas WHERE whatsapp LIKE %s", (f'%{digitos[-8:]}%',))
-    row = c.fetchone()
-    conn.close()
-    return dict(row) if row else None
+    try:
+        c = conn.cursor()
+        c.execute(
+            "SELECT * FROM empresas WHERE whatsapp LIKE %s",
+            (f'%{digitos[-8:]}%',)
+        )
+        row = c.fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
 
 
 # =============================================================================
@@ -465,7 +479,10 @@ def salvar_lead_linkedin(perfil: dict, status: str = 'encontrado'):
         return row['id'] if row else None
     except Exception as e:
         conn.rollback()
-        log_acao('erro', f'salvar_lead_linkedin: {e}')
+        try:
+            log_acao('erro', f'salvar_lead_linkedin: {e}')
+        except Exception:
+            pass
         return None
     finally:
         conn.close()
@@ -506,7 +523,7 @@ def get_estatisticas():
     for key, sql in [
         ('total_empresas',       'SELECT COUNT(*) as total FROM empresas'),
         ('empresas_novas',       "SELECT COUNT(*) as total FROM empresas WHERE status = 'novo'"),
-        ('empresas_contactadas', "SELECT COUNT(*) as total FROM empresas WHERE status = 'contactado'"),
+        ('empresas_contactadas', "SELECT COUNT(*) as total FROM empresas WHERE status = 'contactada'"),
         ('whatsapp_enviados',    "SELECT COUNT(*) as total FROM interacoes WHERE canal = 'whatsapp'"),
         ('whatsapp_respostas',   "SELECT COUNT(*) as total FROM interacoes WHERE canal = 'whatsapp' AND respondeu = 1"),
         ('total_buscas',         'SELECT COUNT(*) as total FROM buscas'),

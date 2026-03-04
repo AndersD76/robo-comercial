@@ -32,24 +32,21 @@ LINKEDIN_MAX_MENSAGENS_DIA = int(os.environ.get('LINKEDIN_MAX_MSGS', '15'))
 
 # Cargos-alvo para prospecção LinkedIn — gestão da qualidade
 LINKEDIN_CARGOS_ALVO = [
-    # Qualidade
+    # Qualidade (foco principal)
     'qualidade', 'quality', 'SGQ', 'gestão da qualidade',
     'gerente de qualidade', 'coordenador de qualidade',
     'responsável pela qualidade', 'supervisor de qualidade',
     'analista de qualidade', 'engenheiro de qualidade',
     'head of quality', 'quality manager', 'quality engineer',
-    # Normas / processos
-    'ISO', 'auditoria', 'auditor', 'melhoria contínua',
-    'lean', 'six sigma', 'PDCA', 'processos',
-    # Produção / operações
+    # Normas / melhoria contínua
+    'auditor interno', 'auditor de qualidade', 'melhoria contínua',
+    'lean manufacturing', 'six sigma', 'gestão de processos',
+    # Produção / operações (termos compostos para evitar falsos positivos)
     'diretor industrial', 'gerente industrial', 'gerente de produção',
     'gerente de operações', 'coordenador de produção',
     'supervisor de produção', 'diretor de operações',
-    'gerente de processos', 'engenheiro de processos',
-    'gerente de fábrica', 'diretor de fábrica',
-    # Gestão / diretoria
-    'diretor', 'CEO', 'sócio', 'proprietário', 'dono',
-    'gerente geral', 'gerente administrativo',
+    'engenheiro de processos', 'gerente de fábrica',
+    'diretor de fábrica', 'gerente de processos industriais',
 ]
 
 # Termos de busca LinkedIn — empresas industriais / ISO 9001

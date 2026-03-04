@@ -62,7 +62,7 @@ _DDDS = {
     '21', '22', '24', '27', '28',
     '31', '32', '33', '34', '35', '37', '38',
     '41', '42', '43', '44', '45', '46', '47', '48', '49',
-    '51', '53', '54', '55',
+    '51', '52', '53', '54', '55',
     '61', '62', '63', '64', '65', '66', '67', '68', '69',
     '71', '73', '74', '75', '77', '79',
     '81', '82', '83', '84', '85', '86', '87', '88', '89',
@@ -550,7 +550,7 @@ async def ciclo_envio(
                 lead['id'], None, 'whatsapp', 'inicial', mensagem
             )
             atualizar_status_empresa(lead['id'], 'contactada')
-            incrementar_contagem('whatsapp_enviados')
+            # registrar_interacao já chama incrementar_contagem
             enviadas += 1
             await bot.delay_entre_mensagens()
         else:
@@ -614,7 +614,7 @@ async def ciclo_followup(bot: WhatsAppBot, gerador: GeradorMensagens):
                 registrar_interacao(
                     lead['id'], None, 'whatsapp', tipo, msg
                 )
-                incrementar_contagem('whatsapp_enviados')
+                # registrar_interacao já chama incrementar_contagem
                 log_acao('info', f"Follow-up {n_fu}: {nome}")
 
             await bot.delay_entre_mensagens()
@@ -680,6 +680,19 @@ async def ciclo_respostas(bot: WhatsAppBot, gerador: GeradorMensagens):
             print(
                 f"[WA/Prisma {_ts()}] ✗ Erro gerando resposta "
                 f"para {nome[:35]}: {e}",
+                flush=True)
+            continue
+
+        # Navega para a conversa correta antes de responder
+        try:
+            await bot.page.goto(
+                f"https://web.whatsapp.com/send?phone={numero}",
+                timeout=20000)
+            await asyncio.sleep(random.uniform(3, 5))
+        except Exception as e:
+            print(
+                f"[WA/Prisma {_ts()}] ⚠ Erro navegando para "
+                f"{nome[:35]}: {e}",
                 flush=True)
             continue
 
@@ -773,17 +786,21 @@ async def main():
                 flush=True
             )
 
+            erros_ciclo = 0
+
             # ── Prospecção 24/7 (a cada 3 ciclos) ──
             if ciclo_num % 3 == 1:
                 try:
                     await asyncio.wait_for(
                         ciclo_busca(), timeout=300)
                 except asyncio.TimeoutError:
+                    erros_ciclo += 1
                     print(
                         f"[WA/Prisma {_ts()}] ⚠ "
                         "ciclo_busca timeout (5 min)",
                         flush=True)
                 except Exception as e:
+                    erros_ciclo += 1
                     print(
                         f"[WA/Prisma {_ts()}] ✗ "
                         f"Erro ciclo_busca: {e}",
@@ -795,11 +812,13 @@ async def main():
                     await asyncio.wait_for(
                         ciclo_respostas(bot, gerador), timeout=120)
                 except asyncio.TimeoutError:
+                    erros_ciclo += 1
                     print(
                         f"[WA/Prisma {_ts()}] ⚠ "
                         "ciclo_respostas timeout (2 min)",
                         flush=True)
                 except Exception as e:
+                    erros_ciclo += 1
                     print(
                         f"[WA/Prisma {_ts()}] ✗ "
                         f"Erro ciclo_respostas: {e}",
@@ -810,11 +829,13 @@ async def main():
                         ciclo_envio(bot, gerador, limite=10),
                         timeout=180)
                 except asyncio.TimeoutError:
+                    erros_ciclo += 1
                     print(
                         f"[WA/Prisma {_ts()}] ⚠ "
                         "ciclo_envio timeout (3 min)",
                         flush=True)
                 except Exception as e:
+                    erros_ciclo += 1
                     print(
                         f"[WA/Prisma {_ts()}] ✗ "
                         f"Erro ciclo_envio: {e}",
@@ -824,26 +845,44 @@ async def main():
                     await asyncio.wait_for(
                         ciclo_followup(bot, gerador), timeout=120)
                 except asyncio.TimeoutError:
+                    erros_ciclo += 1
                     print(
                         f"[WA/Prisma {_ts()}] ⚠ "
                         "ciclo_followup timeout (2 min)",
                         flush=True)
                 except Exception as e:
+                    erros_ciclo += 1
                     print(
                         f"[WA/Prisma {_ts()}] ✗ "
                         f"Erro ciclo_followup: {e}",
                         flush=True)
             else:
                 print(
-                    f"[WA/Prisma {_ts()}] ℹ Fora do horário comercial "
-                    f"({HORARIO_INICIO}h-{HORARIO_FIM}h seg-sex) "
+                    f"[WA/Prisma {_ts()}] ℹ Fora do horário "
+                    f"comercial ({HORARIO_INICIO}h-"
+                    f"{HORARIO_FIM}h seg-sex) "
                     "— apenas prospecção",
                     flush=True
                 )
 
-            erros_seguidos = 0
+            # Circuit breaker: pausa maior se muitos erros
+            if erros_ciclo > 0:
+                erros_seguidos += erros_ciclo
+                if erros_seguidos >= 10:
+                    pausa = 300
+                    print(
+                        f"[WA/Prisma {_ts()}] ⚠ "
+                        f"{erros_seguidos} erros seguidos"
+                        f" — pausa de {pausa}s",
+                        flush=True)
+                    await asyncio.sleep(pausa)
+                    erros_seguidos = 0
+            else:
+                erros_seguidos = 0
+
             print(
-                f"[WA/Prisma {_ts()}] ✓ Ciclo #{ciclo_num} completo.",
+                f"[WA/Prisma {_ts()}] ✓ Ciclo #{ciclo_num} "
+                "completo.",
                 flush=True
             )
             await asyncio.sleep(5)

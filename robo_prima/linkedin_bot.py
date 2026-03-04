@@ -12,6 +12,7 @@ Estratégia:
 import asyncio
 import random
 from datetime import datetime, timezone, timedelta
+from urllib.parse import quote
 
 from config import (
     ANTHROPIC_API_KEY, DEMO_CAL_LINK,
@@ -58,6 +59,7 @@ class LinkedInBot:
         self.msgs_hoje = 0
         self._msgs_respondidas: set = set()  # hashes já respondidos na sessão
         self._ciclo = 0
+        self._ultimo_dia: int = -1  # dia do mês do último reset
         self.ai = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) \
             if HAS_AI and ANTHROPIC_API_KEY else None
 
@@ -402,7 +404,7 @@ class LinkedInBot:
         try:
             url = (
                 f'{LINKEDIN_URL}/search/results/people/'
-                f'?keywords={termo.replace(" ", "%20")}'
+                f'?keywords={quote(termo)}'
                 f'&page={pagina}'
             )
             self._log(f"Buscando: \"{termo}\" (página {pagina})...")
@@ -413,10 +415,16 @@ class LinkedInBot:
             cur_url = self.page.url
             if '/checkpoint' in cur_url or '/login' in cur_url or '/authwall' in cur_url:
                 self._log(
-                    "Redirecionado para checkpoint/login — sessão expirada. "
-                    "Verifique credenciais e aprovação 2FA.", 'aviso'
+                    "Sessão expirada — tentando re-login...", 'aviso'
                 )
-                return resultados
+                self.conectado = False
+                ok = await self.fazer_login()
+                if not ok:
+                    self._log("Re-login falhou — abortando busca", 'erro')
+                    return resultados
+                # Tenta a busca novamente após re-login
+                await self.page.goto(url, wait_until='domcontentloaded')
+                await asyncio.sleep(random.uniform(2, 4))
 
             # Scroll para carregar lazy items
             await self.page.evaluate('window.scrollTo(0, 800)')
@@ -612,26 +620,28 @@ class LinkedInBot:
 
         if self.ai:
             try:
-                r = self.ai.messages.create(
-                    model='claude-3-haiku-20240307',
-                    max_tokens=80,
-                    system=(
-                        "Escreva uma nota CURTA (max 200 chars) de pedido "
-                        "de conexão no LinkedIn para um profissional de "
-                        "qualidade/gestão industrial. Mencione PrismaBiz "
-                        "(gestão da qualidade). Seja direto e profissional. "
-                        "Retorne APENAS a nota, sem aspas."
-                    ),
-                    messages=[{
-                        'role': 'user',
-                        'content': (
-                            f'Nome: {nome}, Cargo: {cargo}, '
-                            f'Empresa: {empresa}'
+                def _chamar_ai():
+                    return self.ai.messages.create(
+                        model='claude-3-haiku-20240307',
+                        max_tokens=80,
+                        system=(
+                            "Escreva uma nota CURTA (max 180 chars) de pedido "
+                            "de conexão no LinkedIn para um profissional de "
+                            "qualidade/gestão industrial. Mencione PrismaBiz "
+                            "(gestão da qualidade). Seja direto e profissional. "
+                            "Retorne APENAS a nota, sem aspas."
                         ),
-                    }],
-                )
+                        messages=[{
+                            'role': 'user',
+                            'content': (
+                                f'Nome: {nome}, Cargo: {cargo}, '
+                                f'Empresa: {empresa}'
+                            ),
+                        }],
+                    )
+                r = await asyncio.to_thread(_chamar_ai)
                 nota = r.content[0].text.strip()
-                return nota[:295]  # LinkedIn limita a 300 chars
+                return nota[:200]  # LinkedIn limita a 200 chars
             except Exception:
                 pass
 
@@ -640,7 +650,7 @@ class LinkedInBot:
             f"Oi {nome}, vi que você atua em {cargo} na {empresa}. "
             "Trabalho com gestão da qualidade e acredito que posso "
             "agregar. Vamos conectar?"
-        )[:295]
+        )[:200]
 
     # =========================================================================
     # ENVIAR DM PÓS-CONEXÃO
@@ -792,18 +802,29 @@ class LinkedInBot:
                             f"  ⏭ {nome} já recebeu DM — pulando")
                         continue
 
-                    # Verifica se já existe mensagem nossa na conversa
+                    # Verifica se já enviamos uma DM nesta conversa
                     try:
-                        has_sent = await self.page.evaluate("""() => {
-                            const msgs = document.querySelectorAll(
-                                '.msg-s-event-listitem__message-bubble, ' +
-                                '[class*="message-bubble"]'
+                        nossa_msg = await self.page.evaluate("""() => {
+                            // Verifica se há mensagem enviada por nós
+                            const outgoing = document.querySelectorAll(
+                                '[class*="message-group--outgoing"], ' +
+                                '[class*="outgoing"]'
                             );
-                            return msgs.length > 1;
+                            // Conta total de bolhas de mensagem
+                            const bolhas = document.querySelectorAll(
+                                '.msg-s-event-listitem__message-bubble, ' +
+                                '[class*="message-bubble"], ' +
+                                '.msg-s-event-listitem__body, ' +
+                                'p[class*="msg-s-event"]'
+                            );
+                            return {
+                                temOutgoing: outgoing.length > 0,
+                                totalMsgs: bolhas.length
+                            };
                         }""")
-                        if has_sent:
+                        if nossa_msg and nossa_msg.get('temOutgoing'):
                             self._log(
-                                f"  ⏭ {nome} já tem conversa aberta — pulando")
+                                f"  ⏭ {nome} — já enviamos msg nesta conversa")
                             continue
                     except Exception:
                         pass
@@ -817,6 +838,15 @@ class LinkedInBot:
                         continue
                     self.msgs_hoje += 1
                     enviadas += 1
+                    # Salva no DB que DM foi enviada
+                    if HAS_DB:
+                        try:
+                            salvar_lead_linkedin(
+                                {'nome': nome, 'url_perfil': self.page.url},
+                                'dm_enviada'
+                            )
+                        except Exception:
+                            pass
                     self._log(
                         f"  ✓ DM #{self.msgs_hoje}/{LINKEDIN_MAX_MENSAGENS_DIA} "
                         f"enviada para {nome}",
@@ -1111,30 +1141,34 @@ class LinkedInBot:
 
         if self.ai:
             try:
-                r = self.ai.messages.create(
-                    model='claude-3-haiku-20240307',
-                    max_tokens=150,
-                    system=(
-                        "Você é Daniel, vendedor do PrismaBiz — sistema de "
-                        "gestão da qualidade com Auditoria, Plano de Ação, "
-                        "SWOT, PDCA e mais 7 módulos, todos 100% gratuitos. "
-                        f"Link para demo: {DEMO_CAL_LINK}\n"
-                        "OBJETIVO: Agendar demo de 20 min.\n"
-                        "REGRAS: resposta curta (2-3 frases), natural e "
-                        "profissional. Interesse → convide para o link. "
-                        "Objeção preço → é GRATUITO. "
-                        "Objeção tempo → são 20 min apenas. "
-                        "Desinteresse claro → agradeça e encerre. "
-                        "Retorne APENAS a mensagem, sem aspas."
-                    ),
-                    messages=[{
-                        'role': 'user',
-                        'content': (
-                            f"Histórico:\n{hist_txt}"
-                            f"\n\nResponda para {primeiro}:"
+                cal = DEMO_CAL_LINK
+
+                def _chamar_ai():
+                    return self.ai.messages.create(
+                        model='claude-3-haiku-20240307',
+                        max_tokens=150,
+                        system=(
+                            "Você é Daniel, vendedor do PrismaBiz — sistema de "
+                            "gestão da qualidade com Auditoria, Plano de Ação, "
+                            "SWOT, PDCA e mais 7 módulos, todos 100% gratuitos. "
+                            f"Link para demo: {cal}\n"
+                            "OBJETIVO: Agendar demo de 20 min.\n"
+                            "REGRAS: resposta curta (2-3 frases), natural e "
+                            "profissional. Interesse → convide para o link. "
+                            "Objeção preço → é GRATUITO. "
+                            "Objeção tempo → são 20 min apenas. "
+                            "Desinteresse claro → agradeça e encerre. "
+                            "Retorne APENAS a mensagem, sem aspas."
                         ),
-                    }],
-                )
+                        messages=[{
+                            'role': 'user',
+                            'content': (
+                                f"Histórico:\n{hist_txt}"
+                                f"\n\nResponda para {primeiro}:"
+                            ),
+                        }],
+                    )
+                r = await asyncio.to_thread(_chamar_ai)
                 return r.content[0].text.strip()
             except Exception:
                 pass
@@ -1152,11 +1186,13 @@ class LinkedInBot:
         try:
             conn = get_connection()
             c = conn.cursor()
+            # Usa nome completo (exato) para evitar atualizar leads errados
             c.execute(
                 """UPDATE leads_linkedin
                    SET respondeu = 1, ultima_resposta = %s
-                   WHERE LOWER(nome) LIKE LOWER(%s)""",
-                (ultima_msg[:500], f'%{nome.split()[0]}%')
+                   WHERE LOWER(nome) = LOWER(%s)
+                   AND respondeu = 0""",
+                (ultima_msg[:500], nome.strip())
             )
             conn.commit()
             conn.close()
@@ -1189,11 +1225,15 @@ class LinkedInBot:
             try:
                 now = datetime.now(_BRT)
 
-                # Reset diário (meia-noite)
-                if now.hour == 0 and now.minute < 5:
-                    self.conexoes_hoje = 0
-                    self.msgs_hoje = 0
-                    self._log("Reset diário — contadores zerados para hoje")
+                # Reset diário (quando muda o dia)
+                dia_atual = now.day
+                if dia_atual != self._ultimo_dia:
+                    self._ultimo_dia = dia_atual
+                    if self.conexoes_hoje > 0 or self.msgs_hoje > 0:
+                        self.conexoes_hoje = 0
+                        self.msgs_hoje = 0
+                        self._msgs_respondidas.clear()
+                        self._log("Reset diário — contadores zerados")
 
                 self._ciclo += 1
                 self._log(
@@ -1275,14 +1315,13 @@ class LinkedInBot:
 
 # ── Entrada standalone ──────────────────────────────────────────────────────
 if __name__ == '__main__':
-    import sys
-    if sys.platform == 'win32':
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
     bot = LinkedInBot()
 
     async def main():
-        await bot.iniciar()
-        await bot.executar()
+        try:
+            await bot.iniciar()
+            await bot.executar()
+        finally:
+            await bot.fechar()
 
     asyncio.run(main())
