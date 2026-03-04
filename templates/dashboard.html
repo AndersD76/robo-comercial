@@ -839,12 +839,14 @@ function loadPipe(){
         const dt=l.ultima_msg?new Date(l.ultima_msg).toLocaleDateString('pt-BR'):
                  l.encontrado_em?new Date(l.encontrado_em).toLocaleDateString('pt-BR'):'';
         const resp=l.respostas>0?`<span style="color:#4ade80">✓ ${l.respostas} resp</span>`:'';
+        const icon=l.canal==='linkedin'?'<i class="fa-brands fa-linkedin" style="color:#60a5fa"></i>':'<i class="fa-brands fa-whatsapp" style="color:#22c55e"></i>';
         return `
         <div class="lcard" onclick="openLead(${JSON.stringify(l).replace(/"/g,'&quot;')})">
-          <div class="lcard-name">${l.nome_fantasia||'—'}</div>
-          <div class="lcard-seg">${l.segmento||'—'}</div>
+          <div class="lcard-name">${icon} ${l.nome_fantasia||'—'}</div>
+          <div class="lcard-seg">${l.segmento||'—'}${l.empresa?' • '+l.empresa:''}</div>
           ${fone?`<div style="font-size:10px;color:var(--muted);margin-top:2px">📞 ${fone}</div>`:''}
           ${l.email?`<div style="font-size:10px;color:var(--muted)">✉ ${l.email}</div>`:''}
+          ${l.url_perfil?`<div style="font-size:10px;color:var(--muted)">🔗 LinkedIn</div>`:''}
           <div class="lcard-msgs">${l.msgs||0} msg${l.msgs!==1?'s':''} ${resp}</div>
           <div class="lcard-foot">
             <span class="lcard-score">★ ${l.score||0}</span>
@@ -919,12 +921,17 @@ function loadBotStatus(){
 function openLead(l){
   document.getElementById('modal-title').textContent=l.nome_fantasia||'Lead';
   const fmt=v=>v?new Date(v).toLocaleString('pt-BR'):'—';
+  const isLi=l.canal==='linkedin';
+  const canalIcon=isLi?'<i class="fa-brands fa-linkedin" style="color:#60a5fa"></i> LinkedIn':'<i class="fa-brands fa-whatsapp" style="color:#22c55e"></i> WhatsApp';
   document.getElementById('modal-content').innerHTML=`
-    <div class="m-row"><span class="m-lbl">Segmento</span><span class="m-val">${l.segmento||'—'}</span></div>
+    <div class="m-row"><span class="m-lbl">Canal</span><span class="m-val">${canalIcon}</span></div>
+    ${isLi&&l.empresa?`<div class="m-row"><span class="m-lbl">Empresa</span><span class="m-val">${l.empresa}</span></div>`:''}
+    <div class="m-row"><span class="m-lbl">${isLi?'Cargo':'Segmento'}</span><span class="m-val">${l.segmento||'—'}</span></div>
     <div class="m-row"><span class="m-lbl">Localização</span><span class="m-val">${[l.cidade,l.estado].filter(Boolean).join(', ')||'—'}</span></div>
-    <div class="m-row"><span class="m-lbl">Telefone</span><span class="m-val">${l.telefone||'—'}</span></div>
-    <div class="m-row"><span class="m-lbl">WhatsApp</span><span class="m-val">${l.whatsapp||'—'}</span></div>
+    ${!isLi?`<div class="m-row"><span class="m-lbl">Telefone</span><span class="m-val">${l.telefone||'—'}</span></div>`:''}
+    ${!isLi?`<div class="m-row"><span class="m-lbl">WhatsApp</span><span class="m-val">${l.whatsapp||'—'}</span></div>`:''}
     <div class="m-row"><span class="m-lbl">Email</span><span class="m-val">${l.email||'—'}</span></div>
+    ${isLi&&l.url_perfil?`<div class="m-row"><span class="m-lbl">Perfil</span><span class="m-val"><a href="${l.url_perfil}" target="_blank" style="color:#60a5fa">Abrir LinkedIn ↗</a></span></div>`:''}
     <div class="m-row"><span class="m-lbl">Score</span><span class="m-val">★ ${l.score||0}</span></div>
     <div class="m-row"><span class="m-lbl">Status</span>${statusChip(l.status,l.demo_status)}</div>
     <div class="m-row"><span class="m-lbl">Mensagens</span><span class="m-val">${l.msgs||0}</span></div>

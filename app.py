@@ -126,7 +126,7 @@ def get_stats(schema: str) -> dict:
             )
             zero['li_conexoes'] = c.fetchone()['n']
             c.execute(
-                "SELECT COUNT(*) AS n FROM leads_linkedin WHERE respondeu = true"
+                "SELECT COUNT(*) AS n FROM leads_linkedin WHERE respondeu = 1"
             )
             zero['li_responderam'] = c.fetchone()['n']
             c.execute(
@@ -316,6 +316,7 @@ def api_pipeline():
         try:
             conn = get_db(schema)
             c = conn.cursor()
+            # — WhatsApp leads —
             c.execute("""
                 SELECT e.id, e.nome_fantasia, e.segmento, e.score,
                        e.status, e.demo_status, e.cidade, e.estado,
@@ -325,7 +326,8 @@ def api_pipeline():
                        MAX(CASE WHEN i.tipo = 'inicial' THEN i.mensagem END) AS msg_enviada,
                        MAX(CASE WHEN i.respondeu = 1 THEN i.resposta END) AS ultima_resposta,
                        MAX(i.respondido_em) AS respondido_em,
-                       SUM(CASE WHEN i.respondeu = 1 THEN 1 ELSE 0 END) AS respostas
+                       SUM(CASE WHEN i.respondeu = 1 THEN 1 ELSE 0 END) AS respostas,
+                       'whatsapp' AS canal
                 FROM empresas e
                 LEFT JOIN interacoes i ON e.id = i.empresa_id
                   AND i.canal = 'whatsapp'
@@ -336,7 +338,6 @@ def api_pipeline():
                 LIMIT 200
             """)
             rows = c.fetchall()
-            conn.close()
             for r in rows:
                 d = dict(r)
                 d['bot'] = schema
@@ -352,6 +353,43 @@ def api_pipeline():
                     stages['contactada'].append(d)
                 else:
                     stages['novo'].append(d)
+
+            # — LinkedIn leads —
+            try:
+                c.execute("""
+                    SELECT id, nome AS nome_fantasia, cargo AS segmento,
+                           empresa, url_perfil, status, demo_status,
+                           encontrado_em, respondeu, ultima_resposta,
+                           0 AS score, 'linkedin' AS canal,
+                           NULL AS whatsapp, NULL AS telefone, NULL AS email,
+                           NULL AS cidade, NULL AS estado,
+                           CASE WHEN dm_enviada_em IS NOT NULL THEN 1 ELSE 0 END AS msgs,
+                           CASE WHEN respondeu = 1 THEN 1 ELSE 0 END AS respostas,
+                           NULL AS msg_enviada,
+                           ultima_resposta AS ultima_resposta,
+                           dm_enviada_em AS ultima_msg,
+                           NULL AS respondido_em
+                    FROM leads_linkedin
+                    ORDER BY encontrado_em DESC
+                    LIMIT 200
+                """)
+                li_rows = c.fetchall()
+                for r in li_rows:
+                    d = dict(r)
+                    d['bot'] = schema
+                    st = d.get('status', 'encontrado')
+                    if d.get('demo_status') == 'confirmado':
+                        stages['demo'].append(d)
+                    elif st == 'respondeu' or d.get('respondeu') == 1:
+                        stages['respondeu'].append(d)
+                    elif st == 'conexao_enviada' or st == 'dm_enviada':
+                        stages['contactada'].append(d)
+                    else:
+                        stages['novo'].append(d)
+            except Exception as e2:
+                print(f"[pipeline/{schema}/linkedin] erro: {e2}")
+
+            conn.close()
         except Exception as e:
             print(f"[pipeline/{schema}] erro: {e}")
     return jsonify(stages)
