@@ -519,7 +519,7 @@
     </div>
     <div class="tab-pane">
       <div id="tab-wa" class="scroll-box">
-        <table><thead><tr><th>Empresa</th><th>Segmento</th><th>Status</th><th>Pts</th></tr></thead>
+        <table><thead><tr><th>Empresa</th><th>Telefone</th><th>Email</th><th>Segmento</th><th>Status</th><th>Pts</th></tr></thead>
         <tbody id="wa-tb"></tbody></table>
       </div>
       <div id="tab-li" style="display:none" class="scroll-box">
@@ -682,9 +682,11 @@ function lbCls(t=''){
 function loadWA(){
   fetch(`/api/${BOT}/leads`).then(r=>r.json()).then(d=>{
     const tb=document.getElementById('wa-tb');
-    if(!d.length){ tb.innerHTML='<tr><td colspan="4"><div class="empty-state"><i class="fa fa-inbox"></i>Nenhum lead ainda</div></td></tr>'; return; }
+    if(!d.length){ tb.innerHTML='<tr><td colspan="6"><div class="empty-state"><i class="fa fa-inbox"></i>Nenhum lead ainda</div></td></tr>'; return; }
     tb.innerHTML=d.map(l=>`<tr>
       <td><b>${l.nome_fantasia||'—'}</b></td>
+      <td style="color:var(--muted);font-size:11px">${l.whatsapp||l.telefone||'—'}</td>
+      <td style="color:var(--muted);font-size:11px">${l.email||'—'}</td>
       <td style="color:var(--muted)">${l.segmento||'—'}</td>
       <td>${statusChip(l.status,l.demo_status)}</td>
       <td style="color:var(--muted)">${l.score||0}</td>
@@ -741,13 +743,23 @@ function loadPipe(){
       if(cnt) cnt.textContent=leads.length;
       total+=leads.length;
       if(!leads.length){ col.innerHTML='<div class="col-empty">—</div>'; return; }
-      col.innerHTML=leads.map(l=>`
+      col.innerHTML=leads.map(l=>{
+        const fone=l.whatsapp||l.telefone||'';
+        const dt=l.ultima_msg?new Date(l.ultima_msg).toLocaleDateString('pt-BR'):
+                 l.encontrado_em?new Date(l.encontrado_em).toLocaleDateString('pt-BR'):'';
+        const resp=l.respostas>0?`<span style="color:#4ade80">✓ ${l.respostas} resp</span>`:'';
+        return `
         <div class="lcard" onclick="openLead(${JSON.stringify(l).replace(/"/g,'&quot;')})">
           <div class="lcard-name">${l.nome_fantasia||'—'}</div>
           <div class="lcard-seg">${l.segmento||'—'}</div>
-          <div class="lcard-msgs">${l.msgs||0} msg${l.msgs!==1?'s':''}</div>
-          <div class="lcard-foot"><span class="lcard-score">★ ${l.score||0}</span></div>
-        </div>`).join('');
+          ${fone?`<div style="font-size:10px;color:var(--muted);margin-top:2px">📞 ${fone}</div>`:''}
+          ${l.email?`<div style="font-size:10px;color:var(--muted)">✉ ${l.email}</div>`:''}
+          <div class="lcard-msgs">${l.msgs||0} msg${l.msgs!==1?'s':''} ${resp}</div>
+          <div class="lcard-foot">
+            <span class="lcard-score">★ ${l.score||0}</span>
+            ${dt?`<span style="font-size:9px;color:var(--muted)">${dt}</span>`:''}
+          </div>
+        </div>`}).join('');
     });
     const el=document.getElementById('pipe-total');
     if(el) el.textContent=total?`${total} lead${total!==1?'s':''}`:' ';
@@ -821,11 +833,17 @@ function openLead(l){
   document.getElementById('modal-content').innerHTML=`
     <div class="m-row"><span class="m-lbl">Segmento</span><span class="m-val">${l.segmento||'—'}</span></div>
     <div class="m-row"><span class="m-lbl">Localização</span><span class="m-val">${[l.cidade,l.estado].filter(Boolean).join(', ')||'—'}</span></div>
+    <div class="m-row"><span class="m-lbl">Telefone</span><span class="m-val">${l.telefone||'—'}</span></div>
     <div class="m-row"><span class="m-lbl">WhatsApp</span><span class="m-val">${l.whatsapp||'—'}</span></div>
+    <div class="m-row"><span class="m-lbl">Email</span><span class="m-val">${l.email||'—'}</span></div>
     <div class="m-row"><span class="m-lbl">Score</span><span class="m-val">★ ${l.score||0}</span></div>
     <div class="m-row"><span class="m-lbl">Status</span>${statusChip(l.status,l.demo_status)}</div>
     <div class="m-row"><span class="m-lbl">Mensagens</span><span class="m-val">${l.msgs||0}</span></div>
+    <div class="m-row"><span class="m-lbl">Respostas</span><span class="m-val">${l.respostas||0}</span></div>
+    <div class="m-row"><span class="m-lbl">Msg enviada</span><span class="m-val" style="font-size:11px;max-height:60px;overflow:auto">${l.msg_enviada||'—'}</span></div>
+    <div class="m-row"><span class="m-lbl">Última resposta</span><span class="m-val" style="font-size:11px;max-height:60px;overflow:auto">${l.ultima_resposta||'—'}</span></div>
     <div class="m-row"><span class="m-lbl">Último contato</span><span class="m-val">${fmt(l.ultima_msg)}</span></div>
+    <div class="m-row"><span class="m-lbl">Respondido em</span><span class="m-val">${fmt(l.respondido_em)}</span></div>
     <div class="m-row"><span class="m-lbl">Encontrado em</span><span class="m-val">${fmt(l.encontrado_em)}</span></div>
   `;
   document.getElementById('overlay').classList.add('open');

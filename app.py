@@ -147,8 +147,9 @@ def get_leads(schema: str, limite: int = 30) -> list:
         conn = get_db(schema)
         c = conn.cursor()
         c.execute(
-            """SELECT nome_fantasia, whatsapp, score, status, segmento,
-                      demo_status, encontrado_em
+            """SELECT nome_fantasia, whatsapp, telefone, email, score,
+                      status, segmento, demo_status, cidade, estado,
+                      encontrado_em
                FROM empresas
                ORDER BY score DESC, encontrado_em DESC
                LIMIT %s""",
@@ -314,15 +315,19 @@ def api_pipeline():
             c.execute("""
                 SELECT e.id, e.nome_fantasia, e.segmento, e.score,
                        e.status, e.demo_status, e.cidade, e.estado,
-                       e.whatsapp, e.encontrado_em,
+                       e.whatsapp, e.telefone, e.email, e.encontrado_em,
                        COUNT(i.id) AS msgs,
-                       MAX(i.enviado_em) AS ultima_msg
+                       MAX(i.enviado_em) AS ultima_msg,
+                       MAX(CASE WHEN i.tipo = 'inicial' THEN i.mensagem END) AS msg_enviada,
+                       MAX(CASE WHEN i.respondeu = 1 THEN i.resposta END) AS ultima_resposta,
+                       MAX(i.respondido_em) AS respondido_em,
+                       SUM(CASE WHEN i.respondeu = 1 THEN 1 ELSE 0 END) AS respostas
                 FROM empresas e
                 LEFT JOIN interacoes i ON e.id = i.empresa_id
                   AND i.canal = 'whatsapp'
                 GROUP BY e.id, e.nome_fantasia, e.segmento, e.score,
                          e.status, e.demo_status, e.cidade, e.estado,
-                         e.whatsapp, e.encontrado_em
+                         e.whatsapp, e.telefone, e.email, e.encontrado_em
                 ORDER BY e.score DESC, e.encontrado_em DESC
                 LIMIT 200
             """)
