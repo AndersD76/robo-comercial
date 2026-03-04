@@ -170,22 +170,28 @@ class LinkedInBot:
                     'erro'
                 )
                 if self._headless:
-                    self._log(
-                        "Reabrindo em modo visível para login manual...",
-                        'aviso'
-                    )
                     await self._reabrir_visivel()
                     await self.page.goto(
                         f'{LINKEDIN_URL}/login',
                         wait_until='domcontentloaded'
                     )
                     await asyncio.sleep(3)
-                    # Aguarda o usuário resolver manualmente
-                    resolvido = await self._aguardar_checkpoint()
-                    if resolvido:
-                        self.conectado = True
-                        self._log("Login manual OK", 'sucesso')
-                        return True
+                if not self._headless:
+                    self._log(
+                        "Navegador aberto — faça login manualmente. "
+                        "Bot aguarda até 10 min.",
+                        'aviso'
+                    )
+                else:
+                    self._log(
+                        "Veja o screenshot no dashboard. Bot aguarda 10 min.",
+                        'aviso'
+                    )
+                resolvido = await self._aguardar_checkpoint()
+                if resolvido:
+                    self.conectado = True
+                    self._log("Login manual OK", 'sucesso')
+                    return True
                 return False
 
             await self.page.fill(campo_email, LINKEDIN_EMAIL)
@@ -211,20 +217,21 @@ class LinkedInBot:
                 self._log("Login LinkedIn OK — feed carregado", 'sucesso')
                 return True
             elif '/checkpoint' in self.page.url:
-                # Se estava headless, reabre em modo visível para o
-                # usuário resolver CAPTCHA / verificação interativamente
+                # Tenta abrir visível; se não der, fica headless com screenshots
                 if self._headless:
-                    self._log(
-                        "LinkedIn exige verificação — reabrindo navegador "
-                        "em modo visível para você resolver.",
-                        'aviso'
-                    )
                     await self._reabrir_visivel()
-                    # Navega de volta ao checkpoint
                     await self.page.goto(
                         f'{LINKEDIN_URL}/feed/', wait_until='domcontentloaded'
                     )
                     await asyncio.sleep(3)
+                if self._headless:
+                    # Ficou headless (servidor sem display)
+                    self._log(
+                        "LinkedIn exige verificação — veja o screenshot no "
+                        "dashboard. Se for código por e-mail, confirme no "
+                        "seu e-mail. Bot aguarda até 10 min.",
+                        'aviso'
+                    )
                 else:
                     self._log(
                         "LinkedIn exige verificação — resolva no navegador "
@@ -249,33 +256,57 @@ class LinkedInBot:
             return False
 
     async def _reabrir_visivel(self):
-        """Fecha contexto headless e reabre em modo visível (mesma sessão)."""
+        """Fecha contexto headless e reabre em modo visível (mesma sessão).
+        Se não houver display (servidor Linux), reabre headless e usa screenshots."""
         self._log("Reabrindo navegador em modo visível...")
         try:
             await self.context.close()
         except Exception:
             pass
-        import os
-        self.context = await self._pw.chromium.launch_persistent_context(
-            user_data_dir=SESSION_DIR,
-            headless=False,
-            args=[
-                '--disable-blink-features=AutomationControlled',
-                '--no-sandbox',
-                '--disable-dev-shm-usage',
-            ],
-            user_agent=(
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                'AppleWebKit/537.36 (KHTML, like Gecko) '
-                'Chrome/121.0.0.0 Safari/537.36'
-            ),
-            viewport={'width': 1366, 'height': 768},
-            locale='pt-BR',
-        )
-        self.page = self.context.pages[0] if self.context.pages \
-            else await self.context.new_page()
-        self._headless = False
-        self._log("Navegador reaberto em modo visível — resolva a verificação na janela")
+
+        # Tenta modo visível; se não houver display, volta headless
+        for tentativa_headless in (False, True):
+            try:
+                self.context = await self._pw.chromium.launch_persistent_context(
+                    user_data_dir=SESSION_DIR,
+                    headless=tentativa_headless,
+                    args=[
+                        '--disable-blink-features=AutomationControlled',
+                        '--no-sandbox',
+                        '--disable-dev-shm-usage',
+                    ],
+                    user_agent=(
+                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                        'AppleWebKit/537.36 (KHTML, like Gecko) '
+                        'Chrome/121.0.0.0 Safari/537.36'
+                    ),
+                    viewport={'width': 1366, 'height': 768},
+                    locale='pt-BR',
+                )
+                self.page = self.context.pages[0] if self.context.pages \
+                    else await self.context.new_page()
+                self._headless = tentativa_headless
+                if tentativa_headless:
+                    self._log(
+                        "Servidor sem display — usando screenshots no dashboard. "
+                        "Resolva a verificação pelo dashboard.",
+                        'aviso'
+                    )
+                else:
+                    self._log(
+                        "Navegador reaberto em modo visível — resolva "
+                        "a verificação na janela"
+                    )
+                return
+            except Exception:
+                if not tentativa_headless:
+                    self._log(
+                        "Sem display (servidor headless) — "
+                        "voltando headless com screenshots...",
+                        'aviso'
+                    )
+                    continue
+                raise
 
     async def _aguardar_checkpoint(self, timeout_min: int = 10) -> bool:
         """
