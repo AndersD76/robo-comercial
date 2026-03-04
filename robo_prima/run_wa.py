@@ -712,11 +712,11 @@ async def main():
             if ciclo_num % 3 == 1:
                 await ciclo_busca()
 
+            # Respostas primeiro — pega mensagens que chegaram offline
+            await ciclo_respostas(bot, gerador)
+
             await ciclo_envio(bot, gerador, limite=10)
             await ciclo_followup(bot, gerador)
-
-            await asyncio.sleep(60)
-            await ciclo_respostas(bot, gerador)
 
             print(
                 f"[WA/Prisma {_ts()}] ✓ Ciclo #{ciclo_num} completo. "

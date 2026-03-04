@@ -101,6 +101,15 @@ class LinkedInBot:
         if self._pw:
             await self._pw.stop()
 
+    @staticmethod
+    def _tem_display() -> bool:
+        """Verifica se há display disponível (X11/Wayland)."""
+        import os, sys
+        if sys.platform == 'win32':
+            return True
+        return bool(os.environ.get('DISPLAY') or
+                    os.environ.get('WAYLAND_DISPLAY'))
+
     # =========================================================================
     # LOGIN
     # =========================================================================
@@ -169,21 +178,13 @@ class LinkedInBot:
                     f"Campo de login não encontrado — URL: {self.page.url}",
                     'erro'
                 )
-                # Tenta abrir visível para login manual
-                abriu = False
-                if self._headless:
-                    try:
-                        await self._reabrir_visivel()
-                        if not self._headless:
-                            abriu = True
-                            await self.page.goto(
-                                f'{LINKEDIN_URL}/login',
-                                wait_until='domcontentloaded'
-                            )
-                            await asyncio.sleep(3)
-                    except Exception:
-                        pass
-                if abriu:
+                if self._headless and self._tem_display():
+                    await self._reabrir_visivel()
+                    await self.page.goto(
+                        f'{LINKEDIN_URL}/login',
+                        wait_until='domcontentloaded'
+                    )
+                    await asyncio.sleep(3)
                     self._log(
                         "Navegador aberto — faça login manualmente. "
                         "Bot aguarda até 10 min.",
@@ -194,12 +195,18 @@ class LinkedInBot:
                         self.conectado = True
                         self._log("Login manual OK", 'sucesso')
                         return True
-                else:
+                elif self._headless:
+                    # Servidor sem display — usa interação via dashboard
                     self._log(
-                        "Servidor sem display e login travou. "
-                        "Verifique as credenciais no config.",
-                        'erro'
+                        "Use a tela interativa no dashboard para "
+                        "fazer login. Bot aguarda até 10 min.",
+                        'aviso'
                     )
+                    resolvido = await self._aguardar_checkpoint()
+                    if resolvido:
+                        self.conectado = True
+                        self._log("Login via dashboard OK", 'sucesso')
+                        return True
                 return False
 
             await self.page.fill(campo_email, LINKEDIN_EMAIL)
@@ -225,35 +232,32 @@ class LinkedInBot:
                 self._log("Login LinkedIn OK — feed carregado", 'sucesso')
                 return True
             elif '/checkpoint' in self.page.url:
-                # Tenta abrir visível apenas se tem display;
-                # senão mantém o contexto atual (com checkpoint carregado)
-                abriu_visivel = False
-                if self._headless:
-                    try:
-                        await self._reabrir_visivel()
-                        if not self._headless:
-                            abriu_visivel = True
-                            await self.page.goto(
-                                f'{LINKEDIN_URL}/feed/',
-                                wait_until='domcontentloaded'
-                            )
-                            await asyncio.sleep(3)
-                    except Exception:
-                        pass
-
-                if not abriu_visivel and self._headless:
-                    # Servidor sem display — mantém contexto atual
-                    # e tira screenshots do checkpoint real
+                if self._headless and self._tem_display():
+                    # Desktop com display — abre janela visível
+                    await self._reabrir_visivel()
+                    await self.page.goto(
+                        f'{LINKEDIN_URL}/feed/',
+                        wait_until='domcontentloaded'
+                    )
+                    await asyncio.sleep(3)
                     self._log(
-                        "LinkedIn exige verificação — veja o screenshot no "
-                        "dashboard. Se for código por e-mail, confirme no "
-                        "seu e-mail. Bot aguarda até 10 min.",
+                        "LinkedIn exige verificação — resolva no "
+                        "navegador que abriu. Bot aguarda até 10 min.",
+                        'aviso'
+                    )
+                elif self._headless:
+                    # Servidor sem display — mantém contexto atual
+                    # (checkpoint carregado) e usa interação via dashboard
+                    self._log(
+                        "LinkedIn exige verificação — use a tela "
+                        "interativa no dashboard para resolver. "
+                        "Bot aguarda até 10 min.",
                         'aviso'
                     )
                 else:
                     self._log(
-                        "LinkedIn exige verificação — resolva no navegador "
-                        "que abriu. O bot aguarda até 10 min.",
+                        "LinkedIn exige verificação — resolva no "
+                        "navegador que abriu. Bot aguarda até 10 min.",
                         'aviso'
                     )
                 resolvido = await self._aguardar_checkpoint()
