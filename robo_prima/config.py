@@ -32,20 +32,32 @@ LINKEDIN_MAX_MENSAGENS_DIA = int(os.environ.get('LINKEDIN_MAX_MSGS', '15'))
 
 # Cargos-alvo para prospecção LinkedIn — gestão da qualidade
 LINKEDIN_CARGOS_ALVO = [
+    # Qualidade
     'qualidade', 'quality', 'SGQ', 'gestão da qualidade',
     'gerente de qualidade', 'coordenador de qualidade',
     'responsável pela qualidade', 'supervisor de qualidade',
     'analista de qualidade', 'engenheiro de qualidade',
-    'ISO', 'auditoria', 'melhoria contínua', 'lean', 'six sigma',
+    'head of quality', 'quality manager', 'quality engineer',
+    # Normas / processos
+    'ISO', 'auditoria', 'auditor', 'melhoria contínua',
+    'lean', 'six sigma', 'PDCA', 'processos',
+    # Produção / operações
     'diretor industrial', 'gerente industrial', 'gerente de produção',
-    'gerente de operações', 'head of quality',
+    'gerente de operações', 'coordenador de produção',
+    'supervisor de produção', 'diretor de operações',
+    'gerente de processos', 'engenheiro de processos',
+    'gerente de fábrica', 'diretor de fábrica',
+    # Gestão / diretoria
+    'diretor', 'CEO', 'sócio', 'proprietário', 'dono',
+    'gerente geral', 'gerente administrativo',
 ]
 
 # Termos de busca LinkedIn — empresas industriais / ISO 9001
 LINKEDIN_TERMOS_BUSCA = [
+    # Qualidade + setores
     'gerente qualidade metalurgica',
     'coordenador SGQ industria',
-    'responsavel qualidade fabrica SP',
+    'responsavel qualidade fabrica',
     'gerente qualidade ISO 9001',
     'quality manager manufacturing Brazil',
     'gerente qualidade usinagem',
@@ -53,6 +65,34 @@ LINKEDIN_TERMOS_BUSCA = [
     'analista qualidade industria',
     'gestor qualidade fabrica',
     'gerente producao industria ISO',
+    # Setores específicos
+    'gerente qualidade autopeças',
+    'coordenador qualidade farmaceutica',
+    'gerente qualidade embalagens',
+    'supervisor qualidade quimica',
+    'gerente qualidade plasticos',
+    'coordenador qualidade cosmeticos',
+    'gerente qualidade textil',
+    # Produção / operações
+    'diretor industrial São Paulo',
+    'gerente producao fabrica',
+    'gerente operações industria',
+    'coordenador producao metalurgica',
+    'diretor industrial Minas Gerais',
+    'gerente fabrica Parana',
+    'diretor operações industria',
+    # Regiões
+    'gerente qualidade Rio Grande do Sul',
+    'coordenador qualidade Santa Catarina',
+    'gerente qualidade Campinas',
+    'diretor industrial Curitiba',
+    'gerente qualidade Joinville',
+    'gerente qualidade Caxias do Sul',
+    # Inglês (multinacionais)
+    'quality director Brazil',
+    'plant manager Brazil',
+    'operations manager manufacturing Brazil',
+    'continuous improvement manager Brazil',
 ]
 
 # Link do Google Calendar Appointment Scheduling

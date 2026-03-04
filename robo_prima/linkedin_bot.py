@@ -735,10 +735,27 @@ class LinkedInBot:
             self._log(f"Erro ao abrir thread: {type(e).__name__}", 'aviso')
             return False
 
+    def _nomes_ja_dm_enviada(self) -> set:
+        """Retorna set de nomes (lower) que já receberam DM no banco."""
+        try:
+            if not HAS_DB:
+                return set()
+            conn = get_connection()
+            c = conn.cursor()
+            c.execute(
+                "SELECT LOWER(nome) AS n FROM leads_linkedin "
+                "WHERE dm_enviada_em IS NOT NULL"
+            )
+            nomes = {r['n'] for r in c.fetchall() if r['n']}
+            conn.close()
+            return nomes
+        except Exception:
+            return set()
+
     async def enviar_dm_novos_contatos(self):
         """
         Abre o inbox, pega conexões aceitas recentemente sem DM enviada,
-        e manda o pitch inicial.
+        e manda o pitch inicial. Pula contatos que já receberam DM.
         """
         if self.msgs_hoje >= LINKEDIN_MAX_MENSAGENS_DIA:
             return
@@ -749,6 +766,7 @@ class LinkedInBot:
                 self._log("Inbox vazio ou não carregou")
                 return
 
+            ja_dm = self._nomes_ja_dm_enviada()
             self._log(
                 f"Inbox: {len(threads)} threads — verificando DMs iniciais"
             )
@@ -757,6 +775,7 @@ class LinkedInBot:
             for thread in threads[:5]:
                 try:
                     preview_txt = await self._extrair_preview_thread(thread)
+                    # Pula se última msg é nossa (já interagimos)
                     if preview_txt.startswith('Você:'):
                         continue
 
@@ -766,6 +785,27 @@ class LinkedInBot:
                     nome = await self._extrair_nome_conversa()
                     if not nome:
                         nome = 'contato'
+
+                    # Pula se já enviamos DM para esse contato (verificar DB)
+                    if nome.lower().strip() in ja_dm:
+                        self._log(
+                            f"  ⏭ {nome} já recebeu DM — pulando")
+                        continue
+
+                    # Verifica se já existe mensagem nossa na conversa
+                    msgs_conversa = await self.page.query_selector_all(
+                        '.msg-s-event-listitem__message-bubble'
+                    )
+                    tem_msg_nossa = False
+                    for m in msgs_conversa:
+                        classes = await m.get_attribute('class') or ''
+                        if 'msg-s-event-listitem__message-bubble--s' in classes:
+                            tem_msg_nossa = True
+                            break
+                    if tem_msg_nossa:
+                        self._log(
+                            f"  ⏭ {nome} já tem conversa aberta — pulando")
+                        continue
 
                     self._log(f"  Enviando DM inicial para {nome}...")
                     msg = self._gerar_dm_inicial(nome)
@@ -1165,8 +1205,11 @@ class LinkedInBot:
                 # ── Fase 1: busca + conexões ──
                 if self.conexoes_hoje < LINKEDIN_MAX_CONEXOES_DIA:
                     termo = termos[termo_idx % len(termos)]
+                    # Página sequencial: 1→2→3 por termo, depois avança termo
+                    pagina = (termo_idx // len(termos)) + 1
+                    if pagina > 3:
+                        pagina = 1  # volta ao início
                     termo_idx += 1
-                    pagina = random.randint(1, 4)
                     leads = await self.buscar_pessoas(termo, pagina)
 
                     if leads:
