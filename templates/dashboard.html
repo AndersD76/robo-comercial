@@ -929,7 +929,7 @@ function pollChk(){
               .then(d=>{
                 if(d.vnc){
                   _vncLoaded=true;
-                  const vncUrl=location.origin+'/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true&reconnect_delay=2000';
+                  const vncUrl=location.origin+'/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true&reconnect_delay=2000&path=vnc/websockify';
                   document.getElementById('vnc-iframe').src=vncUrl;
                   document.getElementById('vnc-container').style.display='block';
                   document.getElementById('chk-fallback').style.display='none';

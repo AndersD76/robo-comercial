@@ -83,15 +83,19 @@ class LinkedInBot:
             return
         display = os.environ.get('DISPLAY', ':99')
         try:
+            vnc_log = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), 'vnc.log')
+            vnc_f = open(vnc_log, 'a')
             p_vnc = subprocess.Popen(
                 ['x11vnc', '-display', display, '-nopw', '-forever',
                  '-shared', '-rfbport', '5900', '-noxdamage'],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                stdout=vnc_f, stderr=vnc_f
             )
+            import time; time.sleep(1)
             p_ws = subprocess.Popen(
                 ['websockify', '--web', '/usr/share/novnc',
                  '6080', 'localhost:5900'],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                stdout=vnc_f, stderr=vnc_f
             )
             self._vnc_procs = [p_vnc, p_ws]
             self._log("noVNC ativo para verificação", 'aviso')
