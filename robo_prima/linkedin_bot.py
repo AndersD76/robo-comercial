@@ -169,29 +169,37 @@ class LinkedInBot:
                     f"Campo de login não encontrado — URL: {self.page.url}",
                     'erro'
                 )
+                # Tenta abrir visível para login manual
+                abriu = False
                 if self._headless:
-                    await self._reabrir_visivel()
-                    await self.page.goto(
-                        f'{LINKEDIN_URL}/login',
-                        wait_until='domcontentloaded'
-                    )
-                    await asyncio.sleep(3)
-                if not self._headless:
+                    try:
+                        await self._reabrir_visivel()
+                        if not self._headless:
+                            abriu = True
+                            await self.page.goto(
+                                f'{LINKEDIN_URL}/login',
+                                wait_until='domcontentloaded'
+                            )
+                            await asyncio.sleep(3)
+                    except Exception:
+                        pass
+                if abriu:
                     self._log(
                         "Navegador aberto — faça login manualmente. "
                         "Bot aguarda até 10 min.",
                         'aviso'
                     )
+                    resolvido = await self._aguardar_checkpoint()
+                    if resolvido:
+                        self.conectado = True
+                        self._log("Login manual OK", 'sucesso')
+                        return True
                 else:
                     self._log(
-                        "Veja o screenshot no dashboard. Bot aguarda 10 min.",
-                        'aviso'
+                        "Servidor sem display e login travou. "
+                        "Verifique as credenciais no config.",
+                        'erro'
                     )
-                resolvido = await self._aguardar_checkpoint()
-                if resolvido:
-                    self.conectado = True
-                    self._log("Login manual OK", 'sucesso')
-                    return True
                 return False
 
             await self.page.fill(campo_email, LINKEDIN_EMAIL)
@@ -217,15 +225,25 @@ class LinkedInBot:
                 self._log("Login LinkedIn OK — feed carregado", 'sucesso')
                 return True
             elif '/checkpoint' in self.page.url:
-                # Tenta abrir visível; se não der, fica headless com screenshots
+                # Tenta abrir visível apenas se tem display;
+                # senão mantém o contexto atual (com checkpoint carregado)
+                abriu_visivel = False
                 if self._headless:
-                    await self._reabrir_visivel()
-                    await self.page.goto(
-                        f'{LINKEDIN_URL}/feed/', wait_until='domcontentloaded'
-                    )
-                    await asyncio.sleep(3)
-                if self._headless:
-                    # Ficou headless (servidor sem display)
+                    try:
+                        await self._reabrir_visivel()
+                        if not self._headless:
+                            abriu_visivel = True
+                            await self.page.goto(
+                                f'{LINKEDIN_URL}/feed/',
+                                wait_until='domcontentloaded'
+                            )
+                            await asyncio.sleep(3)
+                    except Exception:
+                        pass
+
+                if not abriu_visivel and self._headless:
+                    # Servidor sem display — mantém contexto atual
+                    # e tira screenshots do checkpoint real
                     self._log(
                         "LinkedIn exige verificação — veja o screenshot no "
                         "dashboard. Se for código por e-mail, confirme no "
