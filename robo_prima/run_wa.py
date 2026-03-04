@@ -512,12 +512,13 @@ async def ciclo_envio(
             atualizar_status_empresa(lead['id'], 'contactada')
             incrementar_contagem('whatsapp_enviados')
             enviadas += 1
+            await bot.delay_entre_mensagens()
         else:
             # Marca como sem_whatsapp para não re-tentar no próximo ciclo
             atualizar_status_empresa(lead['id'], 'sem_whatsapp')
             falhas += 1
-
-        await bot.delay_entre_mensagens()
+            # Delay curto — não precisa esperar 30-80s após falha
+            await asyncio.sleep(random.uniform(2, 5))
 
     print(
         f"[WA/Prisma {_ts()}] ✓ Envio: {enviadas} ok, {falhas} falhas",

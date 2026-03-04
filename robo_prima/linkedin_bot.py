@@ -105,6 +105,24 @@ class LinkedInBot:
     # LOGIN
     # =========================================================================
 
+    async def _fechar_cookie_banner(self):
+        """Tenta fechar banners de cookies/consent que bloqueiam a página."""
+        for sel in [
+            'button[action-type="ACCEPT"]',
+            'button.artdeco-global-alert__action',
+            '[data-test-global-alert-action]',
+            'button:has-text("Accept")',
+            'button:has-text("Aceitar")',
+        ]:
+            try:
+                btn = await self.page.query_selector(sel)
+                if btn:
+                    await btn.click()
+                    await asyncio.sleep(1)
+                    return
+            except Exception:
+                continue
+
     async def fazer_login(self) -> bool:
         """
         Faz login se não estiver autenticado.
@@ -129,13 +147,63 @@ class LinkedInBot:
             await self.page.goto(
                 f'{LINKEDIN_URL}/login', wait_until='domcontentloaded'
             )
-            await asyncio.sleep(random.uniform(1, 2))
+            await asyncio.sleep(random.uniform(2, 4))
+            await self._fechar_cookie_banner()
 
-            await self.page.fill('#username', LINKEDIN_EMAIL)
+            # Tenta diferentes seletores para o campo de email
+            campo_email = None
+            for sel in [
+                '#username',
+                'input[name="session_key"]',
+                'input[autocomplete="username"]',
+            ]:
+                try:
+                    await self.page.wait_for_selector(sel, timeout=5000)
+                    campo_email = sel
+                    break
+                except Exception:
+                    continue
+
+            if not campo_email:
+                self._log(
+                    f"Campo de login não encontrado — URL: {self.page.url}",
+                    'erro'
+                )
+                if self._headless:
+                    self._log(
+                        "Reabrindo em modo visível para login manual...",
+                        'aviso'
+                    )
+                    await self._reabrir_visivel()
+                    await self.page.goto(
+                        f'{LINKEDIN_URL}/login',
+                        wait_until='domcontentloaded'
+                    )
+                    await asyncio.sleep(3)
+                    # Aguarda o usuário resolver manualmente
+                    resolvido = await self._aguardar_checkpoint()
+                    if resolvido:
+                        self.conectado = True
+                        self._log("Login manual OK", 'sucesso')
+                        return True
+                return False
+
+            await self.page.fill(campo_email, LINKEDIN_EMAIL)
             await asyncio.sleep(random.uniform(0.5, 1.2))
-            await self.page.fill('#password', LINKEDIN_PASSWORD)
+
+            campo_pwd = '#password'
+            for sel_p in ['#password', 'input[name="session_password"]',
+                          'input[type="password"]']:
+                try:
+                    el = await self.page.query_selector(sel_p)
+                    if el:
+                        campo_pwd = sel_p
+                        break
+                except Exception:
+                    continue
+            await self.page.fill(campo_pwd, LINKEDIN_PASSWORD)
             await asyncio.sleep(random.uniform(0.5, 1))
-            await self.page.press('#password', 'Enter')
+            await self.page.press(campo_pwd, 'Enter')
             await asyncio.sleep(random.uniform(3, 5))
 
             if '/feed' in self.page.url:

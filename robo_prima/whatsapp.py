@@ -580,21 +580,24 @@ class WhatsAppBot:
     # =========================================================================
 
     def _formatar_numero(self, telefone):
-        """Formata número para WhatsApp (55XXXXXXXXXXX)"""
+        """Formata número para WhatsApp (55XXXXXXXXXXX).
+        Aceita celular (13 dígitos) e fixo (12 dígitos, WhatsApp Business)."""
         if not telefone:
             return None
 
         numeros = re.sub(r'\D', '', str(telefone))
 
-        if numeros.startswith('55') and len(numeros) in [12, 13]:
-            return numeros
+        # Remove código do país se presente
+        if numeros.startswith('55') and len(numeros) >= 12:
+            numeros = numeros[2:]
 
         if len(numeros) == 11:
+            # Celular: DDD(2) + 9 + 8 dígitos
+            if numeros[2] != '9':
+                return None
             return '55' + numeros
         elif len(numeros) == 10:
-            # Celular sem o 9 → adiciona
-            ddd = numeros[:2]
-            resto = numeros[2:]
-            return '55' + ddd + '9' + resto
+            # Fixo: DDD(2) + 8 dígitos — pode funcionar via WA Business
+            return '55' + numeros
 
         return None

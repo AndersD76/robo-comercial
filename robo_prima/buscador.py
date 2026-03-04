@@ -160,11 +160,10 @@ class Buscador:
     # =========================================================================
 
     async def buscar_bing(self, termo, max_resultados=20):
-        """Busca no Bing — sem site:, locale BR, JS evaluate"""
+        """Busca no Bing — locale BR, JS evaluate"""
         resultados = []
         try:
-            # Bing ignora/rejeita site:.com.br — remove o operador
-            termo_bing = re.sub(r'site:\S+\s*', '', termo).strip()
+            termo_bing = termo.strip()
             url = (
                 f'https://www.bing.com/search?q={quote_plus(termo_bing)}'
                 f'&count={max_resultados}&cc=BR&setlang=pt-BR&FORM=QBLH'
@@ -221,10 +220,10 @@ class Buscador:
     # =========================================================================
 
     async def buscar_duckduckgo(self, termo, max_resultados=15):
-        """Busca no DuckDuckGo Lite — sem site:, região BR"""
+        """Busca no DuckDuckGo Lite — região BR"""
         resultados = []
         try:
-            termo_ddg = re.sub(r'site:\S+\s*', '', termo).strip()
+            termo_ddg = termo.strip()
             url = (
                 f'https://lite.duckduckgo.com/lite/'
                 f'?q={quote_plus(termo_ddg)}&kl=br-pt'
