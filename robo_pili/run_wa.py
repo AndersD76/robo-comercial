@@ -356,10 +356,20 @@ async def ciclo_busca():
             if not url:
                 continue
 
-            # 1. Visita site
+            # 1. Visita site (timeout 30s)
             try:
-                site = await _extrair_site(buscador.page, url)
-            except Exception:
+                site = await asyncio.wait_for(
+                    _extrair_site(buscador.page, url), timeout=30)
+            except asyncio.TimeoutError:
+                print(
+                    f"  [DBG] timeout extraindo: {url[:55]}",
+                    flush=True)
+                site = {}
+            except Exception as e:
+                print(
+                    f"  [DBG] erro extraindo {url[:40]}: "
+                    f"{type(e).__name__}",
+                    flush=True)
                 site = {}
 
             wa = site.get('whatsapp')
@@ -412,8 +422,11 @@ async def ciclo_busca():
                             lead['nome_fantasia'] = dados_rf.get(
                                 'nome_fantasia', ''
                             )
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(
+                        f"  [DBG] erro CNPJ {lead['cnpj']}: "
+                        f"{type(e).__name__}: {e}",
+                        flush=True)
 
             # 4. Descarta sem contato ou já existente
             numero = lead.get('whatsapp') or lead.get('telefone')
@@ -445,8 +458,11 @@ async def ciclo_busca():
                     f"score={lead['score']} | {nf}",
                     flush=True
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                print(
+                    f"[WA/Pili {_ts()}] ✗ Erro salvando "
+                    f"lead: {type(e).__name__}: {e}",
+                    flush=True)
 
             await asyncio.sleep(random.uniform(2, 4))
 
@@ -507,7 +523,24 @@ async def ciclo_envio(
             f"(score {lead.get('score', 0)} | {seg})",
             flush=True
         )
-        ok = await bot.enviar_mensagem(numero, mensagem, nome_lead=nome)
+        try:
+            ok = await asyncio.wait_for(
+                bot.enviar_mensagem(
+                    numero, mensagem, nome_lead=nome),
+                timeout=45)
+        except asyncio.TimeoutError:
+            print(
+                f"[WA/Pili {_ts()}] ⚠ Timeout enviando "
+                f"para {nome[:35]}",
+                flush=True)
+            ok = False
+        except Exception as e:
+            print(
+                f"[WA/Pili {_ts()}] ✗ Erro enviando "
+                f"para {nome[:35]}: {e}",
+                flush=True)
+            ok = False
+
         if ok:
             registrar_interacao(
                 lead['id'], None, 'whatsapp', 'inicial', mensagem
@@ -554,7 +587,24 @@ async def ciclo_followup(bot: WhatsAppBot, gerador: GeradorMensagens):
                 f"[WA/Pili {_ts()}] ℹ Follow-up {n_fu} → {nome[:40]}",
                 flush=True
             )
-            ok = await bot.enviar_mensagem(numero, msg, nome_lead=nome)
+            try:
+                ok = await asyncio.wait_for(
+                    bot.enviar_mensagem(
+                        numero, msg, nome_lead=nome),
+                    timeout=45)
+            except asyncio.TimeoutError:
+                print(
+                    f"[WA/Pili {_ts()}] ⚠ Timeout "
+                    f"follow-up {nome[:35]}",
+                    flush=True)
+                ok = False
+            except Exception as e:
+                print(
+                    f"[WA/Pili {_ts()}] ✗ Erro "
+                    f"follow-up {nome[:35]}: {e}",
+                    flush=True)
+                ok = False
+
             if ok:
                 registrar_interacao(
                     lead['id'], None, 'whatsapp', tipo, msg
@@ -602,6 +652,10 @@ async def ciclo_respostas(bot: WhatsAppBot, gerador: GeradorMensagens):
         numero = info.get('numero')
         empresa = get_empresa_por_whatsapp(numero)
         if not empresa:
+            print(
+                f"[WA/Pili {_ts()}] ⚠ Resposta de {numero}"
+                " mas empresa não encontrada no DB",
+                flush=True)
             continue
 
         estagio = get_estagio_conversa(empresa['id'])
@@ -613,11 +667,33 @@ async def ciclo_respostas(bot: WhatsAppBot, gerador: GeradorMensagens):
             f"(estágio: {estagio})",
             flush=True
         )
-        resposta, intencao = gerador.gerar_resposta(
-            empresa, msg_lead, estagio=estagio
-        )
+        try:
+            resposta, intencao = gerador.gerar_resposta(
+                empresa, msg_lead, estagio=estagio
+            )
+        except Exception as e:
+            print(
+                f"[WA/Pili {_ts()}] ✗ Erro gerando resposta "
+                f"para {nome[:35]}: {e}",
+                flush=True)
+            continue
 
-        ok = await bot.responder_conversa(resposta)
+        try:
+            ok = await asyncio.wait_for(
+                bot.responder_conversa(resposta), timeout=30)
+        except asyncio.TimeoutError:
+            print(
+                f"[WA/Pili {_ts()}] ⚠ Timeout respondendo "
+                f"{nome[:35]}",
+                flush=True)
+            ok = False
+        except Exception as e:
+            print(
+                f"[WA/Pili {_ts()}] ✗ Erro respondendo "
+                f"{nome[:35]}: {e}",
+                flush=True)
+            ok = False
+
         if ok:
             registrar_interacao(
                 empresa['id'], None, 'whatsapp', 'resposta', resposta
@@ -710,13 +786,64 @@ async def main():
 
             # Prospecção a cada 3 ciclos (~15 min)
             if ciclo_num % 3 == 1:
-                await ciclo_busca()
+                try:
+                    await asyncio.wait_for(
+                        ciclo_busca(), timeout=300)
+                except asyncio.TimeoutError:
+                    print(
+                        f"[WA/Pili {_ts()}] ⚠ "
+                        "ciclo_busca timeout (5 min)",
+                        flush=True)
+                except Exception as e:
+                    print(
+                        f"[WA/Pili {_ts()}] ✗ "
+                        f"Erro ciclo_busca: {e}",
+                        flush=True)
 
-            await ciclo_envio(bot, gerador, limite=10)
-            await ciclo_followup(bot, gerador)
+            try:
+                await asyncio.wait_for(
+                    ciclo_envio(bot, gerador, limite=10),
+                    timeout=180)
+            except asyncio.TimeoutError:
+                print(
+                    f"[WA/Pili {_ts()}] ⚠ "
+                    "ciclo_envio timeout (3 min)",
+                    flush=True)
+            except Exception as e:
+                print(
+                    f"[WA/Pili {_ts()}] ✗ "
+                    f"Erro ciclo_envio: {e}",
+                    flush=True)
+
+            try:
+                await asyncio.wait_for(
+                    ciclo_followup(bot, gerador), timeout=120)
+            except asyncio.TimeoutError:
+                print(
+                    f"[WA/Pili {_ts()}] ⚠ "
+                    "ciclo_followup timeout (2 min)",
+                    flush=True)
+            except Exception as e:
+                print(
+                    f"[WA/Pili {_ts()}] ✗ "
+                    f"Erro ciclo_followup: {e}",
+                    flush=True)
 
             await asyncio.sleep(60)
-            await ciclo_respostas(bot, gerador)
+
+            try:
+                await asyncio.wait_for(
+                    ciclo_respostas(bot, gerador), timeout=120)
+            except asyncio.TimeoutError:
+                print(
+                    f"[WA/Pili {_ts()}] ⚠ "
+                    "ciclo_respostas timeout (2 min)",
+                    flush=True)
+            except Exception as e:
+                print(
+                    f"[WA/Pili {_ts()}] ✗ "
+                    f"Erro ciclo_respostas: {e}",
+                    flush=True)
 
             print(
                 f"[WA/Pili {_ts()}] ✓ Ciclo #{ciclo_num} completo. "
@@ -730,6 +857,11 @@ async def main():
             f"[WA/Pili {_ts()}] ℹ Bot encerrado pelo operador",
             flush=True
         )
+    except Exception as e:
+        print(
+            f"[WA/Pili {_ts()}] ✗ ERRO FATAL no main loop: {e}",
+            flush=True)
+        log_acao('erro', f'Erro fatal: {e}')
     finally:
         log_acao('info', 'Bot Pili Equipamentos encerrado')
         await bot.fechar()

@@ -646,6 +646,95 @@ class LinkedInBot:
     # ENVIAR DM PÓS-CONEXÃO
     # =========================================================================
 
+    async def _obter_threads_inbox(self) -> list:
+        """Navega pro inbox e retorna lista de threads com retry."""
+        SELETORES_THREAD = [
+            'li.msg-conversation-listitem',
+            'li[class*="msg-conversation"]',
+            '[data-control-name="conversation"]',
+        ]
+        for tentativa in range(2):
+            try:
+                await self.page.goto(
+                    f'{LINKEDIN_URL}/messaging/',
+                    wait_until='domcontentloaded',
+                    timeout=15000)
+                await asyncio.sleep(random.uniform(2, 4))
+                # Espera pelo menos 1 thread aparecer
+                for sel in SELETORES_THREAD:
+                    try:
+                        await self.page.wait_for_selector(
+                            sel, timeout=5000)
+                        threads = await self.page.query_selector_all(sel)
+                        if threads:
+                            return threads
+                    except Exception:
+                        continue
+            except Exception as e:
+                self._log(
+                    f"Erro ao abrir inbox (tentativa {tentativa + 1}): "
+                    f"{type(e).__name__}", 'aviso')
+                await asyncio.sleep(3)
+        return []
+
+    async def _extrair_preview_thread(self, thread) -> str:
+        """Extrai texto de preview de um thread com tratamento de erro."""
+        try:
+            return await thread.evaluate("""el => {
+                const sels = [
+                    '.msg-conversation-card__message-snippet',
+                    '[class*="message-snippet"]',
+                    '[class*="conversation-card"] span',
+                ];
+                for (const s of sels) {
+                    const e = el.querySelector(s);
+                    if (e) return e.textContent.trim();
+                }
+                return '';
+            }""")
+        except Exception:
+            return ''
+
+    async def _extrair_nome_conversa(self) -> str:
+        """Extrai nome do contato na conversa aberta."""
+        try:
+            return await self.page.evaluate("""() => {
+                const sels = [
+                    '.msg-entity-lockup__entity-title',
+                    '[class*="entity-title"]',
+                    '.msg-thread-top-bar h2',
+                    'h2[class*="conversation"] span',
+                    '.msg-overlay-bubble-header__title',
+                ];
+                for (const s of sels) {
+                    const e = document.querySelector(s);
+                    if (e && e.textContent.trim()) return e.textContent.trim();
+                }
+                return '';
+            }""")
+        except Exception:
+            return ''
+
+    async def _clicar_thread_e_esperar(self, thread) -> bool:
+        """Clica num thread e espera a conversa carregar."""
+        try:
+            await thread.click()
+            # Espera painel de conversa abrir
+            try:
+                await self.page.wait_for_selector(
+                    '.msg-s-message-list-content, '
+                    '[class*="message-list"], '
+                    'div.msg-form__contenteditable, '
+                    'div[contenteditable="true"][role="textbox"]',
+                    timeout=5000)
+            except Exception:
+                await asyncio.sleep(2)
+            await asyncio.sleep(random.uniform(0.5, 1.5))
+            return True
+        except Exception as e:
+            self._log(f"Erro ao abrir thread: {type(e).__name__}", 'aviso')
+            return False
+
     async def enviar_dm_novos_contatos(self):
         """
         Abre o inbox, pega conexões aceitas recentemente sem DM enviada,
@@ -655,24 +744,11 @@ class LinkedInBot:
             return
 
         try:
-            await self.page.goto(
-                f'{LINKEDIN_URL}/messaging/', wait_until='domcontentloaded'
-            )
-            await asyncio.sleep(random.uniform(2, 3))
+            threads = await self._obter_threads_inbox()
+            if not threads:
+                self._log("Inbox vazio ou não carregou")
+                return
 
-            # Pega threads sem mensagem de nossa parte ainda
-            threads = (
-                await self.page.query_selector_all(
-                    'li.msg-conversation-listitem'
-                )
-                or await self.page.query_selector_all(
-                    'li[class*="msg-conversation"]'
-                )
-                or await self.page.query_selector_all(
-                    '[data-control-name="conversation"]'
-                )
-                or []
-            )
             self._log(
                 f"Inbox: {len(threads)} threads — verificando DMs iniciais"
             )
@@ -680,45 +756,23 @@ class LinkedInBot:
             enviadas = 0
             for thread in threads[:5]:
                 try:
-                    preview_txt = await thread.evaluate("""el => {
-                        const sels = [
-                            '.msg-conversation-card__message-snippet',
-                            '[class*="message-snippet"]',
-                            '[class*="conversation-card"] span',
-                        ];
-                        for (const s of sels) {
-                            const e = el.querySelector(s);
-                            if (e) return e.textContent.trim();
-                        }
-                        return '';
-                    }""")
-
-                    # Se o preview é da nossa conta, já mandamos — pula
+                    preview_txt = await self._extrair_preview_thread(thread)
                     if preview_txt.startswith('Você:'):
                         continue
 
-                    await thread.click()
-                    await asyncio.sleep(random.uniform(1, 2))
+                    if not await self._clicar_thread_e_esperar(thread):
+                        continue
 
-                    nome = await self.page.evaluate("""() => {
-                        const sels = [
-                            '.msg-entity-lockup__entity-title',
-                            '[class*="entity-title"]',
-                            '.msg-thread-top-bar h2',
-                            'h2[class*="conversation"] span',
-                        ];
-                        for (const s of sels) {
-                            const e = document.querySelector(s);
-                            if (e) return e.textContent.trim();
-                        }
-                        return 'contato';
-                    }""")
+                    nome = await self._extrair_nome_conversa()
+                    if not nome:
+                        nome = 'contato'
 
                     self._log(f"  Enviando DM inicial para {nome}...")
                     msg = self._gerar_dm_inicial(nome)
                     ok = await self._digitar_e_enviar(msg)
                     if not ok:
-                        self._log(f"  ✗ Falha ao enviar DM para {nome}", 'aviso')
+                        self._log(
+                            f"  ✗ Falha ao enviar DM para {nome}", 'aviso')
                         continue
                     self.msgs_hoje += 1
                     enviadas += 1
@@ -732,7 +786,10 @@ class LinkedInBot:
                         self._log("Limite de DMs do dia atingido", 'aviso')
                         break
                     await asyncio.sleep(random.uniform(30, 60))
-                except Exception:
+                except Exception as e:
+                    self._log(
+                        f"  Erro em thread DM: {type(e).__name__}: {e}",
+                        'aviso')
                     continue
 
             if enviadas == 0:
@@ -753,28 +810,58 @@ class LinkedInBot:
             "Qualquer dúvida, é só chamar!"
         )
 
-    async def _digitar_e_enviar(self, texto: str) -> bool:
-        caixa = (
-            await self.page.query_selector('div.msg-form__contenteditable')
-            or await self.page.query_selector(
-                'div[contenteditable="true"][role="textbox"]'
-            )
-            or await self.page.query_selector('div[contenteditable="true"]')
-        )
-        if not caixa:
-            self._log("Caixa de mensagem não encontrada", 'aviso')
-            return False
-        await caixa.click()
-        # Digita linha por linha (Enter quebra a msg no LinkedIn)
-        for linha in texto.split('\n'):
-            await caixa.type(linha, delay=random.randint(20, 60))
-            await self.page.keyboard.press('Shift+Enter')
-        # Apaga último shift+enter extra
-        await self.page.keyboard.press('Backspace')
-        await asyncio.sleep(0.5)
-        await self.page.keyboard.press('Enter')
-        await asyncio.sleep(random.uniform(1, 2))
-        return True
+    async def _digitar_e_enviar(self, texto: str, retries: int = 3) -> bool:
+        """Digita e envia msg. Tenta múltiplos seletores com retry."""
+        SELETORES_CAIXA = [
+            'div.msg-form__contenteditable',
+            'div[contenteditable="true"][role="textbox"]',
+            'div.msg-form__msg-content-container div[contenteditable]',
+            'form.msg-form div[contenteditable="true"]',
+            'div[contenteditable="true"]',
+        ]
+        for tentativa in range(retries):
+            caixa = None
+            for sel in SELETORES_CAIXA:
+                try:
+                    caixa = await self.page.wait_for_selector(
+                        sel, timeout=3000, state='visible')
+                    if caixa:
+                        break
+                except Exception:
+                    continue
+            if not caixa:
+                if tentativa < retries - 1:
+                    self._log(
+                        f"Caixa de msg não encontrada (tentativa "
+                        f"{tentativa + 1}/{retries}), aguardando...", 'aviso')
+                    await asyncio.sleep(2)
+                    continue
+                self._log("Caixa de mensagem não encontrada após retries", 'aviso')
+                return False
+            try:
+                await caixa.click()
+                await asyncio.sleep(0.3)
+                for linha in texto.split('\n'):
+                    await caixa.type(linha, delay=random.randint(20, 60))
+                    await self.page.keyboard.press('Shift+Enter')
+                await self.page.keyboard.press('Backspace')
+                await asyncio.sleep(0.5)
+                # Tenta botão Enviar primeiro, fallback Enter
+                send_btn = await self.page.query_selector(
+                    'button.msg-form__send-button, '
+                    'button[type="submit"].msg-form__send-btn, '
+                    'button.msg-form__send-btn')
+                if send_btn and await send_btn.is_enabled():
+                    await send_btn.click()
+                else:
+                    await self.page.keyboard.press('Enter')
+                await asyncio.sleep(random.uniform(1, 2))
+                return True
+            except Exception as e:
+                self._log(f"Erro ao digitar/enviar (tentativa "
+                          f"{tentativa + 1}): {e}", 'aviso')
+                await asyncio.sleep(1)
+        return False
 
     # =========================================================================
     # MONITORAR INBOX — RESPOSTAS DOS LEADS
@@ -782,166 +869,194 @@ class LinkedInBot:
 
     async def monitorar_inbox(self):
         """
-        Varre o inbox buscando mensagens de leads não respondidas por nós.
-        Para cada resposta recebida, gera reply via Claude Haiku e envia.
-        Objetivo final: marcar demo/reunião.
+        Varre o inbox buscando mensagens de leads não respondidas.
+        Para cada resposta recebida, gera reply via Claude e envia.
         """
         if self.msgs_hoje >= LINKEDIN_MAX_MENSAGENS_DIA:
             return
         try:
-            await self.page.goto(
-                f'{LINKEDIN_URL}/messaging/', wait_until='domcontentloaded'
-            )
-            await asyncio.sleep(random.uniform(2, 3))
+            threads = await self._obter_threads_inbox()
+            if not threads:
+                self._log("Inbox vazio ou não carregou")
+                return
 
-            threads = (
-                await self.page.query_selector_all(
-                    'li.msg-conversation-listitem'
-                )
-                or await self.page.query_selector_all(
-                    'li[class*="msg-conversation"]'
-                )
-                or await self.page.query_selector_all(
-                    '[data-control-name="conversation"]'
-                )
-                or []
-            )
             self._log(f"Monitorando inbox: {len(threads)} threads")
 
             replies = 0
             for thread in threads[:20]:
                 try:
-                    preview = await thread.evaluate("""el => {
-                        const sels = [
-                            '.msg-conversation-card__message-snippet',
-                            '[class*="message-snippet"]',
-                            '[class*="conversation-card"] span',
-                        ];
-                        for (const s of sels) {
-                            const e = el.querySelector(s);
-                            if (e) return e.textContent.trim();
-                        }
-                        return '';
-                    }""")
+                    preview = await self._extrair_preview_thread(thread)
 
-                    # Pula se última msg foi nossa ou thread vazia
+                    # Pula se última msg foi nossa ou vazia
                     if preview.startswith('Você:') or not preview:
                         continue
 
-                    await thread.click()
-                    await asyncio.sleep(random.uniform(1.5, 2.5))
+                    if not await self._clicar_thread_e_esperar(thread):
+                        continue
 
-                    nome = await self.page.evaluate("""() => {
-                        const sels = [
-                            '.msg-entity-lockup__entity-title',
-                            '[class*="entity-title"]',
-                            '.msg-thread-top-bar h2',
-                            'h2[class*="conversation"] span',
-                        ];
-                        for (const s of sels) {
-                            const e = document.querySelector(s);
-                            if (e) return e.textContent.trim();
-                        }
-                        return 'contato';
-                    }""")
+                    nome = await self._extrair_nome_conversa()
+                    if not nome:
+                        nome = 'contato'
 
-                    self._log(f"  Resposta de {nome}: \"{preview[:70]}\"")
+                    self._log(
+                        f"  Resposta de {nome}: "
+                        f"\"{preview[:70]}\"")
 
                     historico = await self._ler_conversa()
                     if not historico:
+                        self._log(
+                            f"  Sem histórico para {nome}", 'aviso')
                         continue
 
                     ultima = historico[-1]
-                    # Pula se última msg foi nossa
                     if ultima.get('de_nos'):
                         continue
 
-                    # Pula se já respondemos esta msg na sessão atual
                     msg_hash = hash(ultima.get('texto', ''))
                     if msg_hash in self._msgs_respondidas:
-                        self._log("  (já respondido nesta sessão — pulando)")
+                        self._log(
+                            "  (já respondido nesta sessão)")
                         continue
 
                     self._log(f"  Gerando reply IA para {nome}...")
                     resposta = await self._gerar_resposta_inbox(
-                        nome, historico
-                    )
+                        nome, historico)
                     if not resposta:
+                        self._log(
+                            f"  IA não gerou resposta para {nome}",
+                            'aviso')
                         continue
 
                     ok = await self._digitar_e_enviar(resposta)
                     if not ok:
-                        self._log(f"  ✗ Falha ao enviar reply para {nome}", 'aviso')
+                        self._log(
+                            f"  ✗ Falha ao enviar reply para {nome}",
+                            'aviso')
                         continue
                     self.msgs_hoje += 1
                     replies += 1
                     self._msgs_respondidas.add(msg_hash)
                     self._log(
-                        f"  ✓ Reply enviado para {nome}: \"{resposta[:60]}...\"",
-                        'sucesso'
-                    )
-                    self._atualizar_resposta_db(nome, ultima['texto'])
+                        f"  ✓ Reply para {nome}: "
+                        f"\"{resposta[:60]}...\"",
+                        'sucesso')
+                    self._atualizar_resposta_db(
+                        nome, ultima['texto'])
 
                     if self.msgs_hoje >= LINKEDIN_MAX_MENSAGENS_DIA:
-                        self._log("Limite de DMs do dia atingido", 'aviso')
+                        self._log(
+                            "Limite de DMs do dia atingido", 'aviso')
                         break
                     await asyncio.sleep(random.uniform(20, 40))
 
-                except Exception:
+                except Exception as e:
+                    self._log(
+                        f"  Erro em thread inbox: "
+                        f"{type(e).__name__}: {e}", 'aviso')
                     continue
 
             if replies == 0:
                 self._log("Nenhuma resposta pendente no inbox")
 
         except Exception as e:
-            self._log(f"Erro no monitoramento do inbox: {e}", 'erro')
+            self._log(
+                f"Erro no monitoramento do inbox: {e}", 'erro')
 
-    async def _ler_conversa(self) -> list[dict]:
+    async def _ler_conversa(self, retries: int = 2) -> list[dict]:
         """
-        Extrai histórico de mensagens do thread aberto via JavaScript.
-        Tenta seletores novos e antigos do LinkedIn para robustez.
+        Extrai histórico de mensagens do thread aberto.
+        Tenta múltiplas estratégias: JS evaluate e fallback Playwright.
         Retorna lista de dicts: {texto: str, de_nos: bool}
         """
-        try:
-            await asyncio.sleep(1)
-            dados = await self.page.evaluate("""() => {
-                // Tenta estrutura nova primeiro
-                const newGroups = [
-                    ...document.querySelectorAll('[class*="message-group"]')
-                ];
-                if (newGroups.length > 0) {
-                    return newGroups.map(g => ({
-                        de_nos: (
-                            g.className.includes('outgoing') ||
-                            g.getAttribute('data-outgoing') === 'true'
-                        ),
-                        texto: [
-                            ...g.querySelectorAll(
-                                '[class*="message-body"],'
-                                '[class*="msg-s-event"]'
-                            )
-                        ].map(b => b.textContent.trim())
-                         .filter(Boolean).join(' ')
+        for tentativa in range(retries):
+            # Espera container de mensagens carregar
+            try:
+                await self.page.wait_for_selector(
+                    '.msg-s-message-list-content, '
+                    '[class*="message-list"], '
+                    '[class*="msg-thread"]',
+                    timeout=5000)
+            except Exception:
+                await asyncio.sleep(2)
+
+            # Estratégia 1: JS evaluate (rápido)
+            try:
+                dados = await self.page.evaluate("""() => {
+                    // Estratégia A: seletores novos
+                    let groups = [...document.querySelectorAll(
+                        '[class*="message-group"]'
+                    )];
+                    if (groups.length) {
+                        return groups.map(g => ({
+                            de_nos: (
+                                g.className.includes('outgoing') ||
+                                g.getAttribute('data-outgoing') === 'true'
+                            ),
+                            texto: [...g.querySelectorAll(
+                                '[class*="message-body"], '
+                                + '[class*="msg-s-event"], '
+                                + 'p.msg-s-event-listitem__body'
+                            )].map(b => b.textContent.trim())
+                              .filter(Boolean).join(' ')
+                        })).filter(m => m.texto.length > 0);
+                    }
+                    // Estratégia B: seletores antigos
+                    groups = [...document.querySelectorAll(
+                        '.msg-s-message-group'
+                    )];
+                    if (groups.length) {
+                        return groups.map(g => ({
+                            de_nos: g.classList.contains(
+                                'msg-s-message-group--outgoing'
+                            ),
+                            texto: [...g.querySelectorAll(
+                                '.msg-s-event-listitem__body'
+                            )].map(b => b.textContent.trim())
+                              .filter(Boolean).join(' ')
+                        })).filter(m => m.texto.length > 0);
+                    }
+                    // Estratégia C: qualquer parágrafo na thread
+                    const msgs = [...document.querySelectorAll(
+                        '.msg-s-event-listitem, [class*="msg-event"]'
+                    )];
+                    return msgs.map(el => ({
+                        de_nos: !!(el.closest('[class*="outgoing"]')),
+                        texto: el.textContent.trim()
                     })).filter(m => m.texto.length > 0);
-                }
-                // Fallback estrutura antiga
-                const groups = [
-                    ...document.querySelectorAll('.msg-s-message-group')
-                ];
-                return groups.map(g => ({
-                    de_nos: g.classList.contains(
-                        'msg-s-message-group--outgoing'
-                    ),
-                    texto: [...g.querySelectorAll(
-                        '.msg-s-event-listitem__body'
-                    )].map(b => b.textContent.trim())
-                      .filter(Boolean).join(' ')
-                })).filter(m => m.texto.length > 0);
-            }""")
-            return dados or []
-        except Exception as e:
-            self._log(f"Erro ao ler conversa: {e}", 'aviso')
-            return []
+                }""")
+                if dados and len(dados) > 0:
+                    return dados
+            except Exception as e:
+                self._log(
+                    f"Erro JS ao ler conversa (tentativa "
+                    f"{tentativa + 1}): {type(e).__name__}", 'aviso')
+
+            # Estratégia 2: Fallback Playwright (mais lento, mais robusto)
+            try:
+                items = await self.page.query_selector_all(
+                    '.msg-s-event-listitem, [class*="msg-event"]')
+                if items:
+                    result = []
+                    for item in items:
+                        txt = (await item.text_content() or '').strip()
+                        if not txt:
+                            continue
+                        parent = await item.evaluate_handle(
+                            'el => el.closest("[class*=outgoing]")')
+                        de_nos = bool(parent and str(parent) != 'null'
+                                      and str(parent) != 'JSHandle@null')
+                        result.append({'texto': txt, 'de_nos': de_nos})
+                    if result:
+                        return result
+            except Exception as e:
+                self._log(
+                    f"Erro fallback ler conversa: {type(e).__name__}",
+                    'aviso')
+
+            await asyncio.sleep(1)
+
+        self._log("Não conseguiu ler conversa após retries", 'aviso')
+        return []
 
     async def _gerar_resposta_inbox(
         self, nome: str, historico: list[dict]
