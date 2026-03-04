@@ -3,6 +3,9 @@ FROM mcr.microsoft.com/playwright/python:v1.46.0-jammy
 
 WORKDIR /app
 
+# Evita prompts interativos do apt (ex: tzdata)
+ENV DEBIAN_FRONTEND=noninteractive
+
 # Xvfb (display virtual) + x11vnc + noVNC + nginx (reverse proxy)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
