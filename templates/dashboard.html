@@ -534,14 +534,20 @@
       <div class="fstep"><span class="fn" id="f4">{{ stats.demos }}</span><span class="ft">Reuniões</span></div>
     </div>
 
-    <div class="tabs-bar">
-      <button class="tab-btn on" onclick="goTab('wa',this)"><i class="fa-brands fa-whatsapp"></i> Leads WA</button>
-      <button class="tab-btn"   onclick="goTab('li',this)"><i class="fa-brands fa-linkedin"></i> LinkedIn</button>
-      <button class="tab-btn"   onclick="goTab('log',this)"><i class="fa fa-list-ul"></i> Logs</button>
+    <div class="tabs-bar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <div style="display:flex;gap:2px;">
+        <button class="tab-btn on" onclick="goTab('wa',this)"><i class="fa-brands fa-whatsapp"></i> Leads WA</button>
+        <button class="tab-btn"   onclick="goTab('li',this)"><i class="fa-brands fa-linkedin"></i> LinkedIn</button>
+        <button class="tab-btn"   onclick="goTab('log',this)"><i class="fa fa-list-ul"></i> Logs</button>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:6px;" id="lead-actions">
+        <button class="btn-cfg" onclick="openAddLead()" title="Adicionar lead manualmente"><i class="fa fa-plus"></i> Lead</button>
+        <button class="btn-cfg" onclick="enviarEmailSel()" style="background:rgba(234,88,12,.12);border-color:rgba(234,88,12,.25);color:#fb923c;" title="Enviar email para selecionados"><i class="fa fa-envelope"></i> Email</button>
+      </div>
     </div>
     <div class="tab-pane">
       <div id="tab-wa" class="scroll-box">
-        <table><thead><tr><th>Empresa</th><th>Telefone</th><th>Email</th><th>Segmento</th><th>Status</th><th>Pts</th></tr></thead>
+        <table><thead><tr><th style="width:28px"><input type="checkbox" id="sel-all-wa" onchange="toggleSelectAll(this)"></th><th>Empresa</th><th>Telefone</th><th>Email</th><th>Segmento</th><th>Status</th><th>Pts</th></tr></thead>
         <tbody id="wa-tb"></tbody></table>
       </div>
       <div id="tab-li" style="display:none" class="scroll-box">
@@ -713,11 +719,14 @@ function lbCls(t=''){
   return 'lb-info';
 }
 
+let _waLeads=[];
 function loadWA(){
   fetch(`/api/${BOT}/leads`).then(r=>r.json()).then(d=>{
+    _waLeads=d;
     const tb=document.getElementById('wa-tb');
-    if(!d.length){ tb.innerHTML='<tr><td colspan="6"><div class="empty-state"><i class="fa fa-inbox"></i>Nenhum lead ainda</div></td></tr>'; return; }
+    if(!d.length){ tb.innerHTML='<tr><td colspan="7"><div class="empty-state"><i class="fa fa-inbox"></i>Nenhum lead ainda</div></td></tr>'; return; }
     tb.innerHTML=d.map(l=>`<tr>
+      <td><input type="checkbox" class="lead-chk" value="${l.id}" data-email="${l.email||''}"></td>
       <td><b>${l.nome_fantasia||'—'}</b></td>
       <td style="color:var(--muted);font-size:11px">${l.whatsapp||l.telefone||'—'}</td>
       <td style="color:var(--muted);font-size:11px">${l.email||'—'}</td>
@@ -726,6 +735,54 @@ function loadWA(){
       <td style="color:var(--muted)">${l.score||0}</td>
     </tr>`).join('');
   }).catch(()=>{});
+}
+function toggleSelectAll(master){
+  document.querySelectorAll('.lead-chk').forEach(c=>c.checked=master.checked);
+}
+function getSelectedIds(){
+  return Array.from(document.querySelectorAll('.lead-chk:checked')).map(c=>parseInt(c.value));
+}
+function enviarEmailSel(){
+  const ids=getSelectedIds();
+  if(!ids.length){ alert('Selecione ao menos 1 lead com checkbox'); return; }
+  const comEmail=Array.from(document.querySelectorAll('.lead-chk:checked')).filter(c=>c.dataset.email).length;
+  if(!comEmail){ alert('Nenhum lead selecionado tem email'); return; }
+  if(!confirm(`Enviar email para ${comEmail} lead(s) com email?`)) return;
+  fetch(`/api/${BOT}/send-emails`,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ids})
+  }).then(r=>r.json()).then(d=>{
+    if(d.ok) alert(`✓ ${d.enviados} email(s) enviado(s), ${d.erros} erro(s)`);
+    else alert('Erro: '+(d.error||'falha'));
+  }).catch(()=>alert('Erro de conexão'));
+}
+function openAddLead(){
+  document.getElementById('add-lead-overlay').classList.add('open');
+}
+function closeAddLead(e){
+  if(!e||e.target===document.getElementById('add-lead-overlay'))
+    document.getElementById('add-lead-overlay').classList.remove('open');
+}
+function saveNewLead(){
+  const nome=document.getElementById('al-nome').value.trim();
+  const wa=document.getElementById('al-wa').value.trim();
+  const email=document.getElementById('al-email').value.trim();
+  const seg=document.getElementById('al-seg').value.trim();
+  const msg=document.getElementById('al-msg');
+  if(!nome){ msg.textContent='Nome obrigatório'; msg.style.display='block'; msg.style.color='#f87171'; return; }
+  fetch(`/api/${BOT}/add-lead`,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({nome_fantasia:nome,whatsapp:wa,email:email,segmento:seg||'Manual'})
+  }).then(r=>r.json()).then(d=>{
+    if(d.ok){
+      msg.style.display='block'; msg.style.color='#4ade80';
+      msg.textContent=d.msg||'✓ Lead adicionado!';
+      setTimeout(()=>{ closeAddLead(); loadWA(); refreshStats(); loadPipe(); },1200);
+    } else {
+      msg.style.display='block'; msg.style.color='#f87171';
+      msg.textContent='Erro: '+(d.error||'falha');
+    }
+  }).catch(()=>{ msg.style.display='block'; msg.style.color='#f87171'; msg.textContent='Erro de conexão'; });
 }
 function loadLI(){
   fetch(`/api/${BOT}/linkedin`).then(r=>r.json()).then(d=>{
@@ -1076,6 +1133,12 @@ function toggleConsole(){
 loadWA();
 loadPipe();
 
+// Insert Daniel Anders as test lead on first load (idempotent)
+fetch(`/api/${BOT}/add-lead`,{
+  method:'POST',headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({nome_fantasia:'Daniel Anders (TESTE)',whatsapp:'5554999648368',email:'daniel.anders@outlook.com.br',segmento:'Teste',score:90})
+}).catch(()=>{});
+
 // On page load: show last log + start console if bot running
 pollConsole();
 fetch(`/api/${BOT}/status`).then(r=>r.json()).then(d=>{
@@ -1150,5 +1213,27 @@ function saveLiConfig(){
   });
 }
 </script>
+
+<!-- ADD LEAD MODAL -->
+<div class="li-cfg-overlay" id="add-lead-overlay" onclick="closeAddLead(event)">
+  <div class="li-cfg-card" style="width:400px">
+    <div class="li-cfg-hd">
+      <i class="fa fa-user-plus" style="color:#60a5fa"></i> Adicionar Lead
+      <button onclick="closeAddLead()"><i class="fa fa-times"></i></button>
+    </div>
+    <div class="li-cfg-body">
+      <div class="li-cfg-field"><label>Nome / Empresa *</label><input id="al-nome" placeholder="Ex: Daniel Anders"></div>
+      <div class="li-cfg-field"><label>WhatsApp (com DDD)</label><input id="al-wa" placeholder="Ex: 5554999648368"></div>
+      <div class="li-cfg-field"><label>Email</label><input id="al-email" placeholder="Ex: contato@empresa.com"></div>
+      <div class="li-cfg-field"><label>Segmento</label><input id="al-seg" placeholder="Ex: Metalurgia"></div>
+      <div id="al-msg" style="display:none;font-size:12px;padding:6px 10px;border-radius:6px;background:rgba(74,222,128,.1);"></div>
+    </div>
+    <div class="li-cfg-footer">
+      <button class="btn-cancel" onclick="closeAddLead()">Cancelar</button>
+      <button class="btn-save" onclick="saveNewLead()"><i class="fa fa-plus"></i> Adicionar</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
