@@ -843,10 +843,10 @@ async def main():
 
             print(
                 f"[WA/Pili {_ts()}] ✓ Ciclo #{ciclo_num} completo. "
-                "Próximo em 5 min...",
+                "Próximo em 1 min...",
                 flush=True
             )
-            await asyncio.sleep(300)
+            await asyncio.sleep(60)
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         print(

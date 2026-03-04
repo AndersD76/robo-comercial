@@ -844,10 +844,10 @@ async def main():
             erros_seguidos = 0
             print(
                 f"[WA/Prisma {_ts()}] ✓ Ciclo #{ciclo_num} completo. "
-                "Próximo em 5 min...",
+                "Próximo em 1 min...",
                 flush=True
             )
-            await asyncio.sleep(300)
+            await asyncio.sleep(60)
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         print(
