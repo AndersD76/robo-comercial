@@ -404,6 +404,129 @@ def api_bot_stop(bot):
     return jsonify({'status': 'stopped'})
 
 
+# --- Adicionar lead manualmente ---
+@app.route('/api/<bot>/add-lead', methods=['POST'])
+def api_add_lead(bot):
+    schema = {'prisma': 'prisma', 'pili': 'pili'}.get(bot)
+    if not schema:
+        return jsonify({'error': 'bot invalido'}), 400
+    data = request.get_json(silent=True) or {}
+    nome = (data.get('nome_fantasia') or '').strip()
+    whatsapp = (data.get('whatsapp') or '').strip()
+    email = (data.get('email') or '').strip()
+    if not nome:
+        return jsonify({'error': 'nome_fantasia obrigatorio'}), 400
+    try:
+        conn = get_db(schema)
+        c = conn.cursor()
+        # Verifica duplicata por whatsapp
+        if whatsapp:
+            c.execute(
+                "SELECT id FROM empresas WHERE whatsapp = %s", (whatsapp,))
+            ex = c.fetchone()
+            if ex:
+                conn.close()
+                return jsonify({'ok': True, 'id': ex['id'],
+                                'msg': 'lead ja existe'})
+        c.execute("""INSERT INTO empresas (
+            nome_fantasia, whatsapp, email, telefone, segmento,
+            fonte, score, status
+        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""", (
+            nome, whatsapp or None, email or None,
+            data.get('telefone'), data.get('segmento', 'Teste'),
+            'manual', data.get('score', 80), 'novo',
+        ))
+        new_id = c.fetchone()['id']
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True, 'id': new_id})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# --- Envio de email em massa (mala direta) ---
+@app.route('/api/<bot>/send-emails', methods=['POST'])
+def api_send_emails(bot):
+    schema = {'prisma': 'prisma', 'pili': 'pili'}.get(bot)
+    if not schema:
+        return jsonify({'error': 'bot invalido'}), 400
+    data = request.get_json(silent=True) or {}
+    lead_ids = data.get('ids', [])
+    if not lead_ids:
+        return jsonify({'error': 'nenhum lead selecionado'}), 400
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+
+        smtp_host = os.environ.get('SMTP_HOST', '')
+        smtp_port = int(os.environ.get('SMTP_PORT', 587))
+        smtp_user = os.environ.get('SMTP_USER', '')
+        smtp_pass = os.environ.get('SMTP_PASS', '')
+        smtp_from = os.environ.get('SMTP_FROM', smtp_user)
+        if not smtp_host or not smtp_user:
+            return jsonify({'error': 'SMTP nao configurado (SMTP_HOST, '
+                            'SMTP_USER, SMTP_PASS)'}), 400
+
+        tpl_path = os.path.join(
+            os.path.dirname(__file__), 'templates',
+            f'email_{bot if bot != "prisma" else "prisma"}.html')
+        with open(tpl_path, 'r', encoding='utf-8') as f:
+            tpl_html = f.read()
+
+        conn = get_db(schema)
+        c = conn.cursor()
+        placeholders = ','.join(['%s'] * len(lead_ids))
+        c.execute(
+            f"SELECT id, nome_fantasia, email FROM empresas "
+            f"WHERE id IN ({placeholders}) AND email IS NOT NULL",
+            lead_ids)
+        leads = c.fetchall()
+        conn.close()
+
+        if not leads:
+            return jsonify({'error': 'nenhum lead com email'}), 400
+
+        enviados = 0
+        erros = 0
+        server = smtplib.SMTP(smtp_host, smtp_port)
+        server.starttls()
+        server.login(smtp_user, smtp_pass)
+
+        for lead in leads:
+            try:
+                nome = lead['nome_fantasia'] or 'empresa'
+                html = tpl_html.replace('{{nome}}', nome)
+                demo_link = os.environ.get(
+                    'DEMO_CAL_LINK',
+                    'https://calendar.app.google/SEU_LINK_AQUI')
+                html = html.replace('{{DEMO_CAL_LINK}}', demo_link)
+                html = html.replace(
+                    '{{WHATSAPP_PILI}}',
+                    os.environ.get('WHATSAPP_PILI', ''))
+
+                msg = MIMEMultipart('alternative')
+                subject = {
+                    'prisma': f'{nome}, 11 ferramentas de qualidade grátis'
+                              ' — PrismaBiz',
+                    'pili': f'{nome}, reduza perdas na recepção de grãos'
+                            ' — Pili Equipamentos',
+                }.get(bot, 'Contato Comercial')
+                msg['Subject'] = subject
+                msg['From'] = smtp_from
+                msg['To'] = lead['email']
+                msg.attach(MIMEText(html, 'html', 'utf-8'))
+                server.sendmail(smtp_from, [lead['email']], msg.as_string())
+                enviados += 1
+            except Exception:
+                erros += 1
+
+        server.quit()
+        return jsonify({'ok': True, 'enviados': enviados, 'erros': erros})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # --- QR Code do WhatsApp (screenshot salvo pelo subprocess) ---
 @app.route('/api/<bot>/qr')
 def api_bot_qr(bot):
