@@ -793,19 +793,20 @@ class LinkedInBot:
                         continue
 
                     # Verifica se já existe mensagem nossa na conversa
-                    msgs_conversa = await self.page.query_selector_all(
-                        '.msg-s-event-listitem__message-bubble'
-                    )
-                    tem_msg_nossa = False
-                    for m in msgs_conversa:
-                        classes = await m.get_attribute('class') or ''
-                        if 'msg-s-event-listitem__message-bubble--s' in classes:
-                            tem_msg_nossa = True
-                            break
-                    if tem_msg_nossa:
-                        self._log(
-                            f"  ⏭ {nome} já tem conversa aberta — pulando")
-                        continue
+                    try:
+                        has_sent = await self.page.evaluate("""() => {
+                            const msgs = document.querySelectorAll(
+                                '.msg-s-event-listitem__message-bubble, ' +
+                                '[class*="message-bubble"]'
+                            );
+                            return msgs.length > 1;
+                        }""")
+                        if has_sent:
+                            self._log(
+                                f"  ⏭ {nome} já tem conversa aberta — pulando")
+                            continue
+                    except Exception:
+                        pass
 
                     self._log(f"  Enviando DM inicial para {nome}...")
                     msg = self._gerar_dm_inicial(nome)
@@ -1245,11 +1246,8 @@ class LinkedInBot:
                     )
 
                 # Pausa entre ciclos
-                prox = random.randint(300, 600)
-                self._log(
-                    f"Ciclo #{self._ciclo} concluído. "
-                    f"Próximo em {prox // 60} min {prox % 60}s."
-                )
+                prox = random.randint(20, 40)
+                self._log(f"Ciclo #{self._ciclo} concluído. Próximo em {prox}s.")
                 await asyncio.sleep(prox)
 
             except Exception as e:
