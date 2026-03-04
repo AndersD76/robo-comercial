@@ -716,7 +716,10 @@ class LinkedInBot:
 
                     self._log(f"  Enviando DM inicial para {nome}...")
                     msg = self._gerar_dm_inicial(nome)
-                    await self._digitar_e_enviar(msg)
+                    ok = await self._digitar_e_enviar(msg)
+                    if not ok:
+                        self._log(f"  ✗ Falha ao enviar DM para {nome}", 'aviso')
+                        continue
                     self.msgs_hoje += 1
                     enviadas += 1
                     self._log(
@@ -750,7 +753,7 @@ class LinkedInBot:
             "Qualquer dúvida, é só chamar!"
         )
 
-    async def _digitar_e_enviar(self, texto: str):
+    async def _digitar_e_enviar(self, texto: str) -> bool:
         caixa = (
             await self.page.query_selector('div.msg-form__contenteditable')
             or await self.page.query_selector(
@@ -760,7 +763,7 @@ class LinkedInBot:
         )
         if not caixa:
             self._log("Caixa de mensagem não encontrada", 'aviso')
-            return
+            return False
         await caixa.click()
         # Digita linha por linha (Enter quebra a msg no LinkedIn)
         for linha in texto.split('\n'):
@@ -771,6 +774,7 @@ class LinkedInBot:
         await asyncio.sleep(0.5)
         await self.page.keyboard.press('Enter')
         await asyncio.sleep(random.uniform(1, 2))
+        return True
 
     # =========================================================================
     # MONITORAR INBOX — RESPOSTAS DOS LEADS
@@ -865,7 +869,10 @@ class LinkedInBot:
                     if not resposta:
                         continue
 
-                    await self._digitar_e_enviar(resposta)
+                    ok = await self._digitar_e_enviar(resposta)
+                    if not ok:
+                        self._log(f"  ✗ Falha ao enviar reply para {nome}", 'aviso')
+                        continue
                     self.msgs_hoje += 1
                     replies += 1
                     self._msgs_respondidas.add(msg_hash)
