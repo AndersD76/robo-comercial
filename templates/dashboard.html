@@ -137,15 +137,15 @@
     .kpi-n { font-size:48px; font-weight:900; line-height:1; margin-bottom:7px; letter-spacing:-2px; color:var(--accent); }
     .kpi-l { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--sub); }
 
-    /* LinkedIn strip */
+    /* LinkedIn strip — mesmo tamanho do KPI row */
     .li-row {
       display:grid; grid-template-columns:repeat(3,1fr);
-      gap:10px; padding:12px 16px;
-      background:var(--li-dim); border-bottom:1px solid var(--li-bd);
+      border-bottom:1px solid var(--li-bd);
     }
-    .li-box { background:rgba(255,255,255,.06); border:1px solid var(--li-bd); border-radius:10px; padding:12px 10px; text-align:center; }
-    .li-n { font-size:28px; font-weight:800; color:var(--li); line-height:1; margin-bottom:5px; letter-spacing:-.5px; }
-    .li-l { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--li); opacity:.8; }
+    .li-box { padding:26px 16px; text-align:center; border-right:1px solid var(--li-bd); background:var(--li-dim); }
+    .li-box:last-child { border-right:none; }
+    .li-n { font-size:48px; font-weight:900; line-height:1; margin-bottom:7px; letter-spacing:-2px; color:var(--li); }
+    .li-l { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--li); opacity:.8; }
 
     /* Funnel */
     .funnel-row { display:flex; padding:14px 16px; border-bottom:1px solid var(--border); }

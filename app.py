@@ -113,8 +113,11 @@ def get_stats(schema: str) -> dict:
         row = c.fetchone()
         zero['msgs_hoje'] = row['quantidade'] if row else 0
 
-        # LinkedIn
+        # LinkedIn — rollback preventivo caso query anterior tenha falhado
         try:
+            conn.rollback()
+            c = conn.cursor()
+            c.execute(f"SET search_path TO {schema}, public")
             c.execute("SELECT COUNT(*) AS n FROM leads_linkedin")
             zero['li_total'] = c.fetchone()['n']
             c.execute(
@@ -123,7 +126,7 @@ def get_stats(schema: str) -> dict:
             )
             zero['li_conexoes'] = c.fetchone()['n']
             c.execute(
-                "SELECT COUNT(*) AS n FROM leads_linkedin WHERE respondeu = 1"
+                "SELECT COUNT(*) AS n FROM leads_linkedin WHERE respondeu = true"
             )
             zero['li_responderam'] = c.fetchone()['n']
             c.execute(
@@ -131,7 +134,8 @@ def get_stats(schema: str) -> dict:
                 "WHERE demo_status = 'confirmado'"
             )
             zero['li_demos'] = c.fetchone()['n']
-        except Exception:
+        except Exception as e:
+            print(f"[stats/{schema}/linkedin] erro: {e}")
             pass  # tabela pode não existir ainda
 
         conn.close()
@@ -444,7 +448,7 @@ def api_add_lead(bot):
         return jsonify({'error': str(e)}), 500
 
 
-# --- Envio de email em massa (mala direta via Resend API) ---
+# --- Envio de email em massa (mala direta via Brevo API) ---
 @app.route('/api/<bot>/send-emails', methods=['POST'])
 def api_send_emails(bot):
     import requests as http
@@ -456,10 +460,11 @@ def api_send_emails(bot):
     if not lead_ids:
         return jsonify({'error': 'nenhum lead selecionado'}), 400
 
-    api_key = os.environ.get('RESEND_API_KEY', '')
-    email_from = os.environ.get('EMAIL_FROM', 'onboarding@resend.dev')
+    api_key = os.environ.get('BREVO_API_KEY', '')
+    sender_email = os.environ.get('EMAIL_FROM', 'contato@prismabiz.com.br')
+    sender_name = os.environ.get('EMAIL_FROM_NAME', 'PrismaBiz')
     if not api_key:
-        return jsonify({'error': 'RESEND_API_KEY nao configurado'}), 400
+        return jsonify({'error': 'BREVO_API_KEY nao configurado'}), 400
 
     tpl_path = os.path.join(
         os.path.dirname(__file__), 'templates', f'email_{bot}.html')
@@ -501,14 +506,14 @@ def api_send_emails(bot):
         subject = subjects.get(bot, 'Contato Comercial').format(nome=nome)
         try:
             r = http.post(
-                'https://api.resend.com/emails',
-                headers={'Authorization': f'Bearer {api_key}',
+                'https://api.brevo.com/v3/smtp/email',
+                headers={'api-key': api_key,
                          'Content-Type': 'application/json'},
                 json={
-                    'from': email_from,
-                    'to': [lead['email']],
+                    'sender': {'name': sender_name, 'email': sender_email},
+                    'to': [{'email': lead['email'], 'name': nome}],
                     'subject': subject,
-                    'html': html,
+                    'htmlContent': html,
                 },
                 timeout=10,
             )
