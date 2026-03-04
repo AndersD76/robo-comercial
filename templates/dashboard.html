@@ -119,6 +119,16 @@
     }
     .btn-start:hover { filter:brightness(1.1); box-shadow:0 4px 14px rgba(0,0,0,.3); transform:translateY(-1px); }
     .btn-start:disabled, .btn-stop:disabled { opacity:.35; cursor:not-allowed; transform:none !important; box-shadow:none !important; }
+    .btn-start.running {
+      background: linear-gradient(90deg, var(--accent), #22c55e, var(--accent));
+      background-size: 200% 100%;
+      animation: btn-running 2s linear infinite;
+      box-shadow: 0 0 16px rgba(34,197,94,.35);
+      pointer-events: none;
+    }
+    .btn-start.running i { animation: spin 1.5s linear infinite; }
+    @keyframes btn-running { 0%{background-position:0% 50%} 100%{background-position:200% 50%} }
+    @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
 
     /* KPI row */
     .kpi-row { display:grid; grid-template-columns:repeat(3,1fr); border-bottom:1px solid var(--border); }
@@ -777,8 +787,10 @@ function loadBotStatus(){
   fetch(`/api/${BOT}/status`).then(r=>r.json()).then(d=>{
     const badge=document.getElementById('status-badge');
     const txt=document.getElementById('status-txt');
+    const startBtn=document.querySelector('.btn-start');
     if(!badge) return;
-    if(d.wa||d.li){
+    const rodando=d.wa||d.li;
+    if(rodando){
       badge.classList.add('running');
       if(d.wa&&d.li) txt.textContent='WA + LinkedIn';
       else if(d.wa)  txt.textContent='Internet ativo';
@@ -786,6 +798,16 @@ function loadBotStatus(){
     } else {
       badge.classList.remove('running');
       txt.textContent='Parado';
+    }
+    // Animação no botão Iniciar quando está rodando
+    if(startBtn){
+      if(rodando){
+        startBtn.classList.add('running');
+        startBtn.innerHTML='<i class="fa fa-circle-notch"></i> Rodando...';
+      } else {
+        startBtn.classList.remove('running');
+        startBtn.innerHTML='<i class="fa fa-play"></i> Iniciar';
+      }
     }
   }).catch(()=>{});
 }

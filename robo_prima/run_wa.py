@@ -513,6 +513,8 @@ async def ciclo_envio(
             incrementar_contagem('whatsapp_enviados')
             enviadas += 1
         else:
+            # Marca como sem_whatsapp para não re-tentar no próximo ciclo
+            atualizar_status_empresa(lead['id'], 'sem_whatsapp')
             falhas += 1
 
         await bot.delay_entre_mensagens()

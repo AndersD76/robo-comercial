@@ -65,17 +65,18 @@ class LinkedInBot:
     # SESSÃO
     # =========================================================================
 
-    async def iniciar(self):
+    async def iniciar(self, headless: bool = True):
         """Abre browser com sessão persistente."""
         import os
         from playwright.async_api import async_playwright
 
         self._pw = await async_playwright().start()
         os.makedirs(SESSION_DIR, exist_ok=True)
+        self._headless = headless
 
         self.context = await self._pw.chromium.launch_persistent_context(
             user_data_dir=SESSION_DIR,
-            headless=True,
+            headless=headless,
             args=[
                 '--disable-blink-features=AutomationControlled',
                 '--no-sandbox',
@@ -91,7 +92,8 @@ class LinkedInBot:
         )
         self.page = self.context.pages[0] if self.context.pages \
             else await self.context.new_page()
-        self._log("LinkedIn bot Prisma iniciado (headless)")
+        modo = 'visível' if not headless else 'headless'
+        self._log(f"LinkedIn bot Prisma iniciado ({modo})")
 
     async def fechar(self):
         if self.context:
@@ -141,11 +143,26 @@ class LinkedInBot:
                 self._log("Login LinkedIn OK — feed carregado", 'sucesso')
                 return True
             elif '/checkpoint' in self.page.url:
-                self._log(
-                    "LinkedIn exige verificação — salvando screenshot do "
-                    "checkpoint no dashboard. Resolva no site/app do LinkedIn.",
-                    'aviso'
-                )
+                # Se estava headless, reabre em modo visível para o
+                # usuário resolver CAPTCHA / verificação interativamente
+                if self._headless:
+                    self._log(
+                        "LinkedIn exige verificação — reabrindo navegador "
+                        "em modo visível para você resolver.",
+                        'aviso'
+                    )
+                    await self._reabrir_visivel()
+                    # Navega de volta ao checkpoint
+                    await self.page.goto(
+                        f'{LINKEDIN_URL}/feed/', wait_until='domcontentloaded'
+                    )
+                    await asyncio.sleep(3)
+                else:
+                    self._log(
+                        "LinkedIn exige verificação — resolva no navegador "
+                        "que abriu. O bot aguarda até 10 min.",
+                        'aviso'
+                    )
                 resolvido = await self._aguardar_checkpoint()
                 if resolvido:
                     self.conectado = True
@@ -162,6 +179,35 @@ class LinkedInBot:
         except Exception as e:
             self._log(f"Erro no login: {e}", 'erro')
             return False
+
+    async def _reabrir_visivel(self):
+        """Fecha contexto headless e reabre em modo visível (mesma sessão)."""
+        self._log("Reabrindo navegador em modo visível...")
+        try:
+            await self.context.close()
+        except Exception:
+            pass
+        import os
+        self.context = await self._pw.chromium.launch_persistent_context(
+            user_data_dir=SESSION_DIR,
+            headless=False,
+            args=[
+                '--disable-blink-features=AutomationControlled',
+                '--no-sandbox',
+                '--disable-dev-shm-usage',
+            ],
+            user_agent=(
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                'AppleWebKit/537.36 (KHTML, like Gecko) '
+                'Chrome/121.0.0.0 Safari/537.36'
+            ),
+            viewport={'width': 1366, 'height': 768},
+            locale='pt-BR',
+        )
+        self.page = self.context.pages[0] if self.context.pages \
+            else await self.context.new_page()
+        self._headless = False
+        self._log("Navegador reaberto em modo visível — resolva a verificação na janela")
 
     async def _aguardar_checkpoint(self, timeout_min: int = 10) -> bool:
         """

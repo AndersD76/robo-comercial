@@ -414,8 +414,7 @@ class WhatsAppBot:
                             const attr =
                                 el.getAttribute('data-pre-plain-text') || '';
                             const textEl = el.querySelector(
-                                'span[class*="selectable"], '
-                                'span.copyable-text, span'
+                                'span[class*="selectable"], span.copyable-text, span'
                             );
                             const texto = textEl
                                 ? textEl.innerText.trim()
@@ -433,15 +432,13 @@ class WhatsAppBot:
                     );
                     msgEls.forEach(el => {
                         const textEl = el.querySelector(
-                            '.copyable-text span, '
-                            '[class*="selectable"] span'
+                            '.copyable-text span, [class*="selectable"] span'
                         );
                         const texto = textEl
                             ? textEl.innerText.trim() : '';
                         if (!texto) return;
                         const deMim = el.querySelector(
-                            '[data-testid="msg-check"], '
-                            '[data-testid="msg-dblcheck"]'
+                            '[data-testid="msg-check"], [data-testid="msg-dblcheck"]'
                         ) !== null;
                         resultado.push({ texto, deMim });
                     });
