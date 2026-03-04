@@ -444,9 +444,10 @@ def api_add_lead(bot):
         return jsonify({'error': str(e)}), 500
 
 
-# --- Envio de email em massa (mala direta) ---
+# --- Envio de email em massa (mala direta via Resend API) ---
 @app.route('/api/<bot>/send-emails', methods=['POST'])
 def api_send_emails(bot):
+    import requests as http
     schema = {'prisma': 'prisma', 'pili': 'pili'}.get(bot)
     if not schema:
         return jsonify({'error': 'bot invalido'}), 400
@@ -454,77 +455,73 @@ def api_send_emails(bot):
     lead_ids = data.get('ids', [])
     if not lead_ids:
         return jsonify({'error': 'nenhum lead selecionado'}), 400
+
+    api_key = os.environ.get('RESEND_API_KEY', '')
+    email_from = os.environ.get('EMAIL_FROM', 'onboarding@resend.dev')
+    if not api_key:
+        return jsonify({'error': 'RESEND_API_KEY nao configurado'}), 400
+
+    tpl_path = os.path.join(
+        os.path.dirname(__file__), 'templates', f'email_{bot}.html')
     try:
-        import smtplib
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
-
-        smtp_host = os.environ.get('SMTP_HOST', '')
-        smtp_port = int(os.environ.get('SMTP_PORT', 587))
-        smtp_user = os.environ.get('SMTP_USER', '')
-        smtp_pass = os.environ.get('SMTP_PASS', '')
-        smtp_from = os.environ.get('SMTP_FROM', smtp_user)
-        if not smtp_host or not smtp_user:
-            return jsonify({'error': 'SMTP nao configurado (SMTP_HOST, '
-                            'SMTP_USER, SMTP_PASS)'}), 400
-
-        tpl_path = os.path.join(
-            os.path.dirname(__file__), 'templates',
-            f'email_{bot if bot != "prisma" else "prisma"}.html')
         with open(tpl_path, 'r', encoding='utf-8') as f:
             tpl_html = f.read()
+    except FileNotFoundError:
+        return jsonify({'error': f'template email_{bot}.html nao encontrado'}), 400
 
-        conn = get_db(schema)
-        c = conn.cursor()
-        placeholders = ','.join(['%s'] * len(lead_ids))
-        c.execute(
-            f"SELECT id, nome_fantasia, email FROM empresas "
-            f"WHERE id IN ({placeholders}) AND email IS NOT NULL",
-            lead_ids)
-        leads = c.fetchall()
-        conn.close()
+    conn = get_db(schema)
+    c = conn.cursor()
+    placeholders = ','.join(['%s'] * len(lead_ids))
+    c.execute(
+        f"SELECT id, nome_fantasia, email FROM empresas "
+        f"WHERE id IN ({placeholders}) AND email IS NOT NULL",
+        lead_ids)
+    leads = c.fetchall()
+    conn.close()
 
-        if not leads:
-            return jsonify({'error': 'nenhum lead com email'}), 400
+    if not leads:
+        return jsonify({'error': 'nenhum lead com email'}), 400
 
-        enviados = 0
-        erros = 0
-        server = smtplib.SMTP(smtp_host, smtp_port)
-        server.starttls()
-        server.login(smtp_user, smtp_pass)
+    demo_link = os.environ.get(
+        'DEMO_CAL_LINK', 'https://calendar.app.google/SEU_LINK_AQUI')
+    wa_pili = os.environ.get('WHATSAPP_PILI', '')
+    subjects = {
+        'prisma': '{nome}, 11 ferramentas de qualidade grátis — PrismaBiz',
+        'pili': '{nome}, reduza perdas na recepção de grãos'
+                ' — Pili Equipamentos',
+    }
 
-        for lead in leads:
-            try:
-                nome = lead['nome_fantasia'] or 'empresa'
-                html = tpl_html.replace('{{nome}}', nome)
-                demo_link = os.environ.get(
-                    'DEMO_CAL_LINK',
-                    'https://calendar.app.google/SEU_LINK_AQUI')
-                html = html.replace('{{DEMO_CAL_LINK}}', demo_link)
-                html = html.replace(
-                    '{{WHATSAPP_PILI}}',
-                    os.environ.get('WHATSAPP_PILI', ''))
-
-                msg = MIMEMultipart('alternative')
-                subject = {
-                    'prisma': f'{nome}, 11 ferramentas de qualidade grátis'
-                              ' — PrismaBiz',
-                    'pili': f'{nome}, reduza perdas na recepção de grãos'
-                            ' — Pili Equipamentos',
-                }.get(bot, 'Contato Comercial')
-                msg['Subject'] = subject
-                msg['From'] = smtp_from
-                msg['To'] = lead['email']
-                msg.attach(MIMEText(html, 'html', 'utf-8'))
-                server.sendmail(smtp_from, [lead['email']], msg.as_string())
+    enviados = erros = 0
+    for lead in leads:
+        nome = lead['nome_fantasia'] or 'empresa'
+        html = (tpl_html
+                .replace('{{nome}}', nome)
+                .replace('{{DEMO_CAL_LINK}}', demo_link)
+                .replace('{{WHATSAPP_PILI}}', wa_pili))
+        subject = subjects.get(bot, 'Contato Comercial').format(nome=nome)
+        try:
+            r = http.post(
+                'https://api.resend.com/emails',
+                headers={'Authorization': f'Bearer {api_key}',
+                         'Content-Type': 'application/json'},
+                json={
+                    'from': email_from,
+                    'to': [lead['email']],
+                    'subject': subject,
+                    'html': html,
+                },
+                timeout=10,
+            )
+            if r.status_code in (200, 201):
                 enviados += 1
-            except Exception:
+            else:
+                print(f"[EMAIL] erro {lead['email']}: {r.text}", flush=True)
                 erros += 1
+        except Exception as e:
+            print(f"[EMAIL] exception {lead['email']}: {e}", flush=True)
+            erros += 1
 
-        server.quit()
-        return jsonify({'ok': True, 'enviados': enviados, 'erros': erros})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    return jsonify({'ok': True, 'enviados': enviados, 'erros': erros})
 
 
 # --- QR Code do WhatsApp (screenshot salvo pelo subprocess) ---
