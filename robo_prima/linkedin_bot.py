@@ -100,15 +100,58 @@ class LinkedInBot:
             await self.context.close()
         if self._pw:
             await self._pw.stop()
+        self._parar_vnc()
 
     @staticmethod
     def _tem_display() -> bool:
-        """Verifica se há display disponível (X11/Wayland)."""
+        """Verifica se há display disponível (X11/Wayland/Xvfb)."""
         import os, sys
         if sys.platform == 'win32':
             return True
         return bool(os.environ.get('DISPLAY') or
                     os.environ.get('WAYLAND_DISPLAY'))
+
+    # ── VNC remoto (noVNC) ────────────────────────────────────────────────
+    _vnc_procs: list = []
+
+    def _iniciar_vnc(self):
+        """Inicia x11vnc + websockify para acesso remoto via noVNC."""
+        import subprocess, os
+        if self._vnc_procs:
+            return  # Já rodando
+        display = os.environ.get('DISPLAY', ':99')
+        try:
+            p_vnc = subprocess.Popen(
+                ['x11vnc', '-display', display, '-nopw', '-forever',
+                 '-shared', '-rfbport', '5900', '-noxdamage'],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+            p_ws = subprocess.Popen(
+                ['websockify', '--web', '/usr/share/novnc',
+                 '6080', 'localhost:5900'],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+            self._vnc_procs = [p_vnc, p_ws]
+            self._log(
+                "noVNC iniciado — acesse pelo dashboard para "
+                "resolver a verificação",
+                'aviso'
+            )
+        except FileNotFoundError:
+            self._log(
+                "x11vnc/websockify não instalados — "
+                "usando screenshots como fallback",
+                'aviso'
+            )
+
+    def _parar_vnc(self):
+        """Para x11vnc + websockify."""
+        for p in self._vnc_procs:
+            try:
+                p.terminate()
+            except Exception:
+                pass
+        self._vnc_procs = []
 
     # =========================================================================
     # LOGIN
@@ -233,21 +276,21 @@ class LinkedInBot:
                 return True
             elif '/checkpoint' in self.page.url:
                 if self._headless and self._tem_display():
-                    # Desktop com display — abre janela visível
+                    # Xvfb ou desktop — abre browser visível + noVNC
                     await self._reabrir_visivel()
                     await self.page.goto(
                         f'{LINKEDIN_URL}/feed/',
                         wait_until='domcontentloaded'
                     )
                     await asyncio.sleep(3)
+                    self._iniciar_vnc()
                     self._log(
-                        "LinkedIn exige verificação — resolva no "
-                        "navegador que abriu. Bot aguarda até 10 min.",
+                        "LinkedIn exige verificação — resolva pelo "
+                        "navegador no dashboard. Bot aguarda até 10 min.",
                         'aviso'
                     )
                 elif self._headless:
-                    # Servidor sem display — mantém contexto atual
-                    # (checkpoint carregado) e usa interação via dashboard
+                    # Sem display nenhum — screenshot + cliques
                     self._log(
                         "LinkedIn exige verificação — use a tela "
                         "interativa no dashboard para resolver. "
@@ -369,6 +412,7 @@ class LinkedInBot:
             # Verifica se resolveu
             cur = self.page.url
             if '/feed' in cur or ('/in/' in cur and '/checkpoint' not in cur):
+                self._parar_vnc()
                 try:
                     os.remove(chk_path)
                 except Exception:
@@ -376,6 +420,7 @@ class LinkedInBot:
                 return True
             await asyncio.sleep(2)
             elapsed += 2
+        self._parar_vnc()
         return False
 
     async def _executar_acao(self, act: dict):

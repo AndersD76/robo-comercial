@@ -571,29 +571,35 @@
   </div>
 </div>
 
-<!-- LINKEDIN CHECKPOINT OVERLAY (interativo) -->
+<!-- LINKEDIN CHECKPOINT OVERLAY -->
 <div class="qr-overlay" id="li-chk-overlay">
-  <div class="qr-card" style="max-width:820px">
+  <div class="qr-card" style="max-width:920px">
     <button class="qr-close" onclick="stopChkPolling()" title="Fechar">✕</button>
-    <div class="qr-title" style="color:#f59e0b">&#9888; Verificação LinkedIn — clique na página abaixo</div>
-    <div class="qr-sub">Interaja diretamente: clique nos campos, digite e pressione Enter</div>
-    <div style="background:#0f172a;border-radius:10px;padding:8px;position:relative;cursor:crosshair;display:inline-block">
+    <div class="qr-title" style="color:#f59e0b">&#9888; Verificação LinkedIn</div>
+    <div class="qr-sub" id="li-chk-sub">Navegue na página abaixo para resolver a verificação</div>
+    <!-- noVNC iframe (navegação real) -->
+    <div id="li-vnc-wrap" style="display:none;border-radius:10px;overflow:hidden;border:2px solid #334155">
+      <iframe id="li-vnc-frame" src="" style="width:880px;height:560px;border:none;display:block"></iframe>
+    </div>
+    <!-- Fallback: screenshot interativo -->
+    <div id="li-chk-wrap" style="background:#0f172a;border-radius:10px;padding:8px;cursor:crosshair;display:inline-block">
       <img id="li-chk-img" src="" alt="LinkedIn Checkpoint"
            style="width:760px;height:auto;max-height:520px;object-fit:contain;display:block;border-radius:6px"
            onclick="liChkClick(event)">
     </div>
-    <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+    <div id="li-chk-controls" style="display:flex;gap:8px;margin-top:10px;align-items:center">
       <input id="li-chk-input" type="text" placeholder="Digite aqui e pressione Enter..."
              style="flex:1;padding:10px 14px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:14px"
              onkeydown="liChkKey(event)">
       <button onclick="liChkSendText()" style="padding:10px 18px;border-radius:8px;background:#3b82f6;color:#fff;border:none;cursor:pointer;font-size:14px">
         <i class="fa fa-paper-plane"></i> Enviar
       </button>
-      <button onclick="liChkPress('Tab')" style="padding:10px 12px;border-radius:8px;background:#334155;color:#e2e8f0;border:none;cursor:pointer;font-size:13px" title="Tab">Tab</button>
-      <button onclick="liChkPress('Enter')" style="padding:10px 12px;border-radius:8px;background:#334155;color:#e2e8f0;border:none;cursor:pointer;font-size:13px" title="Enter">Enter</button>
+      <button onclick="liChkPress('Tab')" style="padding:10px 12px;border-radius:8px;background:#334155;color:#e2e8f0;border:none;cursor:pointer;font-size:13px">Tab</button>
+      <button onclick="liChkPress('Enter')" style="padding:10px 12px;border-radius:8px;background:#334155;color:#e2e8f0;border:none;cursor:pointer;font-size:13px">Enter</button>
     </div>
     <div class="qr-pulse" style="color:#f59e0b;margin-top:10px">
-      <span class="qr-pulse-dot" style="background:#f59e0b"></span> Aguardando resolução... (atualiza a cada 2s)
+      <span class="qr-pulse-dot" style="background:#f59e0b"></span>
+      <span id="li-chk-status">Aguardando resolução...</span>
     </div>
   </div>
 </div>
@@ -885,21 +891,48 @@ function stopChkPolling(){
   _chkSeen=false;
   document.getElementById('li-chk-overlay').classList.remove('open');
 }
+let _vncActive=false;
 function pollChk(){
+  // Primeiro checa se noVNC está ativo
+  fetch(`/api/${BOT}/li-vnc-status`).then(r=>r.json()).then(d=>{
+    if(d.vnc && !_vncActive){
+      _vncActive=true;
+      // Monta URL noVNC apontando para o mesmo host, porta 6080
+      const vncHost=location.hostname;
+      const vncUrl=`http://${vncHost}:6080/vnc.html?autoconnect=true&resize=scale&reconnect=true`;
+      document.getElementById('li-vnc-frame').src=vncUrl;
+      document.getElementById('li-vnc-wrap').style.display='block';
+      document.getElementById('li-chk-wrap').style.display='none';
+      document.getElementById('li-chk-controls').style.display='none';
+      document.getElementById('li-chk-sub').textContent='Navegue na página abaixo para resolver a verificação';
+      document.getElementById('li-chk-status').textContent='Navegador remoto ativo — resolva a verificação';
+      _chkSeen=true;
+      document.getElementById('li-chk-overlay').classList.add('open');
+    }
+  }).catch(()=>{});
+
+  // Fallback: screenshot (se VNC não está ativo)
   fetch(`/api/${BOT}/li-checkpoint?t=${Date.now()}`)
     .then(r=>{
       if(r.ok){
-        r.blob().then(b=>{
-          const url=URL.createObjectURL(b);
-          const img=document.getElementById('li-chk-img');
-          if(img._prevUrl) URL.revokeObjectURL(img._prevUrl);
-          img._prevUrl=url;
-          img.src=url;
-          _chkSeen=true;
-          document.getElementById('li-chk-overlay').classList.add('open');
-        });
+        if(!_vncActive){
+          r.blob().then(b=>{
+            const url=URL.createObjectURL(b);
+            const img=document.getElementById('li-chk-img');
+            if(img._prevUrl) URL.revokeObjectURL(img._prevUrl);
+            img._prevUrl=url;
+            img.src=url;
+            _chkSeen=true;
+            document.getElementById('li-chk-overlay').classList.add('open');
+          });
+        }
       } else {
         if(_chkSeen){
+          _vncActive=false;
+          document.getElementById('li-vnc-frame').src='';
+          document.getElementById('li-vnc-wrap').style.display='none';
+          document.getElementById('li-chk-wrap').style.display='inline-block';
+          document.getElementById('li-chk-controls').style.display='flex';
           stopChkPolling();
           loadBotStatus();
         }

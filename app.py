@@ -476,6 +476,21 @@ def api_li_action(bot):
     return jsonify({'ok': True})
 
 
+# --- LinkedIn VNC status ---
+@app.route('/api/<bot>/li-vnc-status')
+def api_li_vnc_status(bot):
+    """Verifica se o noVNC está ativo (porta 6080 respondendo)."""
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(1)
+        s.connect(('localhost', 6080))
+        s.close()
+        return jsonify({'vnc': True})
+    except Exception:
+        return jsonify({'vnc': False})
+
+
 # --- Health check ---
 @app.route('/health')
 def health():
