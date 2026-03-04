@@ -46,6 +46,13 @@ def _agora() -> datetime:
     return datetime.now(_BRT)
 
 
+def _horario_comercial(now: datetime) -> bool:
+    """Mensagens WA só em horário comercial: seg-sex 8h-18h."""
+    if now.weekday() not in DIAS_ATIVOS:
+        return False
+    return HORARIO_INICIO <= now.hour < HORARIO_FIM
+
+
 # =============================================================================
 # UTILITÁRIOS
 # =============================================================================
@@ -755,36 +762,18 @@ async def main():
     try:
         while True:
             agora = _agora()
-
-            # Fora do horário — aguarda 30 min
-            if agora.hour < HORARIO_INICIO or agora.hour >= HORARIO_FIM:
-                if agora.minute == 0:
-                    hi = HORARIO_INICIO
-                    hf = HORARIO_FIM
-                    print(
-                        f"[WA/Prisma {_ts()}] ℹ Fora do horário "
-                        f"({agora.strftime('%H:%M')} BRT). "
-                        f"Ativo: {hi:02d}h–{hf:02d}h",
-                        flush=True
-                    )
-                await asyncio.sleep(1800)
-                continue
-
-            # Fim de semana
-            if agora.weekday() not in DIAS_ATIVOS:
-                await asyncio.sleep(3600)
-                continue
-
             ciclo_num += 1
             hoje = bot.msgs_enviadas_hoje
             sessao = bot.msgs_enviadas_sessao
+            comercial = _horario_comercial(agora)
             print(
                 f"[WA/Prisma {_ts()}] ━━━ Ciclo #{ciclo_num} "
-                f"| msgs hoje: {hoje} | sessão: {sessao} ━━━",
+                f"| msgs hoje: {hoje} | sessão: {sessao} "
+                f"| comercial: {'sim' if comercial else 'não'} ━━━",
                 flush=True
             )
 
-            # Prospecção a cada 3 ciclos (~15 min)
+            # ── Prospecção 24/7 (a cada 3 ciclos) ──
             if ciclo_num % 3 == 1:
                 try:
                     await asyncio.wait_for(
@@ -800,49 +789,57 @@ async def main():
                         f"Erro ciclo_busca: {e}",
                         flush=True)
 
-            # Respostas primeiro
-            try:
-                await asyncio.wait_for(
-                    ciclo_respostas(bot, gerador), timeout=120)
-            except asyncio.TimeoutError:
-                print(
-                    f"[WA/Prisma {_ts()}] ⚠ "
-                    "ciclo_respostas timeout (2 min)",
-                    flush=True)
-            except Exception as e:
-                print(
-                    f"[WA/Prisma {_ts()}] ✗ "
-                    f"Erro ciclo_respostas: {e}",
-                    flush=True)
+            # ── Mensagens só em horário comercial (seg-sex 8h-18h) ──
+            if comercial:
+                try:
+                    await asyncio.wait_for(
+                        ciclo_respostas(bot, gerador), timeout=120)
+                except asyncio.TimeoutError:
+                    print(
+                        f"[WA/Prisma {_ts()}] ⚠ "
+                        "ciclo_respostas timeout (2 min)",
+                        flush=True)
+                except Exception as e:
+                    print(
+                        f"[WA/Prisma {_ts()}] ✗ "
+                        f"Erro ciclo_respostas: {e}",
+                        flush=True)
 
-            try:
-                await asyncio.wait_for(
-                    ciclo_envio(bot, gerador, limite=10),
-                    timeout=180)
-            except asyncio.TimeoutError:
-                print(
-                    f"[WA/Prisma {_ts()}] ⚠ "
-                    "ciclo_envio timeout (3 min)",
-                    flush=True)
-            except Exception as e:
-                print(
-                    f"[WA/Prisma {_ts()}] ✗ "
-                    f"Erro ciclo_envio: {e}",
-                    flush=True)
+                try:
+                    await asyncio.wait_for(
+                        ciclo_envio(bot, gerador, limite=10),
+                        timeout=180)
+                except asyncio.TimeoutError:
+                    print(
+                        f"[WA/Prisma {_ts()}] ⚠ "
+                        "ciclo_envio timeout (3 min)",
+                        flush=True)
+                except Exception as e:
+                    print(
+                        f"[WA/Prisma {_ts()}] ✗ "
+                        f"Erro ciclo_envio: {e}",
+                        flush=True)
 
-            try:
-                await asyncio.wait_for(
-                    ciclo_followup(bot, gerador), timeout=120)
-            except asyncio.TimeoutError:
+                try:
+                    await asyncio.wait_for(
+                        ciclo_followup(bot, gerador), timeout=120)
+                except asyncio.TimeoutError:
+                    print(
+                        f"[WA/Prisma {_ts()}] ⚠ "
+                        "ciclo_followup timeout (2 min)",
+                        flush=True)
+                except Exception as e:
+                    print(
+                        f"[WA/Prisma {_ts()}] ✗ "
+                        f"Erro ciclo_followup: {e}",
+                        flush=True)
+            else:
                 print(
-                    f"[WA/Prisma {_ts()}] ⚠ "
-                    "ciclo_followup timeout (2 min)",
-                    flush=True)
-            except Exception as e:
-                print(
-                    f"[WA/Prisma {_ts()}] ✗ "
-                    f"Erro ciclo_followup: {e}",
-                    flush=True)
+                    f"[WA/Prisma {_ts()}] ℹ Fora do horário comercial "
+                    f"({HORARIO_INICIO}h-{HORARIO_FIM}h seg-sex) "
+                    "— apenas prospecção",
+                    flush=True
+                )
 
             erros_seguidos = 0
             print(
