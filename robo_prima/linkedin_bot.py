@@ -376,7 +376,8 @@ class LinkedInBot:
     async def _aguardar_checkpoint(self, timeout_min: int = 10) -> bool:
         """
         Salva screenshot a cada 2s, processa ações do dashboard (click/type)
-        e aguarda resolução. Retorna True se autenticou antes do timeout.
+        e aguarda resolução. A cada 15s navega para /feed/ para detectar se
+        o usuário confirmou a verificação de outro navegador/dispositivo.
         """
         import os, json as _json
         base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -384,6 +385,7 @@ class LinkedInBot:
         action_path = os.path.join(base_dir, 'li_action.json')
         timeout_s = timeout_min * 60
         elapsed = 0
+        desde_ultimo_reload = 0
         while elapsed < timeout_s:
             # Screenshot
             try:
@@ -409,7 +411,7 @@ class LinkedInBot:
                 except Exception as e:
                     self._log(f"Erro ao processar ação: {e}", 'erro')
 
-            # Verifica se resolveu
+            # Verifica se resolveu (URL mudou na própria página)
             cur = self.page.url
             if '/feed' in cur or ('/in/' in cur and '/checkpoint' not in cur):
                 self._parar_vnc()
@@ -418,6 +420,41 @@ class LinkedInBot:
                 except Exception:
                     pass
                 return True
+
+            # A cada 15s, navega para /feed/ para detectar login feito
+            # em outro navegador/dispositivo (cookies da sessão já válidos)
+            desde_ultimo_reload += 2
+            if desde_ultimo_reload >= 15:
+                desde_ultimo_reload = 0
+                self._log("Verificando se sessão foi validada...")
+                try:
+                    await self.page.goto(
+                        f'{LINKEDIN_URL}/feed/',
+                        wait_until='domcontentloaded',
+                        timeout=10000,
+                    )
+                    await asyncio.sleep(2)
+                    cur = self.page.url
+                    if '/feed' in cur or (
+                        '/in/' in cur and '/checkpoint' not in cur
+                    ):
+                        self._log("Sessão validada!", 'sucesso')
+                        self._parar_vnc()
+                        try:
+                            os.remove(chk_path)
+                        except Exception:
+                            pass
+                        return True
+                    # Ainda no checkpoint — tira screenshot atualizado
+                    try:
+                        await self.page.screenshot(
+                            path=chk_path, full_page=False
+                        )
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+
             await asyncio.sleep(2)
             elapsed += 2
         self._parar_vnc()

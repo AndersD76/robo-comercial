@@ -124,11 +124,64 @@ class LinkedInBot:
                 f'{LINKEDIN_URL}/login', wait_until='domcontentloaded'
             )
             await asyncio.sleep(random.uniform(1, 2))
-            await self.page.fill('#username', LINKEDIN_EMAIL)
+
+            # Cookie banner (pode bloquear campos)
+            for cb_sel in [
+                'button[action-type="ACCEPT"]',
+                'button[data-test-id="cookie-accept"]',
+                'button:has-text("Aceitar")',
+                'button:has-text("Accept")',
+            ]:
+                try:
+                    btn = await self.page.query_selector(cb_sel)
+                    if btn:
+                        await btn.click()
+                        await asyncio.sleep(0.5)
+                        break
+                except Exception:
+                    continue
+
+            # Seletores de email (LinkedIn muda layout)
+            email_sels = [
+                '#username',
+                'input[name="session_key"]',
+                'input[autocomplete="username"]',
+            ]
+            email_filled = False
+            for sel in email_sels:
+                try:
+                    await self.page.fill(sel, LINKEDIN_EMAIL, timeout=5000)
+                    email_filled = True
+                    break
+                except Exception:
+                    continue
+            if not email_filled:
+                self._log("Campo email não encontrado", 'erro')
+                return False
+
             await asyncio.sleep(random.uniform(0.5, 1.2))
-            await self.page.fill('#password', LINKEDIN_PASSWORD)
+
+            # Seletores de senha
+            pw_sels = [
+                '#password',
+                'input[name="session_password"]',
+                'input[type="password"]',
+            ]
+            pw_filled = False
+            for sel in pw_sels:
+                try:
+                    await self.page.fill(sel, LINKEDIN_PASSWORD, timeout=5000)
+                    pw_filled = True
+                    pw_sel = sel
+                    break
+                except Exception:
+                    continue
+            if not pw_filled:
+                self._log("Campo senha não encontrado", 'erro')
+                return False
+
             await asyncio.sleep(random.uniform(0.5, 1))
-            await self.page.press('#password', 'Enter')
+            await self.page.press(pw_sel, 'Enter')
             await asyncio.sleep(random.uniform(3, 5))
 
             if '/feed' in self.page.url:
@@ -165,7 +218,8 @@ class LinkedInBot:
     async def _aguardar_checkpoint(self, timeout_min: int = 10) -> bool:
         """
         Salva screenshot a cada 2s, processa ações do dashboard (click/type)
-        e aguarda resolução. Retorna True se autenticou antes do timeout.
+        e aguarda resolução. A cada 15s navega para /feed/ para detectar se
+        o usuário confirmou a verificação de outro navegador/dispositivo.
         """
         import os
         import json as _json
@@ -174,6 +228,7 @@ class LinkedInBot:
         action_path = os.path.join(base_dir, 'li_action.json')
         timeout_s = timeout_min * 60
         elapsed = 0
+        desde_ultimo_reload = 0
         while elapsed < timeout_s:
             try:
                 await self.page.screenshot(path=chk_path, full_page=False)
@@ -197,6 +252,7 @@ class LinkedInBot:
                 except Exception as e:
                     self._log(f"Erro ao processar ação: {e}", 'erro')
 
+            # Verifica se resolveu (URL mudou na própria página)
             cur = self.page.url
             if '/feed' in cur or ('/in/' in cur and '/checkpoint' not in cur):
                 try:
@@ -204,6 +260,40 @@ class LinkedInBot:
                 except Exception:
                     pass
                 return True
+
+            # A cada 15s, navega para /feed/ para detectar login feito
+            # em outro navegador/dispositivo (cookies da sessão já válidos)
+            desde_ultimo_reload += 2
+            if desde_ultimo_reload >= 15:
+                desde_ultimo_reload = 0
+                self._log("Verificando se sessão foi validada...")
+                try:
+                    await self.page.goto(
+                        f'{LINKEDIN_URL}/feed/',
+                        wait_until='domcontentloaded',
+                        timeout=10000,
+                    )
+                    await asyncio.sleep(2)
+                    cur = self.page.url
+                    if '/feed' in cur or (
+                        '/in/' in cur and '/checkpoint' not in cur
+                    ):
+                        self._log("Sessão validada!", 'sucesso')
+                        try:
+                            os.remove(chk_path)
+                        except Exception:
+                            pass
+                        return True
+                    # Ainda no checkpoint — tira screenshot atualizado
+                    try:
+                        await self.page.screenshot(
+                            path=chk_path, full_page=False
+                        )
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+
             await asyncio.sleep(2)
             elapsed += 2
         return False
