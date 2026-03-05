@@ -621,6 +621,52 @@ async def ciclo_followup(bot: WhatsAppBot, gerador: GeradorMensagens):
 
 
 # =============================================================================
+# DETECÇÃO DE ROBÔ / CHATBOT
+# =============================================================================
+
+_PADROES_ROBO = [
+    # Menus numerados (1. Vendas 2. Suporte)
+    r'(?:^|\n)\s*[1-9]\s*[-–.)]\s*\w',
+    # Pede nome/CPF/CNPJ em formato bot
+    r'(?:envie|informe|digite)\s+(?:seu\s+)?(?:nome|cpf|cnpj|email|e-mail)',
+    # "escolha uma opção", "selecione", "digite o número"
+    r'(?:escolha|selecione|digite)\s+(?:uma?\s+)?(?:opção|número|opcao|numero)',
+    # Saudação genérica de bot
+    r'(?:bem[- ]?vindo|boas[- ]?vindas)\s+(?:ao?|à)\s+(?:nosso|nossa)',
+    # "para falar com", "para atendimento"
+    r'para\s+(?:falar|atendimento|suporte|vendas|financeiro)',
+    # "horário de atendimento"
+    r'hor[aá]rio\s+de\s+atendimento',
+    # "Envie uma informação com no máximo"
+    r'envie\s+uma?\s+informa[cç][aã]o',
+    # "não entendi", "não compreendi" (bot não entendeu)
+    r'n[aã]o\s+(?:entendi|compreendi|identifiquei)',
+    # "fora do horário"
+    r'fora\s+do\s+hor[aá]rio',
+    # "aguarde" + "atendente"
+    r'aguarde.*atendente|atendente.*aguarde',
+]
+_RE_ROBO = [re.compile(p, re.IGNORECASE) for p in _PADROES_ROBO]
+
+
+def _eh_resposta_robo(msg: str) -> bool:
+    """Detecta se a mensagem parece ser de um chatbot/robô."""
+    if not msg:
+        return False
+    msg = msg.strip()
+    # Mensagem com menu numerado (>= 3 opções)
+    linhas_menu = [l for l in msg.split('\n')
+                   if re.match(r'^\s*[1-9]\s*[-–.)]\s*\w', l.strip())]
+    if len(linhas_menu) >= 3:
+        return True
+    # Padrões regex
+    for rx in _RE_ROBO:
+        if rx.search(msg):
+            return True
+    return False
+
+
+# =============================================================================
 # CICLO RESPOSTAS
 # =============================================================================
 
@@ -666,6 +712,15 @@ async def ciclo_respostas(bot: WhatsAppBot, gerador: GeradorMensagens):
         estagio = get_estagio_conversa(empresa['id'])
         msg_lead = info.get('ultima_recebida', '')
         nome = empresa.get('nome_fantasia', numero)
+
+        # Detecta resposta de robô/chatbot e ignora
+        if _eh_resposta_robo(msg_lead):
+            print(
+                f"[WA/Prisma {_ts()}] ⏭ {nome[:35]} — "
+                f"resposta de robô (ignorando)",
+                flush=True)
+            atualizar_status_empresa(empresa['id'], 'robo_wa')
+            continue
 
         print(
             f"[WA/Prisma {_ts()}] ℹ Respondendo {nome[:35]} "

@@ -308,7 +308,7 @@ def get_empresas_contactadas(limite=20):
                MAX(i.enviado_em) as ultima_msg, COUNT(i.id) as total_msgs
         FROM empresas e INNER JOIN interacoes i ON e.id = i.empresa_id
         WHERE i.canal = 'whatsapp' AND e.whatsapp IS NOT NULL AND e.whatsapp != ''
-        AND e.status NOT IN ('convertido', 'encerrado')
+        AND e.status NOT IN ('convertido', 'encerrado', 'robo_wa')
         GROUP BY e.id, e.nome_fantasia, e.whatsapp, e.status, e.demo_status
         ORDER BY MAX(i.enviado_em) DESC LIMIT %s""", (limite,))
     results = [dict(row) for row in c.fetchall()]
