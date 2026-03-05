@@ -435,53 +435,63 @@ class LinkedInBot:
                 await asyncio.sleep(0.5)
             await asyncio.sleep(1)
 
-            # Abordagem link-first: encontra links /in/ e sobe até
-            # o container. LinkedIn usa CSS modules (classes hash)
-            # então seletores por classe não funcionam mais.
+            # Abordagem link-first: encontra links /in/ e extrai
+            # cargo/empresa do container mais próximo.
+            # Usa container-isolado: sobe no DOM mas para ANTES de
+            # incluir links de OUTROS perfis — evita misturar dados.
             perfis_data = await self.page.evaluate("""() => {
-                // 1. Encontra todos os links de perfil na página
                 const allLinks = [...document.querySelectorAll('a[href*="/in/"]')];
                 const seen = new Set();
                 const results = [];
 
+                // Coleta todas as hrefs para detectar "outro perfil"
+                const allHrefs = new Set();
+                for (const a of allLinks) {
+                    const h = a.href.split('?')[0];
+                    if (h.includes('/in/') && !h.includes('/in/me/'))
+                        allHrefs.add(h);
+                }
+
                 for (const link of allLinks) {
                     const href = link.href.split('?')[0];
-                    // Ignora links repetidos, de navegação e do header
                     if (seen.has(href)) continue;
                     if (href.includes('/in/me/') || href.includes('/in/miniprofile')) continue;
                     const rect = link.getBoundingClientRect();
                     if (rect.height < 10 || rect.top < 50) continue;
                     seen.add(href);
 
-                    // 2. Extrai nome do link ou do container próximo
+                    // Extrai nome
                     let nome = '';
-                    // Tenta span[aria-hidden] dentro do link (padrão LinkedIn)
                     const ariaSpan = link.querySelector('span[aria-hidden="true"]');
-                    if (ariaSpan) {
-                        nome = ariaSpan.textContent.trim();
-                    }
-                    if (!nome) {
-                        nome = link.textContent.trim();
-                    }
-                    // Limpa nome
+                    if (ariaSpan) nome = ariaSpan.textContent.trim();
+                    if (!nome) nome = link.textContent.trim();
                     nome = nome.replace(/\\n/g, ' ').replace(/\\s+/g, ' ').trim();
                     if (!nome || nome === 'LinkedIn Member' || nome.length > 80) continue;
 
-                    // 3. Sobe para o container do resultado
-                    //    Busca o ancestral com altura significativa
+                    // Sobe para container ISOLADO deste perfil:
+                    // Para quando o container contém links de OUTROS perfis
                     let container = link.parentElement;
+                    let prev = link;
                     for (let i = 0; i < 8 && container; i++) {
-                        if (container.offsetHeight > 80 && container.offsetWidth > 300) break;
+                        const otherLinks = [...container.querySelectorAll('a[href*="/in/"]')]
+                            .filter(a => {
+                                const h = a.href.split('?')[0];
+                                return h !== href && allHrefs.has(h);
+                            });
+                        if (otherLinks.length > 0) {
+                            container = prev;
+                            break;
+                        }
+                        if (container.offsetHeight > 60) break;
+                        prev = container;
                         container = container.parentElement;
                     }
                     if (!container) continue;
 
-                    // 4. Extrai cargo e empresa do texto do container
-                    //    LinkedIn coloca em elementos separados após o link do nome
                     let cargo = '';
                     let empresa = '';
 
-                    // Estratégia A: busca por classes conhecidas
+                    // Estratégia A: seletores conhecidos
                     const knownSelectors = [
                         ['.entity-result__primary-subtitle', '.entity-result__secondary-subtitle'],
                         ['[class*="primary-subtitle"]', '[class*="secondary-subtitle"]'],
@@ -494,9 +504,8 @@ class LinkedInBot:
                         if (cargo) break;
                     }
 
-                    // Estratégia B: pega textos visíveis após o nome
+                    // Estratégia B: textos visíveis após o nome
                     if (!cargo) {
-                        // Textos a ignorar (conexão, UI, etc)
                         const skip = [
                             'conexão em comum', 'conexões em comum',
                             'mutual connection', 'mutual connections',
@@ -504,9 +513,14 @@ class LinkedInBot:
                             'Connect', 'Conectar', 'Follow', 'Seguir',
                             'Message', 'Mensagem', 'Pending', 'Pendente',
                             'Send InMail', 'Enviar InMail',
+                            'e mais', 'and more', 'ver mais', 'see more',
+                            'View profile', 'Ver perfil',
                         ];
                         const isSkip = (t) => skip.some(s =>
                             t.toLowerCase().includes(s.toLowerCase()));
+
+                        // Também ignorar textos que são nomes de outros perfis
+                        const otherNames = results.map(r => r.nome.toLowerCase());
 
                         const allText = [];
                         const walker = document.createTreeWalker(
@@ -519,14 +533,14 @@ class LinkedInBot:
                                 .replace(/\\n/g, ' ').replace(/\\s+/g, ' ').trim();
                             if (!t || t.length < 3) continue;
                             if (t === nome || t.includes(nome)) { foundName = true; continue; }
-                            if (foundName && allText.length < 6) {
+                            if (foundName && allText.length < 4) {
                                 const parent = node.parentElement;
-                                // Ignora botões e textos de UI
                                 if (parent && (parent.tagName === 'BUTTON'
                                     || parent.closest('button'))) continue;
                                 if (isSkip(t)) continue;
-                                // Ignora textos muito curtos ou numéricos
                                 if (t.length < 4 || /^\\d+$/.test(t)) continue;
+                                // Ignora se parece nome de outro perfil
+                                if (otherNames.some(n => t.toLowerCase().includes(n))) continue;
                                 allText.push(t);
                             }
                         }
@@ -534,12 +548,7 @@ class LinkedInBot:
                         if (allText.length >= 2) empresa = allText[1];
                     }
 
-                    results.push({
-                        nome: nome,
-                        cargo: cargo,
-                        empresa: empresa,
-                        url: href,
-                    });
+                    results.push({ nome, cargo, empresa, url: href });
                 }
                 return results.slice(0, 15);
             }""")
@@ -1106,129 +1115,145 @@ class LinkedInBot:
             self._log(f"Erro ao abrir thread: {type(e).__name__}", 'aviso')
             return False
 
-    def _nomes_ja_dm_enviada(self) -> set:
-        """Retorna set de nomes (lower) que já receberam DM no banco."""
+    def _leads_aguardando_dm(self) -> list[dict]:
+        """Retorna leads com conexão enviada/aceita que ainda não receberam DM."""
         try:
             if not HAS_DB:
-                return set()
+                return []
             conn = get_connection()
             c = conn.cursor()
             c.execute(
-                "SELECT LOWER(nome) AS n FROM leads_linkedin "
-                "WHERE dm_enviada_em IS NOT NULL"
+                "SELECT nome, url_perfil FROM leads_linkedin "
+                "WHERE status IN ('conexao_enviada', 'conectado') "
+                "AND dm_enviada_em IS NULL "
+                "AND conexao_em IS NOT NULL "
+                "ORDER BY conexao_em DESC "
+                "LIMIT 10"
             )
-            nomes = {r['n'] for r in c.fetchall() if r['n']}
+            rows = list(c.fetchall())
             conn.close()
-            return nomes
+            return rows
         except Exception:
-            return set()
+            return []
 
     async def enviar_dm_novos_contatos(self):
         """
-        Abre o inbox, pega conexões aceitas recentemente sem DM enviada,
-        e manda o pitch inicial. Pula contatos que já receberam DM.
+        Busca leads do BANCO que tiveram conexão enviada mas ainda não
+        receberam DM. Abre o perfil, clica em "Mensagem" e envia pitch.
+        NÃO itera threads do inbox — só contata leads prospectados pelo bot.
         """
         if self.msgs_hoje >= LINKEDIN_MAX_MENSAGENS_DIA:
             return
 
-        try:
-            threads = await self._obter_threads_inbox()
-            if not threads:
-                self._log("Inbox vazio ou não carregou")
-                return
+        leads_pendentes = self._leads_aguardando_dm()
+        if not leads_pendentes:
+            self._log("Nenhum lead aguardando DM")
+            return
 
-            ja_dm = self._nomes_ja_dm_enviada()
-            self._log(
-                f"Inbox: {len(threads)} threads — verificando DMs iniciais"
-            )
+        self._log(
+            f"{len(leads_pendentes)} leads aguardando DM — verificando..."
+        )
 
-            enviadas = 0
-            for thread in threads[:5]:
-                try:
-                    preview_txt = await self._extrair_preview_thread(thread)
-                    # Pula se última msg é nossa (já interagimos)
-                    if preview_txt.startswith('Você:'):
-                        continue
+        enviadas = 0
+        for lead in leads_pendentes:
+            if self.msgs_hoje >= LINKEDIN_MAX_MENSAGENS_DIA:
+                self._log("Limite de DMs do dia atingido", 'aviso')
+                break
 
-                    if not await self._clicar_thread_e_esperar(thread):
-                        continue
+            nome = lead.get('nome', 'contato')
+            url_perfil = lead.get('url_perfil', '')
+            if not url_perfil:
+                continue
 
-                    nome = await self._extrair_nome_conversa()
-                    if not nome:
-                        nome = 'contato'
+            try:
+                # Abre o perfil do lead
+                await self.page.goto(
+                    url_perfil, wait_until='domcontentloaded', timeout=15000
+                )
+                await asyncio.sleep(random.uniform(2, 4))
 
-                    # Pula se já enviamos DM para esse contato (verificar DB)
-                    if nome.lower().strip() in ja_dm:
-                        self._log(
-                            f"  ⏭ {nome} já recebeu DM — pulando")
-                        continue
-
-                    # Verifica se já enviamos uma DM nesta conversa
-                    try:
-                        nossa_msg = await self.page.evaluate("""() => {
-                            // Verifica se há mensagem enviada por nós
-                            const outgoing = document.querySelectorAll(
-                                '[class*="message-group--outgoing"], ' +
-                                '[class*="outgoing"]'
-                            );
-                            // Conta total de bolhas de mensagem
-                            const bolhas = document.querySelectorAll(
-                                '.msg-s-event-listitem__message-bubble, ' +
-                                '[class*="message-bubble"], ' +
-                                '.msg-s-event-listitem__body, ' +
-                                'p[class*="msg-s-event"]'
-                            );
-                            return {
-                                temOutgoing: outgoing.length > 0,
-                                totalMsgs: bolhas.length
-                            };
-                        }""")
-                        if nossa_msg and nossa_msg.get('temOutgoing'):
-                            self._log(
-                                f"  ⏭ {nome} — já enviamos msg nesta conversa")
-                            continue
-                    except Exception:
-                        pass
-
-                    self._log(f"  Enviando DM inicial para {nome}...")
-                    msg = self._gerar_dm_inicial(nome)
-                    ok = await self._digitar_e_enviar(msg)
-                    if not ok:
-                        self._log(
-                            f"  ✗ Falha ao enviar DM para {nome}", 'aviso')
-                        continue
-                    self.msgs_hoje += 1
-                    enviadas += 1
-                    # Salva no DB que DM foi enviada
-                    if HAS_DB:
-                        try:
-                            salvar_lead_linkedin(
-                                {'nome': nome, 'url_perfil': self.page.url},
-                                'dm_enviada'
-                            )
-                        except Exception:
-                            pass
+                # Verifica se somos conectados (botão "Mensagem" visível)
+                msg_btn = await self.page.query_selector(
+                    'button:has-text("Mensagem"), '
+                    'button:has-text("Message"), '
+                    'a[href*="/messaging/thread/"]'
+                )
+                if not msg_btn:
                     self._log(
-                        f"  ✓ DM #{self.msgs_hoje}/{LINKEDIN_MAX_MENSAGENS_DIA} "
-                        f"enviada para {nome}",
-                        'sucesso'
-                    )
-
-                    if self.msgs_hoje >= LINKEDIN_MAX_MENSAGENS_DIA:
-                        self._log("Limite de DMs do dia atingido", 'aviso')
-                        break
-                    await asyncio.sleep(random.uniform(30, 60))
-                except Exception as e:
-                    self._log(
-                        f"  Erro em thread DM: {type(e).__name__}: {e}",
-                        'aviso')
+                        f"  ⏭ {nome} — sem botão Mensagem (não aceitou ainda)")
                     continue
 
-            if enviadas == 0:
-                self._log("Nenhuma DM inicial pendente encontrada")
+                # Clica no botão Mensagem para abrir chat
+                await msg_btn.click()
+                await asyncio.sleep(random.uniform(2, 3))
 
-        except Exception as e:
-            self._log(f"Erro ao enviar DMs: {e}", 'erro')
+                # Espera caixa de mensagem carregar
+                try:
+                    await self.page.wait_for_selector(
+                        'div.msg-form__contenteditable, '
+                        'div[contenteditable="true"][role="textbox"]',
+                        timeout=8000
+                    )
+                except Exception:
+                    self._log(
+                        f"  ⏭ {nome} — caixa de msg não carregou", 'aviso')
+                    continue
+
+                # Verifica se já enviamos msg nesta conversa
+                try:
+                    tem_outgoing = await self.page.evaluate("""() => {
+                        const out = document.querySelectorAll(
+                            '[class*="msg-s-message-group--outgoing"], '
+                            + '[class*="outgoing"]'
+                        );
+                        return out.length > 0;
+                    }""")
+                    if tem_outgoing:
+                        self._log(f"  ⏭ {nome} — já enviamos msg")
+                        # Atualiza DB para não tentar de novo
+                        if HAS_DB:
+                            try:
+                                salvar_lead_linkedin(
+                                    {'nome': nome, 'url_perfil': url_perfil},
+                                    'dm_enviada'
+                                )
+                            except Exception:
+                                pass
+                        continue
+                except Exception:
+                    pass
+
+                self._log(f"  Enviando DM inicial para {nome}...")
+                msg = self._gerar_dm_inicial(nome)
+                ok = await self._digitar_e_enviar(msg)
+                if not ok:
+                    self._log(
+                        f"  ✗ Falha ao enviar DM para {nome}", 'aviso')
+                    continue
+                self.msgs_hoje += 1
+                enviadas += 1
+                if HAS_DB:
+                    try:
+                        salvar_lead_linkedin(
+                            {'nome': nome, 'url_perfil': url_perfil},
+                            'dm_enviada'
+                        )
+                    except Exception:
+                        pass
+                self._log(
+                    f"  ✓ DM #{self.msgs_hoje}/{LINKEDIN_MAX_MENSAGENS_DIA} "
+                    f"enviada para {nome}",
+                    'sucesso'
+                )
+                await asyncio.sleep(random.uniform(30, 60))
+            except Exception as e:
+                self._log(
+                    f"  Erro DM {nome}: {type(e).__name__}: {e}",
+                    'aviso')
+                continue
+
+        if enviadas == 0:
+            self._log("Nenhuma DM pendente enviada neste ciclo")
 
     def _gerar_dm_inicial(self, nome: str) -> str:
         primeiro = nome.split()[0]
