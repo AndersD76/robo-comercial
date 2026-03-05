@@ -1758,10 +1758,13 @@ class LinkedInBot:
                 if apollo and self._ciclo % 5 == 0:
                     await self._enriquecer_leads_apollo(apollo)
 
-                # Pausa entre ciclos
-                prox = random.randint(20, 40)
+                # Pausa entre ciclos — curta se sem leads, normal se fez algo
+                if leads:
+                    prox = random.randint(25, 45)
+                else:
+                    prox = random.randint(8, 15)
                 self._log(
-                    f"Ciclo #{self._ciclo} OK. Próximo em {prox}s."
+                    f"Ciclo #{self._ciclo} OK → próximo ciclo em {prox}s"
                 )
                 await asyncio.sleep(prox)
 
