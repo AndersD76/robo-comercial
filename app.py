@@ -144,7 +144,7 @@ def get_stats(schema: str) -> dict:
     return zero
 
 
-def get_leads(schema: str, limite: int = 30) -> list:
+def get_leads(schema: str, limite: int = 50) -> list:
     if not DATABASE_URL:
         return []
     try:
@@ -155,7 +155,7 @@ def get_leads(schema: str, limite: int = 30) -> list:
                       status, segmento, demo_status, cidade, estado,
                       encontrado_em
                FROM empresas
-               ORDER BY score DESC, encontrado_em DESC
+               ORDER BY encontrado_em DESC
                LIMIT %s""",
             (limite,)
         )
