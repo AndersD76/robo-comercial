@@ -574,6 +574,17 @@ class LinkedInBot:
                 }""")
                 self._log(f"  [debug] {debug_info}", 'aviso')
 
+            # Log primeiros perfis para debug de cargo
+            if perfis_data and n_total > 0:
+                amostra = perfis_data[:3]
+                for p in amostra:
+                    self._log(
+                        f"  [amostra] {p.get('nome','')} | "
+                        f"cargo=\"{p.get('cargo','')}\" | "
+                        f"emp=\"{p.get('empresa','')}\"",
+                        'info'
+                    )
+
             for p in (perfis_data or []):
                 nome    = (p.get('nome') or '').strip()
                 cargo   = (p.get('cargo') or '').strip()
