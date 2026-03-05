@@ -293,31 +293,31 @@ class Buscador:
     # =========================================================================
 
     async def buscar_leads(self, termo=None, max_resultados=20):
-        """Busca leads: Google → Bing → DuckDuckGo"""
+        """Busca leads: Bing → Google → DuckDuckGo.
+        Bing primeiro pois Google bloqueia com CAPTCHA em IPs de servidor."""
         if not termo:
             termo = random.choice(TERMOS_BUSCA)
 
         print(f"\n  Buscando: '{termo}'")
 
-        # Google primeiro (melhor cobertura .com.br)
-        resultados = await self.buscar_google(termo, max_resultados)
+        # Bing primeiro (não bloqueia com CAPTCHA em servidor)
+        resultados = await self.buscar_bing(termo, max_resultados)
+        if resultados:
+            print(f"  Bing: {len(resultados)} resultados")
 
-        # Fallback Bing
-        if len(resultados) < 5:
-            msg = (
-                f"  Google retornou {len(resultados)} — complementando com Bing..."
-                if resultados else "  Google bloqueado/vazio, tentando Bing..."
-            )
-            print(msg)
-            resultados_bing = await self.buscar_bing(termo, max_resultados)
-            urls_vistas = {r['url'] for r in resultados}
-            for r in resultados_bing:
-                if r['url'] not in urls_vistas:
-                    resultados.append(r)
+        # Google como complemento (pode dar CAPTCHA)
+        if len(resultados) < 10:
+            resultados_g = await self.buscar_google(termo, max_resultados)
+            if resultados_g:
+                print(f"  Google: +{len(resultados_g)} resultados")
+                urls_vistas = {r['url'] for r in resultados}
+                for r in resultados_g:
+                    if r['url'] not in urls_vistas:
+                        resultados.append(r)
 
         # Fallback DuckDuckGo
         if len(resultados) < 5:
-            print("  Bing retornou poucos — tentando DuckDuckGo...")
+            print("  Complementando com DuckDuckGo...")
             resultados_ddg = await self.buscar_duckduckgo(termo, max_resultados)
             urls_vistas = {r['url'] for r in resultados}
             for r in resultados_ddg:

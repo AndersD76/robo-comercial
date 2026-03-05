@@ -195,11 +195,11 @@ FOLLOWUP2_DIAS = 7
 # =============================================================================
 # INTERVALOS (anti-ban)
 # =============================================================================
-INTERVALO_MSG_MIN = 30
-INTERVALO_MSG_MAX = 90
+INTERVALO_MSG_MIN = 15
+INTERVALO_MSG_MAX = 40
 PAUSA_LONGA_A_CADA = 15
-PAUSA_LONGA_MIN = 120
-PAUSA_LONGA_MAX = 300
+PAUSA_LONGA_MIN = 60
+PAUSA_LONGA_MAX = 120
 
 INTERVALO_BUSCA_MIN = 3
 INTERVALO_BUSCA_MAX = 8
