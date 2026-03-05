@@ -496,6 +496,18 @@ class LinkedInBot:
 
                     // Estratégia B: pega textos visíveis após o nome
                     if (!cargo) {
+                        // Textos a ignorar (conexão, UI, etc)
+                        const skip = [
+                            'conexão em comum', 'conexões em comum',
+                            'mutual connection', 'mutual connections',
+                            'grau', '1st', '2nd', '3rd', '1º', '2º', '3º',
+                            'Connect', 'Conectar', 'Follow', 'Seguir',
+                            'Message', 'Mensagem', 'Pending', 'Pendente',
+                            'Send InMail', 'Enviar InMail',
+                        ];
+                        const isSkip = (t) => skip.some(s =>
+                            t.toLowerCase().includes(s.toLowerCase()));
+
                         const allText = [];
                         const walker = document.createTreeWalker(
                             container, NodeFilter.SHOW_TEXT, null
@@ -503,19 +515,19 @@ class LinkedInBot:
                         let node;
                         let foundName = false;
                         while (node = walker.nextNode()) {
-                            const t = node.textContent.trim();
+                            const t = node.textContent.trim()
+                                .replace(/\\n/g, ' ').replace(/\\s+/g, ' ').trim();
                             if (!t || t.length < 3) continue;
-                            if (t === nome) { foundName = true; continue; }
-                            if (foundName && allText.length < 4) {
-                                // Ignora textos de botões/ações
+                            if (t === nome || t.includes(nome)) { foundName = true; continue; }
+                            if (foundName && allText.length < 6) {
                                 const parent = node.parentElement;
+                                // Ignora botões e textos de UI
                                 if (parent && (parent.tagName === 'BUTTON'
-                                    || parent.closest('button')
-                                    || t === 'Connect' || t === 'Conectar'
-                                    || t === 'Follow' || t === 'Seguir'
-                                    || t === 'Message' || t === 'Mensagem'))
-                                    continue;
-                                allText.push(t.replace(/\\n/g, ' ').replace(/\\s+/g, ' ').trim());
+                                    || parent.closest('button'))) continue;
+                                if (isSkip(t)) continue;
+                                // Ignora textos muito curtos ou numéricos
+                                if (t.length < 4 || /^\\d+$/.test(t)) continue;
+                                allText.push(t);
                             }
                         }
                         if (allText.length >= 1) cargo = allText[0];
