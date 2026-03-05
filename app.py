@@ -151,7 +151,7 @@ def get_leads(schema: str, limite: int = 30) -> list:
         conn = get_db(schema)
         c = conn.cursor()
         c.execute(
-            """SELECT nome_fantasia, whatsapp, telefone, email, score,
+            """SELECT id, nome_fantasia, whatsapp, telefone, email, score,
                       status, segmento, demo_status, cidade, estado,
                       encontrado_em
                FROM empresas

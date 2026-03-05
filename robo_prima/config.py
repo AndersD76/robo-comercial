@@ -92,6 +92,88 @@ LINKEDIN_TERMOS_BUSCA = [
     'continuous improvement manager Brazil',
 ]
 
+# =============================================================================
+# SALES NAVIGATOR (requer assinatura Sales Navigator)
+# =============================================================================
+SALES_NAV_HABILITADO = os.environ.get('SALES_NAV_HABILITADO', 'true').lower() == 'true'
+
+# Filtros avançados Sales Navigator
+SALES_NAV_FILTROS = {
+    # Cargos para busca (títulos) — usados no filtro "Title"
+    'titulos': [
+        'Gerente de Qualidade', 'Coordenador de Qualidade',
+        'Diretor Industrial', 'Gerente de Produção',
+        'Engenheiro de Qualidade', 'Supervisor de Qualidade',
+        'Gerente de Operações', 'Head of Quality',
+        'Quality Manager', 'Responsável SGQ',
+        'Gerente de Fábrica', 'Coordenador SGQ',
+    ],
+    # Indústrias — IDs do LinkedIn Sales Navigator
+    # 56=Metalurgia, 53=Máquinas, 48=Alimentos, 46=Plásticos/Borracha
+    # 50=Química, 42=Papel/Celulose, 57=Automotivo, 51=Embalagens
+    'industrias': [
+        'Metalurgia', 'Máquinas e Equipamentos', 'Alimentos',
+        'Plásticos e Borracha', 'Química', 'Automotivo',
+        'Embalagens', 'Fabricação', 'Manufacturing',
+    ],
+    # Porte da empresa (Sales Nav headcount ranges)
+    # B=1-10, C=11-50, D=51-200, E=201-500, F=501-1000, G=1001-5000
+    'portes': ['C', 'D', 'E', 'F'],  # 11 a 1000 funcionários
+    # Geografia — IDs de regiões do LinkedIn
+    'regioes': [
+        'São Paulo', 'Minas Gerais', 'Paraná',
+        'Santa Catarina', 'Rio Grande do Sul', 'Rio de Janeiro',
+    ],
+    # Nível de senioridade
+    # 3=Manager, 4=Director, 5=VP, 8=CXO, 9=Owner
+    'senioridade': ['3', '4', '5', '8', '9'],
+}
+
+# Termos de busca específicos para Sales Navigator (keywords)
+SALES_NAV_TERMOS = [
+    'qualidade ISO 9001',
+    'gestão qualidade indústria',
+    'SGQ metalurgia',
+    'quality management manufacturing',
+    'gerente qualidade fábrica',
+    'coordenador SGQ',
+    'melhoria contínua produção',
+    'auditoria qualidade',
+    'engenheiro qualidade produção',
+    'diretor industrial qualidade',
+]
+
+# =============================================================================
+# APOLLO.IO (API para enriquecimento e busca de leads)
+# =============================================================================
+APOLLO_API_KEY = os.environ.get('APOLLO_API_KEY', '')
+APOLLO_HABILITADO = bool(APOLLO_API_KEY)
+APOLLO_MAX_BUSCAS_DIA = int(os.environ.get('APOLLO_MAX_BUSCAS', '50'))
+
+# Filtros Apollo.io
+APOLLO_FILTROS = {
+    'titulos': [
+        'Gerente de Qualidade', 'Coordenador de Qualidade',
+        'Diretor Industrial', 'Gerente de Produção',
+        'Quality Manager', 'Engenheiro de Qualidade',
+        'Supervisor de Qualidade', 'Gerente de Operações',
+        'Gerente SGQ', 'Head of Quality',
+    ],
+    'localizacao': ['Brazil'],
+    'industrias': [
+        'manufacturing', 'industrial machinery',
+        'automotive', 'food production', 'chemicals',
+        'metals & mining', 'plastics',
+    ],
+    # Porte: 11-50, 51-200, 201-500, 501-1000
+    'porte_min': 11,
+    'porte_max': 1000,
+    'palavras_chave': [
+        'ISO 9001', 'qualidade', 'SGQ', 'quality management',
+        'industrial', 'metalurgia', 'manufacturing',
+    ],
+}
+
 # Link do Google Calendar Appointment Scheduling
 DEMO_CAL_LINK = os.environ.get(
     'DEMO_CAL_LINK',

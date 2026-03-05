@@ -20,6 +20,7 @@ from config import (
     LINKEDIN_MAX_CONEXOES_DIA, LINKEDIN_MAX_MENSAGENS_DIA,
     LINKEDIN_TERMOS_BUSCA, LINKEDIN_CARGOS_ALVO,
     HORARIO_INICIO, HORARIO_FIM, DIAS_ATIVOS,
+    SALES_NAV_HABILITADO, SALES_NAV_FILTROS, SALES_NAV_TERMOS,
 )
 
 try:
@@ -60,6 +61,8 @@ class LinkedInBot:
         self._msgs_respondidas: set = set()  # hashes já respondidos na sessão
         self._ciclo = 0
         self._ultimo_dia: int = -1  # dia do mês do último reset
+        self._sales_nav_disponivel: bool | None = None  # None = não verificado
+        self._apollo_leads_pendentes: list[dict] = []  # buffer de leads Apollo
         self.ai = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) \
             if HAS_AI and ANTHROPIC_API_KEY else None
 
@@ -426,8 +429,10 @@ class LinkedInBot:
                 await self.page.goto(url, wait_until='domcontentloaded')
                 await asyncio.sleep(random.uniform(2, 4))
 
-            # Scroll para carregar lazy items
-            await self.page.evaluate('window.scrollTo(0, 800)')
+            # Scroll progressivo para carregar lazy items
+            for scroll_y in [400, 800, 1200, 1800]:
+                await self.page.evaluate(f'window.scrollTo(0, {scroll_y})')
+                await asyncio.sleep(0.5)
             await asyncio.sleep(1)
 
             # Extrai todos os dados em um único evaluate — mais robusto que
@@ -494,6 +499,24 @@ class LinkedInBot:
             n_total = len(perfis_data or [])
             self._log(f"  {n_total} perfis encontrados na página")
 
+            # Debug: se 0 resultados, logar URL e tirar screenshot
+            if n_total == 0:
+                cur = self.page.url
+                self._log(f"  [debug] URL atual: {cur}", 'aviso')
+                title = await self.page.title()
+                self._log(f"  [debug] Título: {title}", 'aviso')
+                # Detecta se é página de "sem resultados" ou problema
+                no_results = await self.page.evaluate("""() => {
+                    const body = document.body?.innerText || '';
+                    if (body.includes('No results found') || body.includes('nenhum resultado'))
+                        return 'no_results';
+                    if (body.includes('Sign in') || body.includes('Entrar'))
+                        return 'login_wall';
+                    const lis = document.querySelectorAll('li');
+                    return 'li_count=' + lis.length;
+                }""")
+                self._log(f"  [debug] Página: {no_results}", 'aviso')
+
             for p in (perfis_data or []):
                 nome    = (p.get('nome') or '').strip()
                 cargo   = (p.get('cargo') or '').strip()
@@ -527,6 +550,259 @@ class LinkedInBot:
         return any(c.lower() in cargo_lower for c in LINKEDIN_CARGOS_ALVO)
 
     # =========================================================================
+    # SALES NAVIGATOR — Busca avançada
+    # =========================================================================
+
+    async def _verificar_sales_nav(self) -> bool:
+        """Verifica se a conta tem acesso ao Sales Navigator."""
+        try:
+            await self.page.goto(
+                f'{LINKEDIN_URL}/sales/home',
+                wait_until='domcontentloaded'
+            )
+            await asyncio.sleep(random.uniform(2, 4))
+            url = self.page.url
+            if '/sales/' in url and '/login' not in url:
+                self._log("Sales Navigator ativo — conta com acesso", 'sucesso')
+                return True
+            self._log(
+                "Sales Navigator não disponível nesta conta — "
+                "usando busca padrão", 'aviso'
+            )
+            return False
+        except Exception as e:
+            self._log(f"Erro verificando Sales Nav: {e}", 'aviso')
+            return False
+
+    async def buscar_sales_nav(self, termo: str, pagina: int = 1) -> list[dict]:
+        """
+        Busca leads usando LinkedIn Sales Navigator.
+        Filtros avançados: título, indústria, região, porte.
+        Retorna lista de dicts com nome, cargo, empresa, url_perfil.
+        """
+        resultados = []
+        try:
+            # Monta URL do Sales Navigator com keyword
+            url = (
+                f'{LINKEDIN_URL}/sales/search/people/'
+                f'?query=(keywords:{quote(termo)})'
+                f'&page={pagina}'
+            )
+            self._log(f"[Sales Nav] Buscando: \"{termo}\" (pág {pagina})...")
+            await self.page.goto(url, wait_until='domcontentloaded')
+            await asyncio.sleep(random.uniform(3, 5))
+
+            # Detecta se caiu fora do Sales Nav (sessão / sem acesso)
+            cur_url = self.page.url
+            if '/login' in cur_url or '/authwall' in cur_url:
+                self._log("[Sales Nav] Sessão expirada — re-login...", 'aviso')
+                self.conectado = False
+                ok = await self.fazer_login()
+                if not ok:
+                    return resultados
+                await self.page.goto(url, wait_until='domcontentloaded')
+                await asyncio.sleep(random.uniform(3, 5))
+
+            if '/sales/' not in self.page.url:
+                self._log("[Sales Nav] Redirecionado para fora — sem acesso", 'aviso')
+                return resultados
+
+            # Scroll para carregar resultados
+            for scroll_y in [400, 800, 1200]:
+                await self.page.evaluate(f'window.scrollTo(0, {scroll_y})')
+                await asyncio.sleep(0.5)
+
+            # Extrai dados dos resultados — seletores Sales Navigator
+            perfis_data = await self.page.evaluate("""() => {
+                const results = [];
+
+                // Estratégias de seletor para Sales Navigator
+                // (LinkedIn muda frequentemente — múltiplos fallbacks)
+                const strats = [
+                    // Estratégia 1: seletores modernos do Sales Nav
+                    () => [...document.querySelectorAll(
+                        'li.artdeco-list__item[class*="search-results"],' +
+                        'li[class*="search-results__result-item"],' +
+                        'ol.search-results-container > li'
+                    )],
+                    // Estratégia 2: cards genéricos do Sales Nav
+                    () => [...document.querySelectorAll(
+                        'div[data-x--search-result],' +
+                        '[class*="search-result__wrapper"],' +
+                        '[class*="result-lockup"]'
+                    )],
+                    // Estratégia 3: lockup entities
+                    () => [...document.querySelectorAll(
+                        '.artdeco-entity-lockup,' +
+                        '[class*="entity-lockup"]'
+                    )].filter(el =>
+                        el.querySelector('a[href*="/sales/lead/"]') ||
+                        el.querySelector('a[href*="/sales/people/"]')
+                    ),
+                    // Estratégia 4: qualquer li com link de lead
+                    () => [...document.querySelectorAll('li')]
+                        .filter(li => {
+                            const a = li.querySelector(
+                                'a[href*="/sales/lead/"],' +
+                                'a[href*="/sales/people/"]'
+                            );
+                            return a && li.offsetHeight > 50;
+                        }),
+                ];
+
+                let cards = [];
+                for (const s of strats) {
+                    cards = s();
+                    if (cards.length > 0) break;
+                }
+
+                for (const card of cards.slice(0, 15)) {
+                    // Nome
+                    let nome = '';
+                    for (const sel of [
+                        '[data-anonymize="person-name"]',
+                        '.artdeco-entity-lockup__title a',
+                        'a[href*="/sales/lead/"] span',
+                        'a[href*="/sales/people/"] span',
+                        '.result-lockup__name a',
+                    ]) {
+                        const el = card.querySelector(sel);
+                        if (el) { nome = el.textContent.trim(); break; }
+                    }
+
+                    // Cargo/título
+                    let cargo = '';
+                    for (const sel of [
+                        '[data-anonymize="title"]',
+                        '.artdeco-entity-lockup__subtitle',
+                        '.result-lockup__highlight-keyword',
+                        '[class*="entity-lockup__subtitle"]',
+                    ]) {
+                        const el = card.querySelector(sel);
+                        if (el) { cargo = el.textContent.trim(); break; }
+                    }
+
+                    // Empresa
+                    let empresa = '';
+                    for (const sel of [
+                        '[data-anonymize="company-name"]',
+                        '.artdeco-entity-lockup__caption a',
+                        '.result-lockup__position-company a',
+                        '[class*="entity-lockup__caption"] a',
+                    ]) {
+                        const el = card.querySelector(sel);
+                        if (el) { empresa = el.textContent.trim(); break; }
+                    }
+
+                    // URL do perfil (Sales Nav → regular LinkedIn)
+                    let url = '';
+                    const linkEl = card.querySelector(
+                        'a[href*="/sales/lead/"],' +
+                        'a[href*="/sales/people/"],' +
+                        'a[href*="/in/"]'
+                    );
+                    if (linkEl) {
+                        url = linkEl.href.split('?')[0];
+                    }
+
+                    if (nome && nome !== 'LinkedIn Member') {
+                        results.push({ nome, cargo, empresa, url });
+                    }
+                }
+                return results;
+            }""")
+
+            n_total = len(perfis_data or [])
+            self._log(f"  [Sales Nav] {n_total} perfis na página")
+
+            for p in (perfis_data or []):
+                nome = (p.get('nome') or '').strip()
+                cargo = (p.get('cargo') or '').strip()
+                empresa = (p.get('empresa') or '').strip()
+                url_p = (p.get('url') or '').strip()
+
+                if not nome:
+                    continue
+                if not self._cargo_alvo(cargo):
+                    continue
+
+                # Converte URL Sales Nav para URL regular se possível
+                if '/sales/lead/' in url_p or '/sales/people/' in url_p:
+                    url_regular = await self._sales_nav_to_regular_url(url_p)
+                    if url_regular:
+                        url_p = url_regular
+
+                self._log(f"  → [SN] {nome} | {cargo} @ {empresa}")
+                resultados.append({
+                    'nome': nome,
+                    'cargo': cargo,
+                    'empresa': empresa,
+                    'url_perfil': url_p,
+                    'termo_busca': f'[SalesNav] {termo}',
+                    'fonte': 'sales_navigator',
+                })
+
+            self._log(
+                f"[Sales Nav] {len(resultados)} leads qualificados de {n_total}"
+            )
+        except Exception as e:
+            self._log(f"[Sales Nav] Erro na busca: {e}", 'erro')
+        return resultados
+
+    async def _sales_nav_to_regular_url(self, sales_url: str) -> str:
+        """
+        Tenta extrair URL regular do perfil a partir do Sales Navigator.
+        Sales Nav URLs contêm o ID do lead, não o vanity URL.
+        """
+        try:
+            # Abre o perfil Sales Nav em outra aba para pegar o vanity URL
+            # Mas para não sobrecarregar, usamos a URL Sales Nav mesmo
+            # O bot vai navegar para o perfil real quando for enviar conexão
+            return sales_url
+        except Exception:
+            return sales_url
+
+    async def _navegar_perfil_para_conexao(self, url: str) -> str:
+        """
+        Se a URL é do Sales Navigator, navega até o perfil regular.
+        Retorna a URL regular do perfil.
+        """
+        if '/sales/lead/' not in url and '/sales/people/' not in url:
+            return url  # Já é URL regular
+
+        try:
+            await self.page.goto(url, wait_until='domcontentloaded')
+            await asyncio.sleep(random.uniform(2, 4))
+
+            # No Sales Nav, procura link "Ver perfil no LinkedIn"
+            link_regular = await self.page.evaluate("""() => {
+                // Botão/link para perfil regular
+                const sels = [
+                    'a[href*="linkedin.com/in/"]',
+                    'a[data-control-name="view_linkedin"]',
+                    '[class*="view-linkedin"] a',
+                    'a[aria-label*="LinkedIn"]',
+                ];
+                for (const sel of sels) {
+                    const el = document.querySelector(sel);
+                    if (el && el.href && el.href.includes('/in/')) {
+                        return el.href.split('?')[0];
+                    }
+                }
+                return '';
+            }""")
+
+            if link_regular:
+                self._log(f"  Perfil regular encontrado: {link_regular}")
+                return link_regular
+
+            # Se não encontrou link direto, tenta o vanity URL do cabeçalho
+            return url
+        except Exception as e:
+            self._log(f"  Erro navegando perfil Sales Nav: {e}", 'aviso')
+            return url
+
+    # =========================================================================
     # ENVIAR CONEXÃO
     # =========================================================================
 
@@ -548,10 +824,15 @@ class LinkedInBot:
         self._log(f"Conectando com {nome} | {cargo} @ {empresa}...")
 
         try:
+            # Se URL é do Sales Navigator, navega para perfil regular primeiro
+            if '/sales/lead/' in url or '/sales/people/' in url:
+                url = await self._navegar_perfil_para_conexao(url)
+                perfil['url_perfil'] = url  # atualiza para salvar no DB
+
             await self.page.goto(url, wait_until='domcontentloaded')
             await asyncio.sleep(random.uniform(2, 4))
 
-            # Botão "Conectar"
+            # Botão "Conectar" — suporta LinkedIn regular e Sales Navigator
             conectar_btn = await self.page.query_selector(
                 'button[aria-label*="Conectar"], button[aria-label*="Connect"]'
             )
@@ -1204,22 +1485,69 @@ class LinkedInBot:
     # =========================================================================
 
     async def executar(self):
-        """Loop contínuo: busca → conecta → dm"""
+        """
+        Loop contínuo multi-source:
+        Alterna entre LinkedIn Search, Sales Navigator e Apollo.io
+        Ciclo: busca → conecta → dm → inbox
+        """
         ok = await self.fazer_login()
         if not ok:
-            self._log("Não foi possível logar no LinkedIn. Abortando.", 'erro')
+            self._log(
+                "Não foi possível logar no LinkedIn. Abortando.",
+                'erro'
+            )
             return
+
+        # Verifica Sales Navigator (1x no início)
+        if SALES_NAV_HABILITADO and self._sales_nav_disponivel is None:
+            self._sales_nav_disponivel = await self._verificar_sales_nav()
+            # Volta pro feed depois de verificar
+            await self.page.goto(
+                f'{LINKEDIN_URL}/feed/',
+                wait_until='domcontentloaded'
+            )
+            await asyncio.sleep(2)
+
+        # Inicializa Apollo.io
+        apollo = None
+        try:
+            from apollo_client import ApolloClient
+            apollo = ApolloClient()
+            if apollo.disponivel():
+                self._log(
+                    "Apollo.io ativo — enriquecimento habilitado",
+                    'sucesso'
+                )
+            else:
+                self._log("Apollo.io não configurado — pulando")
+                apollo = None
+        except ImportError:
+            self._log("Apollo client não encontrado — pulando")
+
+        # Fontes de busca disponíveis
+        fontes = ['linkedin']
+        if self._sales_nav_disponivel:
+            fontes.append('sales_nav')
+        if apollo:
+            fontes.append('apollo')
 
         self._log(
             f"LinkedIn bot Prisma ativo — "
             f"max {LINKEDIN_MAX_CONEXOES_DIA} conexões/dia, "
-            f"{LINKEDIN_MAX_MENSAGENS_DIA} DMs/dia",
+            f"{LINKEDIN_MAX_MENSAGENS_DIA} DMs/dia | "
+            f"Fontes: {', '.join(fontes)}",
             'sucesso'
         )
-        termos = LINKEDIN_TERMOS_BUSCA.copy()
-        random.shuffle(termos)
-        self._log(f"{len(termos)} termos de busca carregados")
-        termo_idx = 0
+
+        # Termos de busca por fonte
+        termos_li = LINKEDIN_TERMOS_BUSCA.copy()
+        random.shuffle(termos_li)
+        termos_sn = SALES_NAV_TERMOS.copy() if self._sales_nav_disponivel else []
+        random.shuffle(termos_sn)
+
+        termo_idx_li = 0
+        termo_idx_sn = 0
+        termo_idx_apollo = 0
 
         while True:
             try:
@@ -1234,65 +1562,170 @@ class LinkedInBot:
                         self.msgs_hoje = 0
                         self._msgs_respondidas.clear()
                         self._log("Reset diário — contadores zerados")
+                    if apollo:
+                        apollo.buscas_hoje = 0
 
                 self._ciclo += 1
+                # Escolhe fonte deste ciclo (round-robin)
+                fonte_idx = (self._ciclo - 1) % len(fontes)
+                fonte = fontes[fonte_idx]
+
                 self._log(
-                    f"━━━ Ciclo #{self._ciclo} "
+                    f"━━━ Ciclo #{self._ciclo} [{fonte.upper()}] "
                     f"| {now.strftime('%H:%M')} BRT "
-                    f"| Conexões: {self.conexoes_hoje}/{LINKEDIN_MAX_CONEXOES_DIA} "
-                    f"| DMs: {self.msgs_hoje}/{LINKEDIN_MAX_MENSAGENS_DIA} ━━━"
+                    f"| Cx: {self.conexoes_hoje}/"
+                    f"{LINKEDIN_MAX_CONEXOES_DIA} "
+                    f"| DM: {self.msgs_hoje}/"
+                    f"{LINKEDIN_MAX_MENSAGENS_DIA} ━━━"
                 )
 
                 # ── Fase 1: busca + conexões ──
                 if self.conexoes_hoje < LINKEDIN_MAX_CONEXOES_DIA:
-                    termo = termos[termo_idx % len(termos)]
-                    # Página sequencial: 1→2→3 por termo, depois avança termo
-                    pagina = (termo_idx // len(termos)) + 1
-                    if pagina > 3:
-                        pagina = 1  # volta ao início
-                    termo_idx += 1
-                    leads = await self.buscar_pessoas(termo, pagina)
+                    leads = []
+
+                    if fonte == 'linkedin':
+                        termo = termos_li[termo_idx_li % len(termos_li)]
+                        pagina = (termo_idx_li // len(termos_li)) + 1
+                        if pagina > 3:
+                            pagina = 1
+                        termo_idx_li += 1
+                        leads = await self.buscar_pessoas(termo, pagina)
+
+                    elif fonte == 'sales_nav' and termos_sn:
+                        termo = termos_sn[termo_idx_sn % len(termos_sn)]
+                        pagina = (termo_idx_sn // len(termos_sn)) + 1
+                        if pagina > 3:
+                            pagina = 1
+                        termo_idx_sn += 1
+                        leads = await self.buscar_sales_nav(termo, pagina)
+
+                    elif fonte == 'apollo' and apollo:
+                        from apollo_client import APOLLO_KEYWORDS
+                        kws = APOLLO_KEYWORDS
+                        kw = kws[termo_idx_apollo % len(kws)]
+                        termo_idx_apollo += 1
+                        apollo_leads = await apollo.buscar_leads(kw)
+
+                        # Salva leads Apollo no pipeline
+                        if apollo_leads:
+                            await apollo.salvar_leads_no_pipeline(
+                                apollo_leads
+                            )
+                            # Filtra os que têm URL LinkedIn para conexão
+                            leads = [
+                                l for l in apollo_leads
+                                if l.get('url_perfil')
+                            ]
+                            # Buffer: leads com telefone para WhatsApp
+                            tel_leads = [
+                                l for l in apollo_leads
+                                if l.get('telefone')
+                                and not l.get('url_perfil')
+                            ]
+                            if tel_leads:
+                                self._log(
+                                    f"  {len(tel_leads)} leads Apollo "
+                                    f"com telefone → pipeline WA"
+                                )
 
                     if leads:
-                        self._log(f"Fase 1: {len(leads)} leads — enviando conexões...")
+                        self._log(
+                            f"Fase 1: {len(leads)} leads [{fonte}] "
+                            f"— enviando conexões..."
+                        )
                         for lead in leads:
                             if self.conexoes_hoje >= LINKEDIN_MAX_CONEXOES_DIA:
-                                self._log("Limite de conexões do dia atingido")
+                                self._log(
+                                    "Limite de conexões atingido"
+                                )
                                 break
                             await self.enviar_conexao(lead)
                             pausa = random.randint(45, 120)
-                            self._log(f"Aguardando {pausa}s antes do próximo...")
+                            self._log(
+                                f"Aguardando {pausa}s..."
+                            )
                             await asyncio.sleep(pausa)
                     else:
-                        self._log("Fase 1: nenhum lead qualificado nesta busca")
+                        self._log(
+                            f"Fase 1: sem leads [{fonte}] neste ciclo"
+                        )
                 else:
-                    self._log("Fase 1: limite de conexões já atingido hoje — pulando busca")
+                    self._log(
+                        "Fase 1: limite de conexões atingido — "
+                        "pulando busca"
+                    )
 
-                # ── Fase 2 e 3: DMs e respostas só no horário comercial ──
+                # ── Fase 2 e 3: DMs e respostas (horário comercial) ──
                 if self._horario_mensagens(now):
                     if self.msgs_hoje < LINKEDIN_MAX_MENSAGENS_DIA:
-                        self._log("Fase 2: verificando DMs iniciais para novas conexões...")
+                        self._log(
+                            "Fase 2: DMs para novas conexões..."
+                        )
                         await self.enviar_dm_novos_contatos()
                     else:
-                        self._log("Fase 2: limite de DMs já atingido hoje — pulando")
+                        self._log("Fase 2: limite DMs atingido")
 
-                    self._log("Fase 3: monitorando inbox para respostas...")
+                    self._log("Fase 3: monitorando inbox...")
                     await self.monitorar_inbox()
                 else:
                     self._log(
-                        f"Fase 2-3: fora do horário de mensagens "
-                        f"({HORARIO_INICIO}h-22h seg-sex) — "
-                        f"apenas prospecção ativa"
+                        f"Fase 2-3: fora do horário "
+                        f"({HORARIO_INICIO}h-22h) — "
+                        f"apenas prospecção"
                     )
+
+                # ── Fase 4: Apollo enriquecimento (a cada 5 ciclos) ──
+                if apollo and self._ciclo % 5 == 0:
+                    await self._enriquecer_leads_apollo(apollo)
 
                 # Pausa entre ciclos
                 prox = random.randint(20, 40)
-                self._log(f"Ciclo #{self._ciclo} concluído. Próximo em {prox}s.")
+                self._log(
+                    f"Ciclo #{self._ciclo} OK. Próximo em {prox}s."
+                )
                 await asyncio.sleep(prox)
 
             except Exception as e:
                 self._log(f"Erro no loop principal: {e}", 'erro')
                 await asyncio.sleep(60)
+
+    async def _enriquecer_leads_apollo(self, apollo):
+        """Enriquece leads LinkedIn sem email usando Apollo."""
+        if not HAS_DB:
+            return
+        try:
+            conn = get_connection()
+            c = conn.cursor()
+            # Busca leads com URL LinkedIn mas sem email
+            c.execute("""
+                SELECT id, nome, url_perfil FROM leads_linkedin
+                WHERE url_perfil IS NOT NULL
+                AND url_perfil != ''
+                AND url_perfil NOT LIKE '%%/sales/%%'
+                ORDER BY encontrado_em DESC
+                LIMIT 5
+            """)
+            leads = c.fetchall()
+            conn.close()
+
+            if not leads:
+                return
+
+            self._log(
+                f"Enriquecendo {len(leads)} leads via Apollo..."
+            )
+            for lead in leads:
+                url = lead['url_perfil']
+                dados = await apollo.enriquecer_lead(
+                    linkedin_url=url
+                )
+                if dados and dados.get('email'):
+                    self._log(
+                        f"  Enriquecido: {lead['nome']} → "
+                        f"{dados['email']}"
+                    )
+        except Exception as e:
+            self._log(f"Erro enriquecimento: {e}", 'aviso')
 
     def _horario_mensagens(self, now: datetime) -> bool:
         """Retorna True se pode enviar DMs/respostas (seg-sex, 8h-22h BRT)."""

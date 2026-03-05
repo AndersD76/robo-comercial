@@ -100,7 +100,7 @@ def init_database():
         ultima_execucao TIMESTAMP, modo TEXT DEFAULT 'busca'
     )""")
 
-    # Tabela de leads encontrados via LinkedIn
+    # Tabela de leads encontrados via LinkedIn / Sales Nav / Apollo
     c.execute("""CREATE TABLE IF NOT EXISTS leads_linkedin (
         id           BIGSERIAL PRIMARY KEY,
         nome         TEXT,
@@ -114,8 +114,26 @@ def init_database():
         dm_enviada_em TIMESTAMP,
         respondeu    INTEGER DEFAULT 0,
         ultima_resposta TEXT,
-        demo_status  TEXT
+        demo_status  TEXT,
+        email        TEXT,
+        telefone     TEXT,
+        fonte        TEXT DEFAULT 'linkedin'
     )""")
+
+    # Migração: adiciona colunas novas se tabela já existia
+    for col, tipo, default in [
+        ('email', 'TEXT', None),
+        ('telefone', 'TEXT', None),
+        ('fonte', 'TEXT', "'linkedin'"),
+    ]:
+        try:
+            ddl = f"ALTER TABLE leads_linkedin ADD COLUMN {col} {tipo}"
+            if default:
+                ddl += f" DEFAULT {default}"
+            c.execute(ddl)
+        except Exception:
+            conn.rollback()
+            c.execute(f"SET search_path TO {schema}")
 
     c.execute("INSERT INTO execucao (id, status) VALUES (1, 'parado') ON CONFLICT (id) DO NOTHING")
     conn.commit()
@@ -446,32 +464,55 @@ def registrar_log(tipo, mensagem, detalhes=None):
 
 
 def salvar_lead_linkedin(perfil: dict, status: str = 'encontrado'):
-    """Salva ou atualiza lead vindo do LinkedIn."""
+    """Salva ou atualiza lead vindo do LinkedIn / Sales Nav / Apollo."""
     url = perfil.get('url_perfil', '')
     if not url:
         return None
     conn = get_connection()
     c = conn.cursor()
     try:
+        fonte = perfil.get('fonte', 'linkedin')
+        email = perfil.get('email', '')
+        telefone = perfil.get('telefone', '')
         c.execute("""
-            INSERT INTO leads_linkedin (nome, cargo, empresa, url_perfil, termo_busca, status)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            ON CONFLICT (url_perfil) DO UPDATE SET status = EXCLUDED.status
+            INSERT INTO leads_linkedin
+                (nome, cargo, empresa, url_perfil,
+                 termo_busca, status, fonte, email, telefone)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (url_perfil) DO UPDATE SET
+                status = EXCLUDED.status,
+                email = COALESCE(
+                    NULLIF(EXCLUDED.email, ''),
+                    leads_linkedin.email
+                ),
+                telefone = COALESCE(
+                    NULLIF(EXCLUDED.telefone, ''),
+                    leads_linkedin.telefone
+                ),
+                fonte = CASE
+                    WHEN leads_linkedin.fonte = 'linkedin'
+                        AND EXCLUDED.fonte != 'linkedin'
+                    THEN EXCLUDED.fonte
+                    ELSE leads_linkedin.fonte
+                END
             RETURNING id
         """, (
             perfil.get('nome'), perfil.get('cargo'),
             perfil.get('empresa'), url,
-            perfil.get('termo_busca'), status
+            perfil.get('termo_busca'), status,
+            fonte, email or None, telefone or None
         ))
         row = c.fetchone()
         if status == 'conexao_enviada':
             c.execute(
-                "UPDATE leads_linkedin SET conexao_em = CURRENT_TIMESTAMP "
+                "UPDATE leads_linkedin "
+                "SET conexao_em = CURRENT_TIMESTAMP "
                 "WHERE url_perfil = %s", (url,)
             )
         elif status == 'dm_enviada':
             c.execute(
-                "UPDATE leads_linkedin SET dm_enviada_em = CURRENT_TIMESTAMP "
+                "UPDATE leads_linkedin "
+                "SET dm_enviada_em = CURRENT_TIMESTAMP "
                 "WHERE url_perfil = %s", (url,)
             )
         incrementar_contagem(f'linkedin_{status}')
@@ -504,14 +545,37 @@ def get_stats_linkedin():
     conn = get_connection()
     c = conn.cursor()
     stats = {}
-    c.execute("SELECT COUNT(*) AS n FROM leads_linkedin")
+    c.execute(
+        "SELECT COUNT(*) AS n FROM leads_linkedin"
+    )
     stats['total'] = c.fetchone()['n']
-    c.execute("SELECT COUNT(*) AS n FROM leads_linkedin WHERE status = 'conexao_enviada'")
+    c.execute(
+        "SELECT COUNT(*) AS n FROM leads_linkedin "
+        "WHERE status = 'conexao_enviada'"
+    )
     stats['conexoes'] = c.fetchone()['n']
-    c.execute("SELECT COUNT(*) AS n FROM leads_linkedin WHERE respondeu = 1")
+    c.execute(
+        "SELECT COUNT(*) AS n FROM leads_linkedin "
+        "WHERE respondeu = 1"
+    )
     stats['responderam'] = c.fetchone()['n']
-    c.execute("SELECT COUNT(*) AS n FROM leads_linkedin WHERE demo_status = 'confirmado'")
+    c.execute(
+        "SELECT COUNT(*) AS n FROM leads_linkedin "
+        "WHERE demo_status = 'confirmado'"
+    )
     stats['demos'] = c.fetchone()['n']
+    # Stats por fonte
+    c.execute("""
+        SELECT
+            COALESCE(fonte, 'linkedin') AS fonte,
+            COUNT(*) AS total
+        FROM leads_linkedin
+        GROUP BY COALESCE(fonte, 'linkedin')
+    """)
+    stats['por_fonte'] = {
+        row['fonte']: row['total']
+        for row in c.fetchall()
+    }
     conn.close()
     return stats
 
