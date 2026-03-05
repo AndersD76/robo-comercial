@@ -127,13 +127,13 @@ def init_database():
         ('fonte', 'TEXT', "'linkedin'"),
     ]:
         try:
-            ddl = f"ALTER TABLE leads_linkedin ADD COLUMN {col} {tipo}"
+            ddl = f"ALTER TABLE leads_linkedin ADD COLUMN IF NOT EXISTS {col} {tipo}"
             if default:
                 ddl += f" DEFAULT {default}"
             c.execute(ddl)
         except Exception:
             conn.rollback()
-            c.execute(f"SET search_path TO {schema}")
+            c.execute(f"SET search_path TO {DB_SCHEMA}, public")
 
     c.execute("INSERT INTO execucao (id, status) VALUES (1, 'parado') ON CONFLICT (id) DO NOTHING")
     conn.commit()
