@@ -435,99 +435,101 @@ class LinkedInBot:
                 await asyncio.sleep(0.5)
             await asyncio.sleep(1)
 
-            # Extrai todos os dados em um único evaluate — mais robusto que
-            # múltiplas chamadas CSS (LinkedIn muda classes constantemente)
+            # Abordagem link-first: encontra links /in/ e sobe até
+            # o container. LinkedIn usa CSS modules (classes hash)
+            # então seletores por classe não funcionam mais.
             perfis_data = await self.page.evaluate("""() => {
-                const profileUrlPattern = /linkedin\.com\/(in|profile\/view)\//;
-                const extrairNome = (el) => {
-                    const cands = [
-                        el.querySelector('span.entity-result__title-text a span[aria-hidden="true"]'),
-                        el.querySelector('a[href*="/in/"] span[aria-hidden="true"]'),
-                        el.querySelector('a[href*="/profile/"] span[aria-hidden="true"]'),
-                        el.querySelector('span.entity-result__title-text a'),
-                        el.querySelector('a[href*="/in/"]'),
-                        el.querySelector('a[href*="/profile/"]'),
+                // 1. Encontra todos os links de perfil na página
+                const allLinks = [...document.querySelectorAll('a[href*="/in/"]')];
+                const seen = new Set();
+                const results = [];
+
+                for (const link of allLinks) {
+                    const href = link.href.split('?')[0];
+                    // Ignora links repetidos, de navegação e do header
+                    if (seen.has(href)) continue;
+                    if (href.includes('/in/me/') || href.includes('/in/miniprofile')) continue;
+                    const rect = link.getBoundingClientRect();
+                    if (rect.height < 10 || rect.top < 50) continue;
+                    seen.add(href);
+
+                    // 2. Extrai nome do link ou do container próximo
+                    let nome = '';
+                    // Tenta span[aria-hidden] dentro do link (padrão LinkedIn)
+                    const ariaSpan = link.querySelector('span[aria-hidden="true"]');
+                    if (ariaSpan) {
+                        nome = ariaSpan.textContent.trim();
+                    }
+                    if (!nome) {
+                        nome = link.textContent.trim();
+                    }
+                    // Limpa nome
+                    nome = nome.replace(/\\n/g, ' ').replace(/\\s+/g, ' ').trim();
+                    if (!nome || nome === 'LinkedIn Member' || nome.length > 80) continue;
+
+                    // 3. Sobe para o container do resultado
+                    //    Busca o ancestral com altura significativa
+                    let container = link.parentElement;
+                    for (let i = 0; i < 8 && container; i++) {
+                        if (container.offsetHeight > 80 && container.offsetWidth > 300) break;
+                        container = container.parentElement;
+                    }
+                    if (!container) continue;
+
+                    // 4. Extrai cargo e empresa do texto do container
+                    //    LinkedIn coloca em elementos separados após o link do nome
+                    let cargo = '';
+                    let empresa = '';
+
+                    // Estratégia A: busca por classes conhecidas
+                    const knownSelectors = [
+                        ['.entity-result__primary-subtitle', '.entity-result__secondary-subtitle'],
+                        ['[class*="primary-subtitle"]', '[class*="secondary-subtitle"]'],
                     ];
-                    for (const c of cands) {
-                        let t = c?.textContent?.trim();
-                        if (t) t = t.replace(/\\n/g, ' ').replace(/\\s+/g, ' ').trim();
-                        if (t && t !== 'LinkedIn Member' && t.length > 1 && t.length < 80) return t;
+                    for (const [cargoSel, empSel] of knownSelectors) {
+                        const c = container.querySelector(cargoSel);
+                        const e = container.querySelector(empSel);
+                        if (c) cargo = c.textContent.trim();
+                        if (e) empresa = e.textContent.trim();
+                        if (cargo) break;
                     }
-                    // Fallback: primeiro span com aria-hidden dentro de um link
-                    const anyLink = el.querySelector('a span[aria-hidden="true"]');
-                    if (anyLink) {
-                        const t = anyLink.textContent?.trim();
-                        if (t && t !== 'LinkedIn Member' && t.length > 1) return t;
-                    }
-                    return '';
-                };
-                const extrairTexto = (el, sels) => {
-                    for (const s of sels) {
-                        const t = el.querySelector(s)?.textContent?.trim();
-                        if (t) return t;
-                    }
-                    return '';
-                };
-                const extrairUrl = (el) => {
-                    // Tenta /in/ e /profile/
-                    for (const pat of ['a[href*="/in/"]', 'a[href*="/profile/"]']) {
-                        const a = el.querySelector(pat);
-                        if (a) return a.href.split('?')[0];
-                    }
-                    // Fallback: qualquer link linkedin.com que pareça perfil
-                    const links = el.querySelectorAll('a[href*="linkedin.com"]');
-                    for (const a of links) {
-                        if (profileUrlPattern.test(a.href)) return a.href.split('?')[0];
-                    }
-                    return '';
-                };
 
-                // Tenta múltiplas estratégias para encontrar os cards
-                let cards = [];
-                const strats = [
-                    () => [...document.querySelectorAll('li.reusable-search__result-container')],
-                    () => [...document.querySelectorAll('li[class*="reusable-search__result-container"]')],
-                    () => [...document.querySelectorAll('li[class*="result-container"]')],
-                    () => [...document.querySelectorAll('li.scaffold-finite-scroll__list-item')]
-                            .filter(li => li.querySelector('a[href*="/in/"]')),
-                    // Estratégia genérica: qualquer li com link /in/ e altura razoável
-                    () => [...document.querySelectorAll('li')]
-                            .filter(li => li.querySelector('a[href*="/in/"]')
-                                && li.offsetHeight > 40),
-                    // Ultra-genérica: sobe do link /in/ até o container mais próximo
-                    () => {
-                        const links = [...document.querySelectorAll('a[href*="/in/"]')];
-                        const containers = new Set();
-                        for (const a of links) {
-                            let el = a.closest('li') || a.parentElement?.closest('li')
-                                || a.closest('[data-chameleon-result-urn]')
-                                || a.closest('[class*="entity-result"]')
-                                || a.closest('[class*="search-result"]');
-                            if (el && el.offsetHeight > 40) containers.add(el);
+                    // Estratégia B: pega textos visíveis após o nome
+                    if (!cargo) {
+                        const allText = [];
+                        const walker = document.createTreeWalker(
+                            container, NodeFilter.SHOW_TEXT, null
+                        );
+                        let node;
+                        let foundName = false;
+                        while (node = walker.nextNode()) {
+                            const t = node.textContent.trim();
+                            if (!t || t.length < 3) continue;
+                            if (t === nome) { foundName = true; continue; }
+                            if (foundName && allText.length < 4) {
+                                // Ignora textos de botões/ações
+                                const parent = node.parentElement;
+                                if (parent && (parent.tagName === 'BUTTON'
+                                    || parent.closest('button')
+                                    || t === 'Connect' || t === 'Conectar'
+                                    || t === 'Follow' || t === 'Seguir'
+                                    || t === 'Message' || t === 'Mensagem'))
+                                    continue;
+                                allText.push(t.replace(/\\n/g, ' ').replace(/\\s+/g, ' ').trim());
+                            }
                         }
-                        return [...containers];
-                    },
-                ];
-                for (const s of strats) {
-                    cards = s();
-                    if (cards.length > 0) break;
-                }
+                        if (allText.length >= 1) cargo = allText[0];
+                        if (allText.length >= 2) empresa = allText[1];
+                    }
 
-                return cards.slice(0, 12).map(card => ({
-                    nome:    extrairNome(card),
-                    cargo:   extrairTexto(card, [
-                        '.entity-result__primary-subtitle',
-                        '[class*="primary-subtitle"]',
-                        '[class*="entity-result__summary"]',
-                        '[class*="subtitle"]',
-                    ]),
-                    empresa: extrairTexto(card, [
-                        '.entity-result__secondary-subtitle',
-                        '[class*="secondary-subtitle"]',
-                        '[class*="subtitle"]:nth-of-type(2)',
-                    ]),
-                    url: extrairUrl(card),
-                }));
+                    results.push({
+                        nome: nome,
+                        cargo: cargo,
+                        empresa: empresa,
+                        url: href,
+                    });
+                }
+                return results.slice(0, 15);
             }""")
 
             n_total = len(perfis_data or [])
