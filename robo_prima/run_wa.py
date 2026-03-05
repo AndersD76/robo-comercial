@@ -630,9 +630,13 @@ _PADROES_ROBO = [
     # Pede nome/CPF/CNPJ em formato bot
     r'(?:envie|informe|digite)\s+(?:seu\s+)?(?:nome|cpf|cnpj|email|e-mail)',
     # "escolha uma opção", "selecione", "digite o número"
-    r'(?:escolha|selecione|digite)\s+(?:uma?\s+)?(?:opção|número|opcao|numero)',
-    # Saudação genérica de bot
-    r'(?:bem[- ]?vindo|boas[- ]?vindas)\s+(?:ao?|à)\s+(?:nosso|nossa)',
+    r'(?:escolha|selecione|digite)\s+(?:uma?\s+)?(?:op[cç][aã]o|n[uú]mero|opcao|numero)',
+    # "Bem-vindo(a) à/ao" — saudação automatizada
+    r'bem[- ]?vindo\(?a?\)?\s+(?:ao?|[àa])\s',
+    # "Seja bem vindo" / "Seja muito bem vindo"
+    r'seja\s+(?:muito\s+)?bem\s*vindo',
+    # "agradece seu contato" / "agradecemos"
+    r'agrade[cç](?:e|emos)\s+(?:seu|o)\s+contato',
     # "para falar com", "para atendimento"
     r'para\s+(?:falar|atendimento|suporte|vendas|financeiro)',
     # "horário de atendimento"
@@ -645,6 +649,14 @@ _PADROES_ROBO = [
     r'fora\s+do\s+hor[aá]rio',
     # "aguarde" + "atendente"
     r'aguarde.*atendente|atendente.*aguarde',
+    # "como podemos ajudar" / "como posso ajudar" (saudação genérica)
+    r'como\s+(?:podemos|posso)\s+(?:ajudar|te ajudar)',
+    # "atendente do Pré Vendas" / "atendente virtual"
+    r'atendente\s+(?:do|da|virtual)',
+    # "somos especialist" (apresentação empresa auto)
+    r'^ol[aá]!?\s+(?:bem[- ]?vindo|seja)',
+    # "pré vendas online"
+    r'pr[eé][- ]?vendas\s+online',
 ]
 _RE_ROBO = [re.compile(p, re.IGNORECASE) for p in _PADROES_ROBO]
 
@@ -711,10 +723,14 @@ async def ciclo_respostas(bot: WhatsAppBot, gerador: GeradorMensagens):
 
         estagio = get_estagio_conversa(empresa['id'])
         msg_lead = info.get('ultima_recebida', '')
+        todas_recebidas = info.get('msgs_recebidas', [])
         nome = empresa.get('nome_fantasia', numero)
 
-        # Detecta resposta de robô/chatbot e ignora
-        if _eh_resposta_robo(msg_lead):
+        # Detecta robô: se TODAS as msgs recebidas são de robô, ignora.
+        # Se pelo menos uma parece humana, responde normalmente.
+        if todas_recebidas and all(
+            _eh_resposta_robo(m) for m in todas_recebidas
+        ):
             print(
                 f"[WA/Prisma {_ts()}] ⏭ {nome[:35]} — "
                 f"resposta de robô (ignorando)",
@@ -865,12 +881,12 @@ async def main():
             if comercial:
                 try:
                     await asyncio.wait_for(
-                        ciclo_respostas(bot, gerador), timeout=120)
+                        ciclo_respostas(bot, gerador), timeout=300)
                 except asyncio.TimeoutError:
                     erros_ciclo += 1
                     print(
                         f"[WA/Prisma {_ts()}] ⚠ "
-                        "ciclo_respostas timeout (2 min)",
+                        "ciclo_respostas timeout (5 min)",
                         flush=True)
                 except Exception as e:
                     erros_ciclo += 1
