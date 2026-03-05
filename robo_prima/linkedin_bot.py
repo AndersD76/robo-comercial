@@ -438,16 +438,26 @@ class LinkedInBot:
             # Extrai todos os dados em um único evaluate — mais robusto que
             # múltiplas chamadas CSS (LinkedIn muda classes constantemente)
             perfis_data = await self.page.evaluate("""() => {
+                const profileUrlPattern = /linkedin\.com\/(in|profile\/view)\//;
                 const extrairNome = (el) => {
                     const cands = [
                         el.querySelector('span.entity-result__title-text a span[aria-hidden="true"]'),
                         el.querySelector('a[href*="/in/"] span[aria-hidden="true"]'),
+                        el.querySelector('a[href*="/profile/"] span[aria-hidden="true"]'),
                         el.querySelector('span.entity-result__title-text a'),
                         el.querySelector('a[href*="/in/"]'),
+                        el.querySelector('a[href*="/profile/"]'),
                     ];
                     for (const c of cands) {
-                        const t = c?.textContent?.trim();
-                        if (t && t !== 'LinkedIn Member') return t;
+                        let t = c?.textContent?.trim();
+                        if (t) t = t.replace(/\\n/g, ' ').replace(/\\s+/g, ' ').trim();
+                        if (t && t !== 'LinkedIn Member' && t.length > 1 && t.length < 80) return t;
+                    }
+                    // Fallback: primeiro span com aria-hidden dentro de um link
+                    const anyLink = el.querySelector('a span[aria-hidden="true"]');
+                    if (anyLink) {
+                        const t = anyLink.textContent?.trim();
+                        if (t && t !== 'LinkedIn Member' && t.length > 1) return t;
                     }
                     return '';
                 };
@@ -459,8 +469,17 @@ class LinkedInBot:
                     return '';
                 };
                 const extrairUrl = (el) => {
-                    const a = el.querySelector('a[href*="/in/"]');
-                    return a ? a.href.split('?')[0] : '';
+                    // Tenta /in/ e /profile/
+                    for (const pat of ['a[href*="/in/"]', 'a[href*="/profile/"]']) {
+                        const a = el.querySelector(pat);
+                        if (a) return a.href.split('?')[0];
+                    }
+                    // Fallback: qualquer link linkedin.com que pareça perfil
+                    const links = el.querySelectorAll('a[href*="linkedin.com"]');
+                    for (const a of links) {
+                        if (profileUrlPattern.test(a.href)) return a.href.split('?')[0];
+                    }
+                    return '';
                 };
 
                 // Tenta múltiplas estratégias para encontrar os cards
@@ -471,10 +490,23 @@ class LinkedInBot:
                     () => [...document.querySelectorAll('li[class*="result-container"]')],
                     () => [...document.querySelectorAll('li.scaffold-finite-scroll__list-item')]
                             .filter(li => li.querySelector('a[href*="/in/"]')),
+                    // Estratégia genérica: qualquer li com link /in/ e altura razoável
                     () => [...document.querySelectorAll('li')]
                             .filter(li => li.querySelector('a[href*="/in/"]')
-                                && li.querySelector('span[aria-hidden="true"]')
                                 && li.offsetHeight > 40),
+                    // Ultra-genérica: sobe do link /in/ até o container mais próximo
+                    () => {
+                        const links = [...document.querySelectorAll('a[href*="/in/"]')];
+                        const containers = new Set();
+                        for (const a of links) {
+                            let el = a.closest('li') || a.parentElement?.closest('li')
+                                || a.closest('[data-chameleon-result-urn]')
+                                || a.closest('[class*="entity-result"]')
+                                || a.closest('[class*="search-result"]');
+                            if (el && el.offsetHeight > 40) containers.add(el);
+                        }
+                        return [...containers];
+                    },
                 ];
                 for (const s of strats) {
                     cards = s();
@@ -487,10 +519,12 @@ class LinkedInBot:
                         '.entity-result__primary-subtitle',
                         '[class*="primary-subtitle"]',
                         '[class*="entity-result__summary"]',
+                        '[class*="subtitle"]',
                     ]),
                     empresa: extrairTexto(card, [
                         '.entity-result__secondary-subtitle',
                         '[class*="secondary-subtitle"]',
+                        '[class*="subtitle"]:nth-of-type(2)',
                     ]),
                     url: extrairUrl(card),
                 }));
@@ -499,23 +533,44 @@ class LinkedInBot:
             n_total = len(perfis_data or [])
             self._log(f"  {n_total} perfis encontrados na página")
 
-            # Debug: se 0 resultados, logar URL e tirar screenshot
+            # Debug: se 0 resultados, investigar estrutura da página
             if n_total == 0:
                 cur = self.page.url
                 self._log(f"  [debug] URL atual: {cur}", 'aviso')
-                title = await self.page.title()
-                self._log(f"  [debug] Título: {title}", 'aviso')
-                # Detecta se é página de "sem resultados" ou problema
-                no_results = await self.page.evaluate("""() => {
+                debug_info = await self.page.evaluate("""() => {
                     const body = document.body?.innerText || '';
                     if (body.includes('No results found') || body.includes('nenhum resultado'))
-                        return 'no_results';
+                        return {status: 'no_results'};
                     if (body.includes('Sign in') || body.includes('Entrar'))
-                        return 'login_wall';
-                    const lis = document.querySelectorAll('li');
-                    return 'li_count=' + lis.length;
+                        return {status: 'login_wall'};
+
+                    // Mapear links /in/ na página
+                    const inLinks = [...document.querySelectorAll('a[href*="/in/"]')];
+                    const inHrefs = inLinks.slice(0, 5).map(a => a.href.split('?')[0]);
+
+                    // Encontrar containers dos resultados
+                    const allLi = [...document.querySelectorAll('li')];
+                    const liWithIn = allLi.filter(li => li.querySelector('a[href*="/in/"]'));
+
+                    // Classes dos li que contêm links /in/
+                    const liClasses = liWithIn.slice(0, 3).map(li => li.className.substring(0, 120));
+
+                    // Verificar se há div container de resultados
+                    const mainDiv = document.querySelector('div.search-results-container')
+                        || document.querySelector('[class*="search-results"]')
+                        || document.querySelector('main');
+                    const mainClass = mainDiv?.className?.substring(0, 120) || 'nenhum';
+
+                    return {
+                        status: 'loaded',
+                        total_li: allLi.length,
+                        li_with_in_links: liWithIn.length,
+                        in_hrefs: inHrefs,
+                        li_classes: liClasses,
+                        main_container: mainClass,
+                    };
                 }""")
-                self._log(f"  [debug] Página: {no_results}", 'aviso')
+                self._log(f"  [debug] {debug_info}", 'aviso')
 
             for p in (perfis_data or []):
                 nome    = (p.get('nome') or '').strip()
