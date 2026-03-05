@@ -435,22 +435,30 @@ class LinkedInBot:
                 await asyncio.sleep(0.5)
             await asyncio.sleep(1)
 
-            # Abordagem link-first: encontra links /in/ e extrai
-            # cargo/empresa do container mais próximo.
-            # Usa container-isolado: sobe no DOM mas para ANTES de
-            # incluir links de OUTROS perfis — evita misturar dados.
+            # Extração link-first com siblings: encontra links /in/,
+            # sobe ao container amplo, mas extrai cargo/empresa
+            # percorrendo SIBLINGS do link (não TreeWalker no container).
             perfis_data = await self.page.evaluate("""() => {
                 const allLinks = [...document.querySelectorAll('a[href*="/in/"]')];
                 const seen = new Set();
                 const results = [];
 
-                // Coleta todas as hrefs para detectar "outro perfil"
-                const allHrefs = new Set();
-                for (const a of allLinks) {
-                    const h = a.href.split('?')[0];
-                    if (h.includes('/in/') && !h.includes('/in/me/'))
-                        allHrefs.add(h);
-                }
+                const skip = [
+                    'conexão em comum', 'conexões em comum',
+                    'mutual connection', 'mutual connections',
+                    'grau', '1st', '2nd', '3rd', '1º', '2º', '3º',
+                    'Connect', 'Conectar', 'Follow', 'Seguir',
+                    'Message', 'Mensagem', 'Pending', 'Pendente',
+                    'Send InMail', 'Enviar InMail',
+                    'e mais', 'and more', 'ver mais', 'see more',
+                    'View profile', 'Ver perfil', 'LinkedIn Member',
+                ];
+                const isSkip = (t) => {
+                    const tl = t.toLowerCase();
+                    return skip.some(s => tl.includes(s.toLowerCase()))
+                        || t.length < 4
+                        || /^\\d+$/.test(t);
+                };
 
                 for (const link of allLinks) {
                     const href = link.href.split('?')[0];
@@ -460,7 +468,6 @@ class LinkedInBot:
                     if (rect.height < 10 || rect.top < 50) continue;
                     seen.add(href);
 
-                    // Extrai nome
                     let nome = '';
                     const ariaSpan = link.querySelector('span[aria-hidden="true"]');
                     if (ariaSpan) nome = ariaSpan.textContent.trim();
@@ -468,85 +475,67 @@ class LinkedInBot:
                     nome = nome.replace(/\\n/g, ' ').replace(/\\s+/g, ' ').trim();
                     if (!nome || nome === 'LinkedIn Member' || nome.length > 80) continue;
 
-                    // Sobe para container ISOLADO deste perfil:
-                    // Para quando o container contém links de OUTROS perfis
-                    let container = link.parentElement;
-                    let prev = link;
-                    for (let i = 0; i < 8 && container; i++) {
-                        const otherLinks = [...container.querySelectorAll('a[href*="/in/"]')]
-                            .filter(a => {
-                                const h = a.href.split('?')[0];
-                                return h !== href && allHrefs.has(h);
-                            });
-                        if (otherLinks.length > 0) {
-                            container = prev;
-                            break;
-                        }
-                        if (container.offsetHeight > 60) break;
-                        prev = container;
-                        container = container.parentElement;
-                    }
-                    if (!container) continue;
-
                     let cargo = '';
                     let empresa = '';
 
-                    // Estratégia A: seletores conhecidos
+                    // Estratégia A: seletores conhecidos (rápido)
+                    // Sobe até achar container com altura > 100
+                    let container = link;
+                    for (let i = 0; i < 10 && container.parentElement; i++) {
+                        container = container.parentElement;
+                        if (container.offsetHeight > 100 && container.offsetWidth > 300) break;
+                    }
                     const knownSelectors = [
                         ['.entity-result__primary-subtitle', '.entity-result__secondary-subtitle'],
                         ['[class*="primary-subtitle"]', '[class*="secondary-subtitle"]'],
                     ];
-                    for (const [cargoSel, empSel] of knownSelectors) {
-                        const c = container.querySelector(cargoSel);
-                        const e = container.querySelector(empSel);
+                    for (const [cs, es] of knownSelectors) {
+                        const c = container.querySelector(cs);
+                        const e = container.querySelector(es);
                         if (c) cargo = c.textContent.trim();
                         if (e) empresa = e.textContent.trim();
                         if (cargo) break;
                     }
 
-                    // Estratégia B: textos visíveis após o nome
+                    // Estratégia B: percorre siblings do link e ancestrais
+                    // Busca texto nos próximos irmãos em cada nível
                     if (!cargo) {
-                        const skip = [
-                            'conexão em comum', 'conexões em comum',
-                            'mutual connection', 'mutual connections',
-                            'grau', '1st', '2nd', '3rd', '1º', '2º', '3º',
-                            'Connect', 'Conectar', 'Follow', 'Seguir',
-                            'Message', 'Mensagem', 'Pending', 'Pendente',
-                            'Send InMail', 'Enviar InMail',
-                            'e mais', 'and more', 'ver mais', 'see more',
-                            'View profile', 'Ver perfil',
-                        ];
-                        const isSkip = (t) => skip.some(s =>
-                            t.toLowerCase().includes(s.toLowerCase()));
+                        const nomeSet = new Set();
+                        nomeSet.add(nome.toLowerCase());
+                        results.forEach(r => nomeSet.add(r.nome.toLowerCase()));
 
-                        // Também ignorar textos que são nomes de outros perfis
-                        const otherNames = results.map(r => r.nome.toLowerCase());
-
-                        const allText = [];
-                        const walker = document.createTreeWalker(
-                            container, NodeFilter.SHOW_TEXT, null
-                        );
-                        let node;
-                        let foundName = false;
-                        while (node = walker.nextNode()) {
-                            const t = node.textContent.trim()
-                                .replace(/\\n/g, ' ').replace(/\\s+/g, ' ').trim();
-                            if (!t || t.length < 3) continue;
-                            if (t === nome || t.includes(nome)) { foundName = true; continue; }
-                            if (foundName && allText.length < 4) {
-                                const parent = node.parentElement;
-                                if (parent && (parent.tagName === 'BUTTON'
-                                    || parent.closest('button'))) continue;
-                                if (isSkip(t)) continue;
-                                if (t.length < 4 || /^\\d+$/.test(t)) continue;
-                                // Ignora se parece nome de outro perfil
-                                if (otherNames.some(n => t.toLowerCase().includes(n))) continue;
-                                allText.push(t);
+                        const foundTexts = [];
+                        let el = link.parentElement;
+                        // Sobe 4 níveis, em cada um checa nextSiblings
+                        for (let up = 0; up < 5 && foundTexts.length < 3; up++) {
+                            if (!el) break;
+                            let sib = el.nextElementSibling;
+                            let sibN = 0;
+                            while (sib && sibN < 6 && foundTexts.length < 3) {
+                                // Ignora se contém link de outro perfil
+                                if (sib.querySelector && sib.querySelector('a[href*="/in/"]')) {
+                                    break;
+                                }
+                                const t = (sib.textContent || '').trim()
+                                    .replace(/\\n/g, ' ').replace(/\\s+/g, ' ').trim();
+                                if (t && !isSkip(t) && !nomeSet.has(t.toLowerCase())) {
+                                    // Ignora se é botão
+                                    if (sib.tagName !== 'BUTTON' && !sib.querySelector('button')) {
+                                        foundTexts.push(t);
+                                    }
+                                }
+                                sib = sib.nextElementSibling;
+                                sibN++;
                             }
+                            el = el.parentElement;
                         }
-                        if (allText.length >= 1) cargo = allText[0];
-                        if (allText.length >= 2) empresa = allText[1];
+                        if (foundTexts.length >= 1) cargo = foundTexts[0];
+                        if (foundTexts.length >= 2) empresa = foundTexts[1];
                     }
+
+                    // Limpa cargo/empresa (remove prefixos comuns)
+                    cargo = cargo.replace(/^Cargo atual:\\s*/i, '').trim();
+                    empresa = empresa.replace(/^Empresa atual:\\s*/i, '').trim();
 
                     results.push({ nome, cargo, empresa, url: href });
                 }
@@ -1324,14 +1313,34 @@ class LinkedInBot:
     # MONITORAR INBOX — RESPOSTAS DOS LEADS
     # =========================================================================
 
+    def _nomes_leads_banco(self) -> set:
+        """Retorna nomes (lowercase) de leads prospectados pelo bot."""
+        try:
+            if not HAS_DB:
+                return set()
+            conn = get_connection()
+            c = conn.cursor()
+            c.execute("SELECT LOWER(nome) AS n FROM leads_linkedin")
+            nomes = {r['n'] for r in c.fetchall() if r['n']}
+            conn.close()
+            return nomes
+        except Exception:
+            return set()
+
     async def monitorar_inbox(self):
         """
-        Varre o inbox buscando mensagens de leads não respondidas.
-        Para cada resposta recebida, gera reply via Claude e envia.
+        Varre o inbox buscando respostas APENAS de leads do banco.
+        Ignora conversas pessoais ou de contatos não prospectados.
         """
         if self.msgs_hoje >= LINKEDIN_MAX_MENSAGENS_DIA:
             return
         try:
+            # Carrega nomes de leads do banco para filtrar
+            nomes_db = self._nomes_leads_banco()
+            if not nomes_db:
+                self._log("Nenhum lead no banco — pulando inbox")
+                return
+
             threads = await self._obter_threads_inbox()
             if not threads:
                 self._log("Inbox vazio ou não carregou")
@@ -1354,6 +1363,12 @@ class LinkedInBot:
                     nome = await self._extrair_nome_conversa()
                     if not nome:
                         nome = 'contato'
+
+                    # SÓ responde se o nome corresponde a um lead do banco
+                    nome_lower = nome.lower().strip()
+                    if not any(n in nome_lower or nome_lower in n
+                               for n in nomes_db):
+                        continue
 
                     self._log(
                         f"  Resposta de {nome}: "
