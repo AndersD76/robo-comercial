@@ -558,10 +558,11 @@ async def ciclo_envio(
             atualizar_status_empresa(lead['id'], 'contactada')
             incrementar_contagem('whatsapp_enviados')
             enviadas += 1
+            await bot.delay_entre_mensagens()
         else:
+            atualizar_status_empresa(lead['id'], 'sem_whatsapp')
             falhas += 1
-
-        await bot.delay_entre_mensagens()
+            await asyncio.sleep(random.uniform(2, 5))
 
     print(
         f"[WA/Pili {_ts()}] ✓ Envio: {enviadas} ok, {falhas} falhas",
