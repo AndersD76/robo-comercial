@@ -384,67 +384,132 @@ class LinkedInBot:
                 )
                 return resultados
 
-            await self.page.evaluate('window.scrollTo(0, 800)')
+            for _sy in [400, 800, 1200, 1800]:
+                    await self.page.evaluate(f'window.scrollTo(0, {_sy})')
+                    await asyncio.sleep(0.5)
             await asyncio.sleep(1)
 
             # Extrai todos os dados em um único evaluate — mais robusto que
             # múltiplas chamadas CSS (LinkedIn muda classes constantemente)
             perfis_data = await self.page.evaluate("""() => {
-                const extrairNome = (el) => {
-                    const cands = [
-                        el.querySelector('span.entity-result__title-text a span[aria-hidden="true"]'),
-                        el.querySelector('a[href*="/in/"] span[aria-hidden="true"]'),
-                        el.querySelector('span.entity-result__title-text a'),
-                        el.querySelector('a[href*="/in/"]'),
-                    ];
-                    for (const c of cands) {
-                        const t = c?.textContent?.trim();
-                        if (t && t !== 'LinkedIn Member') return t;
-                    }
-                    return '';
-                };
-                const extrairTexto = (el, sels) => {
-                    for (const s of sels) {
-                        const t = el.querySelector(s)?.textContent?.trim();
-                        if (t) return t;
-                    }
-                    return '';
-                };
-                const extrairUrl = (el) => {
-                    const a = el.querySelector('a[href*="/in/"]');
-                    return a ? a.href.split('?')[0] : '';
-                };
-
-                let cards = [];
-                const strats = [
-                    () => [...document.querySelectorAll('li.reusable-search__result-container')],
-                    () => [...document.querySelectorAll('li[class*="reusable-search__result-container"]')],
-                    () => [...document.querySelectorAll('li[class*="result-container"]')],
-                    () => [...document.querySelectorAll('li.scaffold-finite-scroll__list-item')]
-                            .filter(li => li.querySelector('a[href*="/in/"]')),
-                    () => [...document.querySelectorAll('li')]
-                            .filter(li => li.querySelector('a[href*="/in/"]')
-                                && li.querySelector('span[aria-hidden="true"]')
-                                && li.offsetHeight > 40),
+                const noise = [
+                    'conexão em comum', 'conexões em comum',
+                    'mutual connection', 'mutual connections',
+                    '1st', '2nd', '3rd', '1º', '2º', '3º',
+                    'connect', 'conectar', 'follow', 'seguir',
+                    'message', 'mensagem', 'pending', 'pendente',
+                    'send inmail', 'enviar inmail',
+                    'e mais', 'and more', 'ver mais', 'see more',
+                    'view profile', 'ver perfil', 'linkedin member',
+                    'grau de conexão', 'degree connection',
                 ];
-                for (const s of strats) {
-                    cards = s();
-                    if (cards.length > 0) break;
-                }
+                const isNoise = (t) => {
+                    if (!t || t.length < 4 || /^\\d+$/.test(t)) return true;
+                    const tl = t.toLowerCase();
+                    return noise.some(n => tl.includes(n));
+                };
 
-                return cards.slice(0, 12).map(card => ({
-                    nome:    extrairNome(card),
-                    cargo:   extrairTexto(card, [
-                        '.entity-result__primary-subtitle',
-                        '[class*="primary-subtitle"]',
-                        '[class*="entity-result__summary"]',
-                    ]),
-                    empresa: extrairTexto(card, [
-                        '.entity-result__secondary-subtitle',
-                        '[class*="secondary-subtitle"]',
-                    ]),
-                    url: extrairUrl(card),
-                }));
+                // Encontra todos os links /in/ na página
+                const allLinks = [...document.querySelectorAll('a[href*="/in/"]')];
+                const seen = new Set();
+                const results = [];
+
+                for (const link of allLinks) {
+                    const href = link.href.split('?')[0];
+                    if (seen.has(href)) continue;
+                    if (href.includes('/in/me/') || href.includes('/in/miniprofile')) continue;
+                    const rect = link.getBoundingClientRect();
+                    if (rect.height < 10 || rect.top < 50) continue;
+                    seen.add(href);
+
+                    let nome = '';
+                    const ariaSpan = link.querySelector('span[aria-hidden="true"]');
+                    if (ariaSpan) nome = ariaSpan.textContent.trim();
+                    if (!nome) nome = link.textContent.trim();
+                    nome = nome.replace(/\\n/g, ' ').replace(/\\s+/g, ' ').trim();
+                    if (!nome || nome === 'LinkedIn Member' || nome.length > 80) continue;
+
+                    let cargo = '';
+                    let empresa = '';
+
+                    // Sobe até container do resultado
+                    let container = link;
+                    for (let i = 0; i < 12 && container.parentElement; i++) {
+                        container = container.parentElement;
+                        const tag = container.tagName;
+                        if (tag === 'LI' && container.offsetHeight > 80) break;
+                        if (container.offsetHeight > 100 && container.offsetWidth > 300) break;
+                    }
+
+                    // Estratégia A: seletores conhecidos
+                    const selectors = [
+                        ['.entity-result__primary-subtitle', '.entity-result__secondary-subtitle'],
+                        ['[class*="primary-subtitle"]', '[class*="secondary-subtitle"]'],
+                        ['[class*="entity-result__summary"]', null],
+                        ['[class*="t-14"][class*="t-normal"]', null],
+                    ];
+                    for (const [cs, es] of selectors) {
+                        if (cargo) break;
+                        const c = container.querySelector(cs);
+                        if (c) {
+                            const ct = c.textContent.trim().replace(/\\n/g, ' ').replace(/\\s+/g, ' ');
+                            if (!isNoise(ct)) cargo = ct;
+                        }
+                        if (es) {
+                            const e = container.querySelector(es);
+                            if (e) {
+                                const et = e.textContent.trim().replace(/\\n/g, ' ').replace(/\\s+/g, ' ');
+                                if (!isNoise(et)) empresa = et;
+                            }
+                        }
+                    }
+
+                    // Estratégia B: TreeWalker — extrai textos visíveis e usa posição
+                    if (!cargo) {
+                        const walker = document.createTreeWalker(
+                            container, NodeFilter.SHOW_TEXT, null
+                        );
+                        const allTexts = [];
+                        const nomeLower = nome.toLowerCase();
+                        let node;
+                        while (node = walker.nextNode()) {
+                            const t = node.textContent.trim();
+                            if (!t || t.length < 3) continue;
+                            const parent = node.parentElement;
+                            if (!parent) continue;
+                            const ptag = parent.tagName;
+                            if (ptag === 'SCRIPT' || ptag === 'STYLE') continue;
+                            if (ptag === 'BUTTON' || parent.closest('button')) continue;
+                            const style = getComputedStyle(parent);
+                            if (style.display === 'none' || style.visibility === 'hidden') continue;
+                            const clean = t.replace(/\\n/g, ' ').replace(/\\s+/g, ' ').trim();
+                            if (clean.length >= 3) allTexts.push(clean);
+                        }
+
+                        const uniqueTexts = [];
+                        const seenTexts = new Set();
+                        for (const t of allTexts) {
+                            const key = t.toLowerCase().substring(0, 50);
+                            if (!seenTexts.has(key) && !isNoise(t)) {
+                                seenTexts.add(key);
+                                if (key !== nomeLower && !nomeLower.includes(key) && !key.includes(nomeLower)) {
+                                    uniqueTexts.push(t);
+                                }
+                            }
+                        }
+
+                        if (uniqueTexts.length >= 1) cargo = uniqueTexts[0];
+                        if (uniqueTexts.length >= 2) empresa = uniqueTexts[1];
+                    }
+
+                    cargo = (cargo || '').replace(/^Cargo atual:\\s*/i, '').replace(/^Current:\\s*/i, '').trim();
+                    empresa = (empresa || '').replace(/^Empresa atual:\\s*/i, '').trim();
+                    if (cargo.length > 120) cargo = cargo.substring(0, 120);
+                    if (empresa.length > 120) empresa = empresa.substring(0, 120);
+
+                    results.push({ nome, cargo, empresa, url: href });
+                }
+                return results.slice(0, 15);
             }""")
 
             n_total = len(perfis_data or [])

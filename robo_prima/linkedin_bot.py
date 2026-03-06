@@ -442,29 +442,27 @@ class LinkedInBot:
                 await asyncio.sleep(0.5)
             await asyncio.sleep(1)
 
-            # Extração link-first com siblings: encontra links /in/,
-            # sobe ao container amplo, mas extrai cargo/empresa
-            # percorrendo SIBLINGS do link (não TreeWalker no container).
+            # Extração baseada em container text — robusta contra mudanças de CSS
             perfis_data = await self.page.evaluate("""() => {
                 const allLinks = [...document.querySelectorAll('a[href*="/in/"]')];
                 const seen = new Set();
                 const results = [];
 
-                const skip = [
+                const noise = [
                     'conexão em comum', 'conexões em comum',
                     'mutual connection', 'mutual connections',
-                    'grau', '1st', '2nd', '3rd', '1º', '2º', '3º',
-                    'Connect', 'Conectar', 'Follow', 'Seguir',
-                    'Message', 'Mensagem', 'Pending', 'Pendente',
-                    'Send InMail', 'Enviar InMail',
+                    '1st', '2nd', '3rd', '1º', '2º', '3º',
+                    'connect', 'conectar', 'follow', 'seguir',
+                    'message', 'mensagem', 'pending', 'pendente',
+                    'send inmail', 'enviar inmail',
                     'e mais', 'and more', 'ver mais', 'see more',
-                    'View profile', 'Ver perfil', 'LinkedIn Member',
+                    'view profile', 'ver perfil', 'linkedin member',
+                    'grau de conexão', 'degree connection',
                 ];
-                const isSkip = (t) => {
+                const isNoise = (t) => {
+                    if (!t || t.length < 4 || /^\\d+$/.test(t)) return true;
                     const tl = t.toLowerCase();
-                    return skip.some(s => tl.includes(s.toLowerCase()))
-                        || t.length < 4
-                        || /^\\d+$/.test(t);
+                    return noise.some(n => tl.includes(n));
                 };
 
                 for (const link of allLinks) {
@@ -485,64 +483,81 @@ class LinkedInBot:
                     let cargo = '';
                     let empresa = '';
 
-                    // Estratégia A: seletores conhecidos (rápido)
-                    // Sobe até achar container com altura > 100
+                    // Sobe até achar o container do resultado (li ou div grande)
                     let container = link;
-                    for (let i = 0; i < 10 && container.parentElement; i++) {
+                    for (let i = 0; i < 12 && container.parentElement; i++) {
                         container = container.parentElement;
+                        const tag = container.tagName;
+                        if (tag === 'LI' && container.offsetHeight > 80) break;
                         if (container.offsetHeight > 100 && container.offsetWidth > 300) break;
                     }
-                    const knownSelectors = [
+
+                    // Estratégia A: seletores conhecidos do LinkedIn (2024-2026)
+                    const selectors = [
                         ['.entity-result__primary-subtitle', '.entity-result__secondary-subtitle'],
                         ['[class*="primary-subtitle"]', '[class*="secondary-subtitle"]'],
+                        ['[class*="entity-result__summary"]', null],
+                        ['[class*="t-14"][class*="t-normal"]', null],
                     ];
-                    for (const [cs, es] of knownSelectors) {
-                        const c = container.querySelector(cs);
-                        const e = container.querySelector(es);
-                        if (c) cargo = c.textContent.trim();
-                        if (e) empresa = e.textContent.trim();
+                    for (const [cs, es] of selectors) {
                         if (cargo) break;
-                    }
-
-                    // Estratégia B: percorre siblings do link e ancestrais
-                    // Busca texto nos próximos irmãos em cada nível
-                    if (!cargo) {
-                        const nomeSet = new Set();
-                        nomeSet.add(nome.toLowerCase());
-                        results.forEach(r => nomeSet.add(r.nome.toLowerCase()));
-
-                        const foundTexts = [];
-                        let el = link.parentElement;
-                        // Sobe 4 níveis, em cada um checa nextSiblings
-                        for (let up = 0; up < 5 && foundTexts.length < 3; up++) {
-                            if (!el) break;
-                            let sib = el.nextElementSibling;
-                            let sibN = 0;
-                            while (sib && sibN < 6 && foundTexts.length < 3) {
-                                // Ignora se contém link de outro perfil
-                                if (sib.querySelector && sib.querySelector('a[href*="/in/"]')) {
-                                    break;
-                                }
-                                const t = (sib.textContent || '').trim()
-                                    .replace(/\\n/g, ' ').replace(/\\s+/g, ' ').trim();
-                                if (t && !isSkip(t) && !nomeSet.has(t.toLowerCase())) {
-                                    // Ignora se é botão
-                                    if (sib.tagName !== 'BUTTON' && !sib.querySelector('button')) {
-                                        foundTexts.push(t);
-                                    }
-                                }
-                                sib = sib.nextElementSibling;
-                                sibN++;
-                            }
-                            el = el.parentElement;
+                        const c = container.querySelector(cs);
+                        if (c) {
+                            const ct = c.textContent.trim().replace(/\\n/g, ' ').replace(/\\s+/g, ' ');
+                            if (!isNoise(ct)) cargo = ct;
                         }
-                        if (foundTexts.length >= 1) cargo = foundTexts[0];
-                        if (foundTexts.length >= 2) empresa = foundTexts[1];
+                        if (es) {
+                            const e = container.querySelector(es);
+                            if (e) {
+                                const et = e.textContent.trim().replace(/\\n/g, ' ').replace(/\\s+/g, ' ');
+                                if (!isNoise(et)) empresa = et;
+                            }
+                        }
                     }
 
-                    // Limpa cargo/empresa (remove prefixos comuns)
-                    cargo = cargo.replace(/^Cargo atual:\\s*/i, '').trim();
-                    empresa = empresa.replace(/^Empresa atual:\\s*/i, '').trim();
+                    // Estratégia B: extrai TODOS os textos visíveis do container
+                    if (!cargo) {
+                        const walker = document.createTreeWalker(
+                            container, NodeFilter.SHOW_TEXT, null
+                        );
+                        const allTexts = [];
+                        const nomeLower = nome.toLowerCase();
+                        let node;
+                        while (node = walker.nextNode()) {
+                            const t = node.textContent.trim();
+                            if (!t || t.length < 3) continue;
+                            const parent = node.parentElement;
+                            if (!parent) continue;
+                            const ptag = parent.tagName;
+                            if (ptag === 'SCRIPT' || ptag === 'STYLE') continue;
+                            if (ptag === 'BUTTON' || parent.closest('button')) continue;
+                            const style = getComputedStyle(parent);
+                            if (style.display === 'none' || style.visibility === 'hidden') continue;
+                            const clean = t.replace(/\\n/g, ' ').replace(/\\s+/g, ' ').trim();
+                            if (clean.length >= 3) allTexts.push(clean);
+                        }
+
+                        const uniqueTexts = [];
+                        const seenTexts = new Set();
+                        for (const t of allTexts) {
+                            const key = t.toLowerCase().substring(0, 50);
+                            if (!seenTexts.has(key) && !isNoise(t)) {
+                                seenTexts.add(key);
+                                if (key !== nomeLower && !nomeLower.includes(key) && !key.includes(nomeLower)) {
+                                    uniqueTexts.push(t);
+                                }
+                            }
+                        }
+
+                        if (uniqueTexts.length >= 1) cargo = uniqueTexts[0];
+                        if (uniqueTexts.length >= 2) empresa = uniqueTexts[1];
+                    }
+
+                    // Limpa
+                    cargo = (cargo || '').replace(/^Cargo atual:\\s*/i, '').replace(/^Current:\\s*/i, '').trim();
+                    empresa = (empresa || '').replace(/^Empresa atual:\\s*/i, '').trim();
+                    if (cargo.length > 120) cargo = cargo.substring(0, 120);
+                    if (empresa.length > 120) empresa = empresa.substring(0, 120);
 
                     results.push({ nome, cargo, empresa, url: href });
                 }

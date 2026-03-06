@@ -103,7 +103,6 @@ class ApolloClient:
 
         filtros = APOLLO_FILTROS
         payload = {
-            'api_key': self.api_key,
             'page': pagina,
             'per_page': por_pagina,
             'person_titles': filtros.get('titulos', []),
@@ -136,7 +135,10 @@ class ApolloClient:
 
         resultados = []
         try:
-            async with httpx.AsyncClient(timeout=30) as client:
+            async with httpx.AsyncClient(
+                timeout=30,
+                headers={'X-Api-Key': self.api_key, 'Content-Type': 'application/json'},
+            ) as client:
                 resp = await client.post(
                     f'{_API_BASE}/mixed_people/search',
                     json=payload,
@@ -269,7 +271,7 @@ class ApolloClient:
         if self.buscas_hoje >= APOLLO_MAX_BUSCAS_DIA:
             return None
 
-        payload = {'api_key': self.api_key}
+        payload = {}
         if email:
             payload['email'] = email
         elif linkedin_url:
@@ -278,7 +280,10 @@ class ApolloClient:
             return None
 
         try:
-            async with httpx.AsyncClient(timeout=30) as client:
+            async with httpx.AsyncClient(
+                timeout=30,
+                headers={'X-Api-Key': self.api_key, 'Content-Type': 'application/json'},
+            ) as client:
                 resp = await client.post(
                     f'{_API_BASE}/people/match',
                     json=payload,
