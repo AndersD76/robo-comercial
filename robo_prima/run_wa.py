@@ -139,7 +139,7 @@ def _calcular_score(lead: dict) -> int:
 # =============================================================================
 
 _PAGINAS_CONTATO = (
-    '/contato', '/contact', '/fale-conosco', '/sobre', '/quem-somos',
+    '/contato', '/contact',
 )
 
 
@@ -205,7 +205,7 @@ async def _extrair_site(page, url_base: str) -> dict:
     for pag in paginas:
         try:
             await page.goto(
-                pag, timeout=20000, wait_until='domcontentloaded'
+                pag, timeout=10000, wait_until='domcontentloaded'
             )
             await asyncio.sleep(random.uniform(1.2, 2.0))
             html = await page.content()
@@ -264,7 +264,7 @@ async def _extrair_site(page, url_base: str) -> dict:
                     break
 
         # Para de navegar se já temos o suficiente
-        if dados['whatsapp'] and dados['cnpj']:
+        if dados['whatsapp'] or (dados['telefone'] and dados['email']):
             break
 
     # Celular sem wa.me → tenta usar como WhatsApp
@@ -327,7 +327,7 @@ def _consultar_cnpj_sync(cnpj: str) -> dict | None:
 # CICLO PROSPECÇÃO COMPLETA
 # =============================================================================
 
-async def ciclo_busca():
+async def ciclo_busca(buscador_ext=None):
     """
     Prospecção completa a cada chamada:
     1. Busca Bing/DuckDuckGo com termo aleatório
@@ -337,9 +337,11 @@ async def ciclo_busca():
     """
     from buscador import Buscador
 
-    buscador = Buscador()
+    proprio = buscador_ext is None
+    buscador = buscador_ext or Buscador()
     try:
-        await buscador.iniciar()
+        if proprio:
+            await buscador.iniciar()
 
         termo = random.choice(TERMOS_BUSCA)
         print(
@@ -347,7 +349,7 @@ async def ciclo_busca():
             flush=True
         )
 
-        resultados = await buscador.buscar_leads(termo, max_resultados=15)
+        resultados = await buscador.buscar_leads(termo, max_resultados=8)
         print(
             f"[WA/Prisma {_ts()}] ℹ "
             f"{len(resultados)} sites para enriquecer",
@@ -401,8 +403,8 @@ async def ciclo_busca():
                 'score': r.get('relevancia', 0),
             }
 
-            # 3. Enriquece CNPJ via ReceitaWS
-            if lead['cnpj']:
+            # 3. Enriquece CNPJ via ReceitaWS (pula se já tem contato — evita delay 21s)
+            if lead['cnpj'] and not (lead.get('whatsapp') or lead.get('telefone')):
                 try:
                     dados_rf = await asyncio.to_thread(
                         _consultar_cnpj_sync, lead['cnpj']
@@ -483,7 +485,8 @@ async def ciclo_busca():
             flush=True
         )
     finally:
-        await buscador.fechar()
+        if proprio:
+            await buscador.fechar()
 
 
 # =============================================================================
@@ -839,6 +842,12 @@ async def main():
         flush=True
     )
     log_acao('info', 'Bot PrismaBiz iniciado')
+
+    # Buscador persistente — evita criar Chromium novo a cada ciclo
+    from buscador import Buscador
+    buscador = Buscador()
+    buscador_pronto = False
+
     ciclo_num = 0
 
     erros_seguidos = 0
@@ -862,13 +871,16 @@ async def main():
             # ── Prospecção 24/7 (a cada 3 ciclos) ──
             if ciclo_num % 3 == 1:
                 try:
+                    if not buscador_pronto:
+                        await buscador.iniciar()
+                        buscador_pronto = True
                     await asyncio.wait_for(
-                        ciclo_busca(), timeout=300)
+                        ciclo_busca(buscador), timeout=480)
                 except asyncio.TimeoutError:
                     erros_ciclo += 1
                     print(
                         f"[WA/Prisma {_ts()}] ⚠ "
-                        "ciclo_busca timeout (5 min)",
+                        "ciclo_busca timeout (8 min)",
                         flush=True)
                 except Exception as e:
                     erros_ciclo += 1
@@ -970,6 +982,8 @@ async def main():
         log_acao('erro', f'Erro fatal: {e}')
     finally:
         log_acao('info', 'Bot PrismaBiz encerrado')
+        if buscador_pronto:
+            await buscador.fechar()
         await bot.fechar()
 
 

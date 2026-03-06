@@ -24,7 +24,7 @@ def get_connection():
     url = _fix_url(os.environ.get('DATABASE_URL', ''))
     conn = psycopg2.connect(url, cursor_factory=psycopg2.extras.RealDictCursor)
     with conn.cursor() as c:
-        c.execute(f"SET search_path TO {DB_SCHEMA}, public")
+        c.execute("SET search_path TO %s, public", (DB_SCHEMA,))
     return conn
 
 
@@ -32,8 +32,8 @@ def init_database():
     conn = get_connection()
     c = conn.cursor()
 
-    c.execute(f"CREATE SCHEMA IF NOT EXISTS {DB_SCHEMA}")
-    c.execute(f"SET search_path TO {DB_SCHEMA}, public")
+    c.execute("CREATE SCHEMA IF NOT EXISTS " + psycopg2.extensions.quote_ident(DB_SCHEMA, conn))
+    c.execute("SET search_path TO %s, public", (DB_SCHEMA,))
 
     c.execute("""CREATE TABLE IF NOT EXISTS empresas (
         id            BIGSERIAL PRIMARY KEY,
@@ -133,7 +133,7 @@ def init_database():
             c.execute(ddl)
         except Exception:
             conn.rollback()
-            c.execute(f"SET search_path TO {DB_SCHEMA}, public")
+            c.execute("SET search_path TO %s, public", (DB_SCHEMA,))
 
     c.execute("INSERT INTO execucao (id, status) VALUES (1, 'parado') ON CONFLICT (id) DO NOTHING")
     conn.commit()
@@ -245,7 +245,7 @@ def salvar_empresa(dados):
         conn.rollback()
         # Re-setar search_path após rollback (rollback reverte SET)
         c.execute(
-            f"SET search_path TO {DB_SCHEMA}, public"
+            "SET search_path TO %s, public", (DB_SCHEMA,)
         )
         if dados.get('cnpj'):
             c.execute(

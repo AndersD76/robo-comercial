@@ -58,7 +58,7 @@ class GeradorMensagens:
             )
 
             response = self.ai_client.messages.create(
-                model="claude-3-haiku-20240307",
+                model="claude-haiku-4-5-20251001",
                 max_tokens=400,
                 system=f"""Você é a Ana, vendedora do PrismaBiz (gestão da qualidade).
 
@@ -142,7 +142,7 @@ REGRAS DA MENSAGEM:
             }.get(estagio, '')
 
             response = self.ai_client.messages.create(
-                model="claude-3-haiku-20240307",
+                model="claude-haiku-4-5-20251001",
                 max_tokens=400,
                 system=f"""Você é a Ana, vendedora do PrismaBiz.
 
@@ -226,7 +226,7 @@ REGRAS:
             try:
                 nome = lead.get('nome_fantasia', 'vocês')
                 response = self.ai_client.messages.create(
-                    model="claude-3-haiku-20240307",
+                    model="claude-haiku-4-5-20251001",
                     max_tokens=300,
                     system=f"""Você é a Ana, do PrismaBiz.
 O lead demonstrou interesse. Sua missão agora é convencer a agendar

@@ -207,7 +207,14 @@ class LinkedInBot:
             return True
 
         # Precisa logar
-        email_conf = LINKEDIN_EMAIL[:4] + '***' if LINKEDIN_EMAIL else '(não definido)'
+        if not LINKEDIN_EMAIL or not LINKEDIN_PASSWORD:
+            self._log(
+                "LINKEDIN_EMAIL ou LINKEDIN_PASSWORD nao configurados! "
+                "Configure no Railway ou em linkedin_creds.json.",
+                'erro'
+            )
+            return False
+        email_conf = LINKEDIN_EMAIL[:4] + '***'
         self._log(f"Fazendo login com {email_conf}...")
         try:
             await self.page.goto(
@@ -981,7 +988,7 @@ class LinkedInBot:
             try:
                 def _chamar_ai():
                     return self.ai.messages.create(
-                        model='claude-3-haiku-20240307',
+                        model='claude-haiku-4-5-20251001',
                         max_tokens=80,
                         system=(
                             "Escreva uma nota CURTA (max 180 chars) de pedido "
@@ -1546,7 +1553,7 @@ class LinkedInBot:
 
                 def _chamar_ai():
                     return self.ai.messages.create(
-                        model='claude-3-haiku-20240307',
+                        model='claude-haiku-4-5-20251001',
                         max_tokens=150,
                         system=(
                             "Você é Daniel, vendedor do PrismaBiz — sistema de "

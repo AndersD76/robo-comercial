@@ -24,7 +24,7 @@ def get_connection():
     url = _fix_url(os.environ.get('DATABASE_URL', ''))
     conn = psycopg2.connect(url, cursor_factory=psycopg2.extras.RealDictCursor)
     with conn.cursor() as c:
-        c.execute(f"SET search_path TO {DB_SCHEMA}, public")
+        c.execute("SET search_path TO %s, public", (DB_SCHEMA,))
     return conn
 
 
@@ -32,8 +32,8 @@ def init_database():
     conn = get_connection()
     c = conn.cursor()
 
-    c.execute(f"CREATE SCHEMA IF NOT EXISTS {DB_SCHEMA}")
-    c.execute(f"SET search_path TO {DB_SCHEMA}, public")
+    c.execute("CREATE SCHEMA IF NOT EXISTS " + psycopg2.extensions.quote_ident(DB_SCHEMA, conn))
+    c.execute("SET search_path TO %s, public", (DB_SCHEMA,))
 
     c.execute("""CREATE TABLE IF NOT EXISTS empresas (
         id            BIGSERIAL PRIMARY KEY,

@@ -95,7 +95,7 @@ LINKEDIN_TERMOS_BUSCA = [
 # =============================================================================
 # SALES NAVIGATOR (requer assinatura Sales Navigator)
 # =============================================================================
-SALES_NAV_HABILITADO = os.environ.get('SALES_NAV_HABILITADO', 'true').lower() == 'true'
+SALES_NAV_HABILITADO = os.environ.get('SALES_NAV_HABILITADO', 'false').lower() == 'true'
 
 # Filtros avançados Sales Navigator
 SALES_NAV_FILTROS = {
@@ -177,8 +177,11 @@ APOLLO_FILTROS = {
 # Link do Google Calendar Appointment Scheduling
 DEMO_CAL_LINK = os.environ.get(
     'DEMO_CAL_LINK',
-    'https://calendar.app.google/SEU_LINK_AQUI'
+    'https://prismabiz.com.br/cadastro'
 )
+if 'SEU_LINK_AQUI' in DEMO_CAL_LINK:
+    DEMO_CAL_LINK = 'https://prismabiz.com.br/cadastro'
+    print("[CONFIG] AVISO: DEMO_CAL_LINK nao configurado — usando link de cadastro como fallback")
 
 # =============================================================================
 # LIMITES DIÁRIOS
@@ -360,4 +363,4 @@ DB_SCHEMA = 'prisma'  # schema exclusivo deste bot no Neon
 # API CNPJ
 # =============================================================================
 CNPJ_API_URL = 'https://receitaws.com.br/v1/cnpj/{cnpj}'
-CNPJ_API_DELAY = 21
+CNPJ_API_DELAY = 5

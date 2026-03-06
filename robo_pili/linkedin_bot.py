@@ -569,7 +569,7 @@ class LinkedInBot:
         if self.ai:
             try:
                 r = self.ai.messages.create(
-                    model='claude-3-haiku-20240307',
+                    model='claude-haiku-4-5-20251001',
                     max_tokens=80,
                     system=(
                         "Escreva uma nota CURTA (max 200 chars) de pedido "
@@ -1016,7 +1016,7 @@ class LinkedInBot:
         if self.ai:
             try:
                 r = self.ai.messages.create(
-                    model='claude-3-haiku-20240307',
+                    model='claude-haiku-4-5-20251001',
                     max_tokens=150,
                     system=(
                         "Você é Marcos, vendedor da Pili Equipamentos — "
