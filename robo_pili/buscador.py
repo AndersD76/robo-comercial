@@ -9,6 +9,8 @@ import random
 import asyncio
 from urllib.parse import quote_plus, urlparse, parse_qs, unquote
 
+import httpx
+
 from config import (
     TERMOS_BUSCA, INTERVALO_BUSCA_MIN, INTERVALO_BUSCA_MAX,
     PALAVRAS_POSITIVAS, PALAVRAS_NEGATIVAS, ESTADOS_PRIORIDADE
@@ -290,41 +292,208 @@ class Buscador:
             print(f"  [ERRO] DuckDuckGo: {e}")
         return resultados
 
+
+    # =========================================================================
+    # BUSCA VIA HTTP (funciona de datacenter - sem bloqueio de Playwright)
+    # =========================================================================
+
+    _HTTP_HEADERS = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+    }
+
+    async def _buscar_bing_http(self, termo, max_resultados=20):
+        """Busca Bing via HTTP puro (sem Playwright) - funciona de datacenter."""
+        resultados = []
+        try:
+            url = (
+                f'https://www.bing.com/search?q={quote_plus(termo)}'
+                f'&count={max_resultados}&cc=BR&setlang=pt-BR'
+            )
+            async with httpx.AsyncClient(
+                headers=self._HTTP_HEADERS,
+                follow_redirects=True,
+                timeout=15.0,
+            ) as client:
+                resp = await client.get(url)
+                html = resp.text
+
+            blocos = re.findall(
+                r'<li[^>]*class="b_algo"[^>]*>(.*?)</li>',
+                html, re.DOTALL
+            )
+            for bloco in blocos:
+                m_link = re.search(r'<h2[^>]*><a[^>]+href="(https?://[^"]+)"', bloco)
+                if not m_link:
+                    continue
+                url_r = m_link.group(1)
+                m_titulo = re.search(r'<a[^>]*>(.*?)</a>', bloco, re.DOTALL)
+                titulo = re.sub(r'<[^>]+>', '', m_titulo.group(1)).strip() if m_titulo else ''
+                m_snip = re.search(r'<p[^>]*>(.*?)</p>', bloco, re.DOTALL)
+                snippet = re.sub(r'<[^>]+>', '', m_snip.group(1)).strip() if m_snip else ''
+
+                try:
+                    dominio = urlparse(url_r).netloc.lower()
+                except Exception:
+                    continue
+                if any(s in dominio for s in self.sites_ignorar):
+                    continue
+                if len(titulo) < 4:
+                    continue
+
+                telefones = self._extrair_telefones(snippet + ' ' + titulo)
+                resultados.append({
+                    'url': url_r, 'dominio': dominio,
+                    'titulo': titulo[:200], 'snippet': snippet[:500],
+                    'telefones': telefones, 'fonte': 'bing_http',
+                })
+        except Exception as e:
+            print(f'  [ERRO] Bing HTTP: {e}')
+        return resultados
+
+    async def _buscar_ddg_http(self, termo, max_resultados=15):
+        """Busca DuckDuckGo HTML via HTTP puro - funciona de datacenter."""
+        resultados = []
+        try:
+            url = f'https://html.duckduckgo.com/html/?q={quote_plus(termo)}&kl=br-pt'
+            async with httpx.AsyncClient(
+                headers=self._HTTP_HEADERS,
+                follow_redirects=True,
+                timeout=15.0,
+            ) as client:
+                resp = await client.get(url)
+                html = resp.text
+
+            # DDG HTML: links em <a class="result__a">
+            links = re.findall(
+                r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
+                html, re.DOTALL
+            )
+            # Snippets em <a class="result__snippet">
+            snippets = re.findall(
+                r'<a[^>]*class="result__snippet"[^>]*>(.*?)</a>',
+                html, re.DOTALL
+            )
+
+            for i, (href, titulo_html) in enumerate(links[:max_resultados]):
+                url_r = href
+                if 'uddg=' in url_r:
+                    m = re.search(r'uddg=([^&]+)', url_r)
+                    if m:
+                        url_r = unquote(m.group(1))
+                if not url_r.startswith('http'):
+                    continue
+                titulo = re.sub(r'<[^>]+>', '', titulo_html).strip()
+                snippet = ''
+                if i < len(snippets):
+                    snippet = re.sub(r'<[^>]+>', '', snippets[i]).strip()
+
+                try:
+                    dominio = urlparse(url_r).netloc.lower()
+                except Exception:
+                    continue
+                if any(s in dominio for s in self.sites_ignorar):
+                    continue
+                if len(titulo) < 4:
+                    continue
+                telefones = self._extrair_telefones(snippet + ' ' + titulo)
+                resultados.append({
+                    'url': url_r, 'dominio': dominio,
+                    'titulo': titulo[:200], 'snippet': snippet[:500],
+                    'telefones': telefones, 'fonte': 'ddg_http',
+                })
+        except Exception as e:
+            print(f'  [ERRO] DDG HTTP: {e}')
+        return resultados
+
+    async def _buscar_brave_http(self, termo, max_resultados=15):
+        """Busca Brave Search via HTTP - nao bloqueia datacenter."""
+        resultados = []
+        try:
+            url = f'https://search.brave.com/search?q={quote_plus(termo)}&source=web'
+            async with httpx.AsyncClient(
+                headers={**self._HTTP_HEADERS, 'Accept': 'text/html'},
+                follow_redirects=True,
+                timeout=15.0,
+            ) as client:
+                resp = await client.get(url)
+                html = resp.text
+
+            # Brave: links em <a class="result-header">
+            links = re.findall(
+                r'<a[^>]*class="[^"]*heading-serpresult[^"]*"[^>]*href="(https?://[^"]+)"[^>]*>(.*?)</a>',
+                html, re.DOTALL
+            )
+            if not links:
+                links = re.findall(
+                    r'<a[^>]*href="(https?://[^"]+)"[^>]*class="[^"]*result-header[^"]*"[^>]*>(.*?)</a>',
+                    html, re.DOTALL
+                )
+
+            for href, titulo_html in links[:max_resultados]:
+                titulo = re.sub(r'<[^>]+>', '', titulo_html).strip()
+                try:
+                    dominio = urlparse(href).netloc.lower()
+                except Exception:
+                    continue
+                if any(s in dominio for s in self.sites_ignorar):
+                    continue
+                if len(titulo) < 4:
+                    continue
+                resultados.append({
+                    'url': href, 'dominio': dominio,
+                    'titulo': titulo[:200], 'snippet': '',
+                    'telefones': [], 'fonte': 'brave_http',
+                })
+        except Exception as e:
+            print(f'  [ERRO] Brave HTTP: {e}')
+        return resultados
+
     # =========================================================================
     # BUSCA PRINCIPAL
     # =========================================================================
 
     async def buscar_leads(self, termo=None, max_resultados=20):
-        """Busca leads: Google → Bing → DuckDuckGo"""
+        """Busca leads: HTTP primeiro (funciona de datacenter), Playwright como fallback."""
         if not termo:
             termo = random.choice(TERMOS_BUSCA)
 
         print(f"\n  Buscando: '{termo}'")
 
-        # Google primeiro (melhor cobertura .com.br)
-        resultados = await self.buscar_google(termo, max_resultados)
+        # === FASE 1: HTTP puro (funciona de datacenter) ===
+        resultados = await self._buscar_bing_http(termo, max_resultados)
+        if resultados:
+            print(f"  Bing HTTP: {len(resultados)} resultados")
 
-        # Fallback Bing
         if len(resultados) < 5:
-            msg = (
-                f"  Google retornou {len(resultados)} — complementando com Bing..."
-                if resultados else "  Google bloqueado/vazio, tentando Bing..."
-            )
-            print(msg)
-            resultados_bing = await self.buscar_bing(termo, max_resultados)
-            urls_vistas = {r['url'] for r in resultados}
-            for r in resultados_bing:
-                if r['url'] not in urls_vistas:
-                    resultados.append(r)
+            ddg = await self._buscar_ddg_http(termo, max_resultados)
+            if ddg:
+                print(f"  DDG HTTP: +{len(ddg)} resultados")
+                urls_vistas = {r['url'] for r in resultados}
+                for r in ddg:
+                    if r['url'] not in urls_vistas:
+                        resultados.append(r)
 
-        # Fallback DuckDuckGo
-        if len(resultados) < 5:
-            print("  Bing retornou poucos — tentando DuckDuckGo...")
-            resultados_ddg = await self.buscar_duckduckgo(termo, max_resultados)
-            urls_vistas = {r['url'] for r in resultados}
-            for r in resultados_ddg:
-                if r['url'] not in urls_vistas:
-                    resultados.append(r)
+        if len(resultados) < 3:
+            brave = await self._buscar_brave_http(termo, max_resultados)
+            if brave:
+                print(f"  Brave HTTP: +{len(brave)} resultados")
+                urls_vistas = {r['url'] for r in resultados}
+                for r in brave:
+                    if r['url'] not in urls_vistas:
+                        resultados.append(r)
+
+        # === FASE 2: Playwright fallback (se HTTP falhou) ===
+        if len(resultados) < 3 and self.page:
+            print("  HTTP insuficiente - tentando Playwright...")
+            pw_bing = await self.buscar_bing(termo, max_resultados)
+            if pw_bing:
+                print(f"  Bing PW: +{len(pw_bing)} resultados")
+                urls_vistas = {r['url'] for r in resultados}
+                for r in pw_bing:
+                    if r['url'] not in urls_vistas:
+                        resultados.append(r)
 
         # Filtra e pontua
         leads = []
