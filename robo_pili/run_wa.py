@@ -62,7 +62,7 @@ _DDDS = {
     '21', '22', '24', '27', '28',
     '31', '32', '33', '34', '35', '37', '38',
     '41', '42', '43', '44', '45', '46', '47', '48', '49',
-    '51', '53', '54', '55',
+    '51', '52', '53', '54', '55',
     '61', '62', '63', '64', '65', '66', '67', '68', '69',
     '71', '73', '74', '75', '77', '79',
     '81', '82', '83', '84', '85', '86', '87', '88', '89',
@@ -556,7 +556,7 @@ async def ciclo_envio(
                 lead['id'], None, 'whatsapp', 'inicial', mensagem
             )
             atualizar_status_empresa(lead['id'], 'contactada')
-            incrementar_contagem('whatsapp_enviados')
+            # registrar_interacao já chama incrementar_contagem
             enviadas += 1
             await bot.delay_entre_mensagens()
         else:
@@ -620,7 +620,7 @@ async def ciclo_followup(bot: WhatsAppBot, gerador: GeradorMensagens):
                 registrar_interacao(
                     lead['id'], None, 'whatsapp', tipo, msg
                 )
-                incrementar_contagem('whatsapp_enviados')
+                # registrar_interacao já chama incrementar_contagem
                 log_acao('info', f"Follow-up {n_fu}: {nome}")
 
             await bot.delay_entre_mensagens()
@@ -686,6 +686,19 @@ async def ciclo_respostas(bot: WhatsAppBot, gerador: GeradorMensagens):
             print(
                 f"[WA/Pili {_ts()}] ✗ Erro gerando resposta "
                 f"para {nome[:35]}: {e}",
+                flush=True)
+            continue
+
+        # Navega para a conversa correta antes de responder
+        try:
+            await bot.page.goto(
+                f"https://web.whatsapp.com/send?phone={numero}",
+                timeout=20000)
+            await asyncio.sleep(random.uniform(3, 5))
+        except Exception as e:
+            print(
+                f"[WA/Pili {_ts()}] ⚠ Erro navegando para "
+                f"{nome[:35]}: {e}",
                 flush=True)
             continue
 
