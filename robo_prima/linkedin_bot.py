@@ -453,8 +453,9 @@ class LinkedInBot:
                 await asyncio.sleep(0.5)
             await asyncio.sleep(1)
 
-            # Extração: usa proximidade espacial (não depende de DOM/classes)
-            perfis_data = await self.page.evaluate("""() => {
+            # Extração: sibling-walking (sobe do link e pega texto dos próximos irmãos)
+            perfis_data = await self.page.evaluate('''() => {
+                try {
                 const allLinks = [...document.querySelectorAll('a[href*="/in/"]')];
                 const seen = new Set();
                 const results = [];
@@ -472,14 +473,14 @@ class LinkedInBot:
                     'pular para', 'skip to', 'conteúdo principal',
                     'notificação', 'notification', 'premium',
                     'open to work', 'aberto a', 'hiring',
+                    'currículo', 'resume', 'salvar', 'save',
                 ];
                 const isNoise = (t) => {
-                    if (!t || t.length < 4 || /^\\d+$/.test(t)) return true;
+                    if (!t || t.length < 4 || /^\d+$/.test(t)) return true;
                     const tl = t.toLowerCase();
                     return noise.some(n => tl.includes(n));
                 };
 
-                // Coleta todos os nomes conhecidos para filtrar
                 const allNames = new Set();
                 for (const a of allLinks) {
                     const s = a.querySelector('span[aria-hidden="true"]');
@@ -487,32 +488,7 @@ class LinkedInBot:
                     if (n && n.length > 2 && n !== 'LinkedIn Member') allNames.add(n.toLowerCase());
                 }
 
-                // Pre-coletamos TODOS os blocos de texto visíveis com posição
-                const allTextBlocks = [];
-                const walker = document.createTreeWalker(
-                    document.body, NodeFilter.SHOW_TEXT, null
-                );
-                let tnode;
-                while (tnode = walker.nextNode()) {
-                    const t = tnode.textContent.trim();
-                    if (!t || t.length < 3) continue;
-                    const parent = tnode.parentElement;
-                    if (!parent) continue;
-                    const ptag = parent.tagName;
-                    if (ptag === 'SCRIPT' || ptag === 'STYLE' || ptag === 'NOSCRIPT') continue;
-                    if (ptag === 'BUTTON' || parent.closest('button')) continue;
-                    const r = parent.getBoundingClientRect();
-                    if (r.height === 0 || r.width === 0) continue;
-                    const clean = t.replace(/\\n/g, ' ').replace(/\\s+/g, ' ').trim();
-                    if (clean.length < 3) continue;
-                    allTextBlocks.push({
-                        text: clean,
-                        top: r.top,
-                        left: r.left,
-                        bottom: r.bottom,
-                        el: parent
-                    });
-                }
+                let debugCount = 0;
 
                 for (const link of allLinks) {
                     const href = link.href.split('?')[0];
@@ -526,172 +502,115 @@ class LinkedInBot:
                     const ariaSpan = link.querySelector('span[aria-hidden="true"]');
                     if (ariaSpan) nome = ariaSpan.textContent.trim();
                     if (!nome) nome = link.textContent.trim();
-                    nome = nome.replace(/\\n/g, ' ').replace(/\\s+/g, ' ').trim();
+                    nome = nome.replace(/\\n/g, ' ').replace(/\s+/g, ' ').trim();
                     if (!nome || nome === 'LinkedIn Member' || nome.length > 80) continue;
 
                     let cargo = '';
                     let empresa = '';
                     const nomeLower = nome.toLowerCase();
+                    const debugInfo = [];
+                    const wantDebug = debugCount < 2;
 
-                    // Estratégia A: seletores conhecidos (caso LinkedIn volte ao normal)
-                    let container = link.parentElement;
-                    for (let i = 0; i < 12 && container && container.parentElement; i++) {
-                        container = container.parentElement;
-                        const tag = container.tagName;
-                        if (tag === 'LI' || tag === 'DIV' || tag === 'SECTION') {
-                            const inLinks = container.querySelectorAll('a[href*="/in/"]');
-                            const cRect = container.getBoundingClientRect();
-                            if (inLinks.length <= 2 && cRect.height > 50 && cRect.width > 200) break;
-                        }
-                        if (container.id === 'root' || tag === 'BODY') {
-                            container = null;
-                            break;
-                        }
-                    }
-                    if (container) {
-                        const selectors = [
-                            ['.entity-result__primary-subtitle', '.entity-result__secondary-subtitle'],
-                            ['[class*="primary-subtitle"]', '[class*="secondary-subtitle"]'],
-                        ];
-                        for (const [cs, es] of selectors) {
-                            if (cargo) break;
-                            const c = container.querySelector(cs);
-                            if (c) {
-                                const ct = c.textContent.trim().replace(/\\n/g, ' ').replace(/\\s+/g, ' ');
-                                if (!isNoise(ct) && !allNames.has(ct.toLowerCase())) cargo = ct;
+                    // ESTRATÉGIA: subir do link e pegar texto de irmãos seguintes
+                    // Em LinkedIn, a estrutura é algo como:
+                    //   <div card>
+                    //     <div avatar/>
+                    //     <div info>
+                    //       <div><a href="/in/...">Nome</a></div>
+                    //       <div>Cargo at Empresa</div>
+                    //       <div>Localização</div>
+                    //     </div>
+                    //   </div>
+                    // O cargo está num irmão (sibling) do ancestral do link
+
+                    const candidateTexts = [];
+
+                    // Sobe até 8 níveis de parent, em cada nível checa siblings
+                    let el = link;
+                    for (let level = 0; level < 8 && el; level++) {
+                        // Checa nextSibling e seus filhos
+                        let sib = el.nextElementSibling;
+                        let sibCount = 0;
+                        while (sib && sibCount < 5) {
+                            // Pula se tem link /in/ (é outro perfil)
+                            if (sib.querySelector && sib.querySelector('a[href*="/in/"]')) {
+                                sib = sib.nextElementSibling;
+                                sibCount++;
+                                continue;
                             }
-                            if (es) {
-                                const e = container.querySelector(es);
-                                if (e) {
-                                    const et = e.textContent.trim().replace(/\\n/g, ' ').replace(/\\s+/g, ' ');
-                                    if (!isNoise(et) && !allNames.has(et.toLowerCase())) empresa = et;
+                            // Pula buttons
+                            if (sib.tagName === 'BUTTON' || (sib.querySelector && sib.querySelector('button'))) {
+                                sib = sib.nextElementSibling;
+                                sibCount++;
+                                continue;
+                            }
+                            const t = (sib.textContent || '').trim().replace(/\\n/g, ' ').replace(/\s+/g, ' ');
+                            if (wantDebug) debugInfo.push('L' + level + 'S' + sibCount + ': "' + t.substring(0, 60) + '" tag=' + sib.tagName);
+                            if (t && t.length >= 4 && t.length <= 150) {
+                                const tl = t.toLowerCase();
+                                if (!isNoise(t) && !allNames.has(tl) &&
+                                    !nomeLower.includes(tl) && !tl.includes(nomeLower)) {
+                                    candidateTexts.push(t);
                                 }
                             }
+                            sib = sib.nextElementSibling;
+                            sibCount++;
+                            if (candidateTexts.length >= 3) break;
                         }
+                        if (candidateTexts.length >= 2) break;
+
+                        // Também checa o próprio parent do nível seguinte
+                        // (caso o texto esteja num wrapper junto com o link)
+                        if (!el.parentElement) break;
+                        el = el.parentElement;
+                        if (el.tagName === 'BODY' || el.id === 'root') break;
+                        if (wantDebug) debugInfo.push('UP->' + el.tagName + ' cls=' + (el.className||'').toString().substring(0,40));
                     }
 
-                    // Estratégia B: PROXIMIDADE ESPACIAL
-                    // Pega textos que ficam abaixo do link (entre 0 e 120px)
-                    // e horizontalmente próximos (dentro de 300px à direita)
-                    if (!cargo) {
-                        const linkBottom = rect.bottom;
-                        const linkLeft = rect.left;
-                        const nearby = [];
-
-                        for (const tb of allTextBlocks) {
-                            // Texto deve começar abaixo (ou quase na mesma linha) do link
-                            if (tb.top < linkBottom - 5) continue;
-                            // Não muito longe abaixo (máx 120px)
-                            if (tb.top > linkBottom + 120) continue;
-                            // Horizontalmente razoável
-                            if (Math.abs(tb.left - linkLeft) > 300) continue;
-                            // Filtros
-                            const tl = tb.text.toLowerCase();
-                            if (isNoise(tb.text)) continue;
-                            if (allNames.has(tl)) continue;
-                            if (nomeLower.includes(tl) || tl.includes(nomeLower)) continue;
-                            if (tb.text.length > 120) continue;
-                            // Pula se dentro de outro link /in/
-                            const inLink = tb.el.closest('a[href*="/in/"]');
-                            if (inLink && inLink !== link) continue;
-                            nearby.push(tb);
-                        }
-
-                        // Ordena por distância vertical
-                        nearby.sort((a, b) => a.top - b.top);
-                        // Remove duplicatas
-                        const uniqueNearby = [];
-                        const seenT = new Set();
-                        for (const n of nearby) {
-                            const k = n.text.toLowerCase().substring(0, 50);
-                            if (seenT.has(k)) continue;
-                            seenT.add(k);
-                            uniqueNearby.push(n.text);
-                            if (uniqueNearby.length >= 3) break;
-                        }
-
-                        if (uniqueNearby.length >= 1) cargo = uniqueNearby[0];
-                        if (uniqueNearby.length >= 2) empresa = uniqueNearby[1];
-                    }
+                    if (candidateTexts.length >= 1) cargo = candidateTexts[0];
+                    if (candidateTexts.length >= 2) empresa = candidateTexts[1];
 
                     // Limpa
-                    cargo = (cargo || '').replace(/^Cargo atual:\\s*/i, '').replace(/^Current:\\s*/i, '').trim();
-                    empresa = (empresa || '').replace(/^Empresa atual:\\s*/i, '').trim();
+                    cargo = (cargo || '').replace(/^Cargo atual:\s*/i, '').replace(/^Current:\s*/i, '').trim();
+                    empresa = (empresa || '').replace(/^Empresa atual:\s*/i, '').trim();
                     if (cargo.length > 120) cargo = cargo.substring(0, 120);
                     if (empresa.length > 120) empresa = empresa.substring(0, 120);
 
-                    results.push({ nome, cargo, empresa, url: href });
+                    const r = { nome, cargo, empresa, url: href };
+                    if (wantDebug) {
+                        r._debug = debugInfo;
+                        r._linkH = Math.round(rect.height);
+                        r._linkW = Math.round(rect.width);
+                        debugCount++;
+                    }
+                    results.push(r);
                 }
                 return results.slice(0, 15);
-            }""")
+                } catch(err) {
+                    return [{_error: err.message, _stack: (err.stack||'').substring(0, 300)}];
+                }
+            }''')
 
             n_total = len(perfis_data or [])
+
+            # Check for JS error
+            if n_total == 1 and perfis_data[0].get('_error'):
+                self._log(f"  [JS-ERROR] {perfis_data[0]['_error']}", 'erro')
+                self._log(f"  [JS-STACK] {perfis_data[0].get('_stack','')}", 'erro')
+                perfis_data = []
+                n_total = 0
+
             self._log(f"  {n_total} perfis encontrados na página")
 
-            # Debug: se todos vieram sem cargo, capturar info espacial
-            if n_total > 0 and all(not p.get('cargo') for p in perfis_data):
-                debug_html = await self.page.evaluate("""() => {
-                    const links = [...document.querySelectorAll('a[href*="/in/"]')];
-                    const link = links.find(a => {
-                        const r = a.getBoundingClientRect();
-                        return r.height > 10 && r.top > 50 &&
-                               !a.href.includes('/in/me/') && !a.href.includes('/in/miniprofile');
-                    });
-                    if (!link) return 'no visible /in/ link';
-
-                    const linkRect = link.getBoundingClientRect();
-                    const nome = (link.querySelector('span[aria-hidden="true"]') || link).textContent.trim();
-
-                    // Cadeia de ancestrais
-                    const chain = [];
-                    let el = link;
-                    for (let i = 0; i < 12 && el; i++) {
-                        const tag = el.tagName;
-                        const cls = (el.className || '').toString().substring(0, 60);
-                        const inLinks = el.querySelectorAll('a[href*="/in/"]').length;
-                        const r = el.getBoundingClientRect();
-                        chain.push(tag + ' cls="' + cls + '" /in/=' + inLinks + ' h=' + Math.round(r.height) + ' w=' + Math.round(r.width));
-                        if (tag === 'BODY' || el.id === 'root') break;
-                        el = el.parentElement;
-                    }
-
-                    // Todos os textos visíveis num raio de 150px abaixo do link
-                    const nearbyTexts = [];
-                    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
-                    let node;
-                    while (node = walker.nextNode()) {
-                        const t = node.textContent.trim();
-                        if (!t || t.length < 3) continue;
-                        const p = node.parentElement;
-                        if (!p) continue;
-                        const ptag = p.tagName;
-                        if (ptag === 'SCRIPT' || ptag === 'STYLE' || ptag === 'NOSCRIPT') continue;
-                        const r = p.getBoundingClientRect();
-                        if (r.height === 0) continue;
-                        // Dentro de 150px abaixo do link, 300px horizontal
-                        if (r.top >= linkRect.bottom - 5 && r.top <= linkRect.bottom + 150 &&
-                            Math.abs(r.left - linkRect.left) < 300) {
-                            const inA = p.closest('a[href*="/in/"]');
-                            nearbyTexts.push({
-                                text: t.substring(0, 80).replace(/\n/g, ' '),
-                                top: Math.round(r.top - linkRect.bottom),
-                                left: Math.round(r.left - linkRect.left),
-                                tag: ptag,
-                                inLink: inA ? (inA === link ? 'same' : 'other') : 'none',
-                                btn: ptag === 'BUTTON' || !!p.closest('button') ? 'Y' : 'N'
-                            });
-                        }
-                        if (nearbyTexts.length >= 20) break;
-                    }
-
-                    return JSON.stringify({
-                        nome: nome,
-                        link_pos: {top: Math.round(linkRect.top), bottom: Math.round(linkRect.bottom), left: Math.round(linkRect.left)},
-                        chain: chain,
-                        nearby_texts: nearbyTexts
-                    }, null, 2);
-                }""")
-                self._log(f'  [debug-spatial] {debug_html}', 'aviso')
+            # Debug inline: mostra info de sibling-walking para primeiros perfis
+            if n_total > 0:
+                for p in perfis_data[:2]:
+                    if p.get('_debug'):
+                        self._log(f"  [dbg] {p['nome']} linkH={p.get('_linkH')} linkW={p.get('_linkW')}", 'aviso')
+                        for d in p['_debug'][:10]:
+                            self._log(f"    {d}", 'aviso')
+                    if not p.get('cargo'):
+                        self._log(f"  [sem-cargo] {p['nome']}", 'aviso')
 
             # Debug: se 0 resultados, investigar estrutura da página
             if n_total == 0:
