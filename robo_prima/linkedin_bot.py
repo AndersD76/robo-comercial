@@ -453,7 +453,7 @@ class LinkedInBot:
                 await asyncio.sleep(0.5)
             await asyncio.sleep(1)
 
-            # Extração: encontra container individual por resultado, usa TreeWalker limitado
+            # Extração: encontra container individual por resultado
             perfis_data = await self.page.evaluate("""() => {
                 const allLinks = [...document.querySelectorAll('a[href*="/in/"]')];
                 const seen = new Set();
@@ -469,6 +469,8 @@ class LinkedInBot:
                     'e mais', 'and more', 'ver mais', 'see more',
                     'view profile', 'ver perfil', 'linkedin member',
                     'grau de conexão', 'degree connection',
+                    'pular para', 'skip to', 'conteúdo principal',
+                    'notificação', 'notification',
                 ];
                 const isNoise = (t) => {
                     if (!t || t.length < 4 || /^\\d+$/.test(t)) return true;
@@ -502,26 +504,42 @@ class LinkedInBot:
                     let cargo = '';
                     let empresa = '';
 
-                    // Sobe até achar container que tenha EXATAMENTE 1 link /in/
-                    // (garante que não pegamos o card vizinho)
+                    // Encontrar container: sobe até achar o menor ancestral
+                    // que contenha exatamente 1-2 links /in/ (o card individual)
                     let container = link;
-                    for (let i = 0; i < 15 && container.parentElement; i++) {
+                    for (let i = 0; i < 20 && container.parentElement; i++) {
                         container = container.parentElement;
                         const tag = container.tagName;
-                        // Para em <li> que contenha apenas este link /in/
-                        if (tag === 'LI') {
+                        // Para em <li> ou em div/section que tenha 1-2 links /in/
+                        if (tag === 'LI' || tag === 'DIV' || tag === 'SECTION') {
                             const inLinks = container.querySelectorAll('a[href*="/in/"]');
-                            if (inLinks.length <= 2) break;  // 1-2 links (nome pode ter 2 links)
+                            if (inLinks.length <= 2) {
+                                // Confirma que tem tamanho razoável (não é wrapper minúsculo)
+                                const cRect = container.getBoundingClientRect();
+                                if (cRect.height > 50 && cRect.width > 200) break;
+                            }
+                        }
+                        // Segurança: para se chegou em #root ou body
+                        if (container.id === 'root' || tag === 'BODY' || tag === 'MAIN') {
+                            container = link.parentElement;
+                            break;
                         }
                     }
-                    // Verificação: se container tem muitos links /in/, reduz
+
+                    // Se container ainda tem muitos links, reduz
                     const containerInLinks = container.querySelectorAll('a[href*="/in/"]');
                     if (containerInLinks.length > 3) {
-                        // Container muito grande — volta para o pai direto do link
-                        container = link.parentElement?.parentElement?.parentElement || link.parentElement;
+                        // Volta para ancestrais próximos do link
+                        container = link.parentElement;
+                        for (let i = 0; i < 8 && container.parentElement; i++) {
+                            container = container.parentElement;
+                            const cLinks = container.querySelectorAll('a[href*="/in/"]');
+                            const cRect = container.getBoundingClientRect();
+                            if (cLinks.length <= 2 && cRect.height > 50) break;
+                        }
                     }
 
-                    // Estratégia A: seletores conhecidos do LinkedIn
+                    // Estratégia A: seletores conhecidos do LinkedIn (antigo e novo)
                     const selectors = [
                         ['.entity-result__primary-subtitle', '.entity-result__secondary-subtitle'],
                         ['[class*="primary-subtitle"]', '[class*="secondary-subtitle"]'],
@@ -599,20 +617,63 @@ class LinkedInBot:
             n_total = len(perfis_data or [])
             self._log(f"  {n_total} perfis encontrados na página")
 
-
-            # Debug: se todos vieram sem cargo, capturar estrutura HTML
+            # Debug: se todos vieram sem cargo, capturar estrutura dos containers
             if n_total > 0 and all(not p.get('cargo') for p in perfis_data):
                 debug_html = await self.page.evaluate("""() => {
-                    const firstLink = document.querySelector('a[href*="/in/"]');
-                    if (!firstLink) return 'no link found';
-                    let container = firstLink;
-                    for (let i = 0; i < 15 && container.parentElement; i++) {
-                        container = container.parentElement;
-                        if (container.tagName === 'LI') break;
+                    // Achar o primeiro link /in/ visível
+                    const links = [...document.querySelectorAll('a[href*="/in/"]')];
+                    const link = links.find(a => {
+                        const r = a.getBoundingClientRect();
+                        return r.height > 10 && r.top > 50;
+                    });
+                    if (!link) return 'no visible /in/ link';
+
+                    // Mostrar a cadeia de ancestrais até encontrar um bom container
+                    const chain = [];
+                    let el = link;
+                    for (let i = 0; i < 15 && el; i++) {
+                        const tag = el.tagName;
+                        const cls = (el.className || '').toString().substring(0, 80);
+                        const inLinks = el.querySelectorAll('a[href*="/in/"]').length;
+                        const r = el.getBoundingClientRect();
+                        chain.push(`${tag} cls="${cls}" inLinks=${inLinks} h=${Math.round(r.height)} w=${Math.round(r.width)}`);
+                        if (tag === 'BODY' || el.id === 'root') break;
+                        el = el.parentElement;
                     }
-                    return container.outerHTML.substring(0, 2000);
+
+                    // Encontrar o container correto (primeiro div com 1-2 /in/ links e h>50)
+                    let container = link;
+                    for (let i = 0; i < 20 && container.parentElement; i++) {
+                        container = container.parentElement;
+                        const tag = container.tagName;
+                        if (tag === 'LI' || tag === 'DIV' || tag === 'SECTION') {
+                            const inLinks = container.querySelectorAll('a[href*="/in/"]');
+                            const cRect = container.getBoundingClientRect();
+                            if (inLinks.length <= 2 && cRect.height > 50 && cRect.width > 200) break;
+                        }
+                        if (container.id === 'root' || tag === 'BODY') { container = link.parentElement; break; }
+                    }
+
+                    // Textos visíveis no container
+                    const texts = [];
+                    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+                    let n;
+                    while (n = walker.nextNode()) {
+                        const t = n.textContent.trim();
+                        if (t.length >= 3) texts.push(t.substring(0, 60));
+                        if (texts.length >= 10) break;
+                    }
+
+                    return JSON.stringify({
+                        chain: chain,
+                        container_tag: container.tagName,
+                        container_cls: (container.className||'').toString().substring(0,100),
+                        container_inLinks: container.querySelectorAll('a[href*="/in/"]').length,
+                        texts: texts,
+                        container_html: container.outerHTML.substring(0, 800)
+                    }, null, 2);
                 }""")
-                self._log(f'  [debug-html] {debug_html}', 'aviso')
+                self._log(f'  [debug-container] {debug_html}', 'aviso')
 
             # Debug: se 0 resultados, investigar estrutura da página
             if n_total == 0:
