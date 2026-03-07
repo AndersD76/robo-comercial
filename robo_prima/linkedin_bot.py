@@ -599,6 +599,21 @@ class LinkedInBot:
             n_total = len(perfis_data or [])
             self._log(f"  {n_total} perfis encontrados na página")
 
+
+            # Debug: se todos vieram sem cargo, capturar estrutura HTML
+            if n_total > 0 and all(not p.get('cargo') for p in perfis_data):
+                debug_html = await self.page.evaluate("""() => {
+                    const firstLink = document.querySelector('a[href*="/in/"]');
+                    if (!firstLink) return 'no link found';
+                    let container = firstLink;
+                    for (let i = 0; i < 15 && container.parentElement; i++) {
+                        container = container.parentElement;
+                        if (container.tagName === 'LI') break;
+                    }
+                    return container.outerHTML.substring(0, 2000);
+                }""")
+                self._log(f'  [debug-html] {debug_html}', 'aviso')
+
             # Debug: se 0 resultados, investigar estrutura da página
             if n_total == 0:
                 cur = self.page.url
