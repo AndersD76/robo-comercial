@@ -91,17 +91,67 @@ class LinkedInBot:
                 '--disable-blink-features=AutomationControlled',
                 '--no-sandbox',
                 '--disable-dev-shm-usage',
+                '--disable-infobars',
+                '--disable-background-timer-throttling',
+                '--disable-popup-blocking',
+                '--disable-extensions',
+                '--disable-component-update',
+                '--disable-default-apps',
+                '--disable-features=TranslateUI',
+                '--lang=pt-BR',
+                '--window-size=1366,768',
             ],
             user_agent=(
                 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
                 'AppleWebKit/537.36 (KHTML, like Gecko) '
-                'Chrome/121.0.0.0 Safari/537.36'
+                'Chrome/131.0.0.0 Safari/537.36'
             ),
             viewport={'width': 1366, 'height': 768},
             locale='pt-BR',
+            timezone_id='America/Sao_Paulo',
+            color_scheme='light',
+            ignore_https_errors=True,
         )
         self.page = self.context.pages[0] if self.context.pages \
             else await self.context.new_page()
+
+        # Stealth: esconde sinais de automação (Playwright/WebDriver)
+        await self.page.add_init_script("""
+            // Remove navigator.webdriver
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            // Chrome runtime
+            window.chrome = { runtime: {}, loadTimes: function(){}, csi: function(){} };
+            // Permissions API
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications' ?
+                    Promise.resolve({state: Notification.permission}) :
+                    originalQuery(parameters)
+            );
+            // Plugins (Chrome tem plugins, headless não)
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5].map(() => ({
+                    name: 'Chrome PDF Plugin',
+                    filename: 'internal-pdf-viewer',
+                    description: 'Portable Document Format'
+                }))
+            });
+            // Languages
+            Object.defineProperty(navigator, 'languages', {get: () => ['pt-BR', 'pt', 'en-US', 'en']});
+            // Platform
+            Object.defineProperty(navigator, 'platform', {get: () => 'Win32'});
+            // Hardware concurrency
+            Object.defineProperty(navigator, 'hardwareConcurrency', {get: () => 8});
+            // Device memory
+            Object.defineProperty(navigator, 'deviceMemory', {get: () => 8});
+            // WebGL vendor/renderer (real Chrome values)
+            const getParameter = WebGLRenderingContext.prototype.getParameter;
+            WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                if (parameter === 37445) return 'Google Inc. (NVIDIA)';
+                if (parameter === 37446) return 'ANGLE (NVIDIA, NVIDIA GeForce GTX 1650 Direct3D11 vs_5_0 ps_5_0, D3D11)';
+                return getParameter.call(this, parameter);
+            };
+        """)
         modo = 'visível (Xvfb)' if not usar_headless else 'headless'
         self._log(f"LinkedIn bot Prisma iniciado ({modo})")
 
@@ -261,7 +311,10 @@ class LinkedInBot:
                     return True
                 return False
 
-            await self.page.fill(campo_email, LINKEDIN_EMAIL)
+            # Digita como humano (caractere por caractere com delay)
+            await self.page.click(campo_email)
+            await asyncio.sleep(random.uniform(0.3, 0.6))
+            await self.page.type(campo_email, LINKEDIN_EMAIL, delay=random.randint(50, 120))
             await asyncio.sleep(random.uniform(0.5, 1.2))
 
             campo_pwd = '#password'
@@ -274,7 +327,9 @@ class LinkedInBot:
                         break
                 except Exception:
                     continue
-            await self.page.fill(campo_pwd, LINKEDIN_PASSWORD)
+            await self.page.click(campo_pwd)
+            await asyncio.sleep(random.uniform(0.2, 0.5))
+            await self.page.type(campo_pwd, LINKEDIN_PASSWORD, delay=random.randint(50, 120))
             await asyncio.sleep(random.uniform(0.5, 1))
             await self.page.press(campo_pwd, 'Enter')
             await asyncio.sleep(random.uniform(3, 5))
@@ -284,6 +339,45 @@ class LinkedInBot:
                 self._log("Login LinkedIn OK — feed carregado", 'sucesso')
                 return True
             elif '/checkpoint' in self.page.url:
+                cur_url = self.page.url
+                # Se checkpoint deu erro interno, tenta limpar cookies e relogar
+                if 'internal_error' in cur_url or 'errorKey' in cur_url:
+                    self._log(
+                        "Checkpoint com erro interno — limpando sessão e tentando novamente em 30s...",
+                        'aviso'
+                    )
+                    await asyncio.sleep(30)
+                    await self.context.clear_cookies()
+                    await self.page.goto(f'{LINKEDIN_URL}/login', wait_until='load')
+                    await asyncio.sleep(random.uniform(3, 5))
+                    # Tenta preencher novamente
+                    try:
+                        for sel in seletores_email:
+                            try:
+                                await self.page.wait_for_selector(sel, timeout=5000)
+                                await self.page.click(sel)
+                                await asyncio.sleep(0.3)
+                                await self.page.type(sel, LINKEDIN_EMAIL, delay=random.randint(80, 150))
+                                await asyncio.sleep(random.uniform(0.5, 1))
+                                for sel_p in ['#password', 'input[name="session_password"]', 'input[type="password"]']:
+                                    el = await self.page.query_selector(sel_p)
+                                    if el:
+                                        await self.page.click(sel_p)
+                                        await asyncio.sleep(0.3)
+                                        await self.page.type(sel_p, LINKEDIN_PASSWORD, delay=random.randint(80, 150))
+                                        await asyncio.sleep(random.uniform(0.5, 1))
+                                        await self.page.press(sel_p, 'Enter')
+                                        break
+                                break
+                            except Exception:
+                                continue
+                        await asyncio.sleep(random.uniform(4, 7))
+                        if '/feed' in self.page.url:
+                            self.conectado = True
+                            self._log("Login OK após retry", 'sucesso')
+                            return True
+                    except Exception as e2:
+                        self._log(f"Retry login falhou: {e2}", 'aviso')
                 self._log(
                     "LinkedIn exige verificação — resolva pelo "
                     "navegador interativo no dashboard (noVNC). "
