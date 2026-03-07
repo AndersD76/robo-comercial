@@ -218,24 +218,35 @@ class LinkedInBot:
         self._log(f"Fazendo login com {email_conf}...")
         try:
             await self.page.goto(
-                f'{LINKEDIN_URL}/login', wait_until='domcontentloaded'
+                f'{LINKEDIN_URL}/login', wait_until='load'
             )
-            await asyncio.sleep(random.uniform(2, 4))
+            await asyncio.sleep(random.uniform(3, 5))
             await self._fechar_cookie_banner()
 
             # Tenta diferentes seletores para o campo de email
-            campo_email = None
-            for sel in [
+            seletores_email = [
                 '#username',
                 'input[name="session_key"]',
                 'input[autocomplete="username"]',
-            ]:
-                try:
-                    await self.page.wait_for_selector(sel, timeout=5000)
-                    campo_email = sel
+                'input[type="text"]',
+                'input[type="email"]',
+            ]
+            campo_email = None
+            for tentativa in range(2):
+                for sel in seletores_email:
+                    try:
+                        await self.page.wait_for_selector(sel, timeout=5000)
+                        campo_email = sel
+                        break
+                    except Exception:
+                        continue
+                if campo_email:
                     break
-                except Exception:
-                    continue
+                # Segunda tentativa: recarrega a página
+                self._log("Seletores não encontrados, recarregando página de login...")
+                await self.page.reload(wait_until='load')
+                await asyncio.sleep(random.uniform(3, 5))
+                await self._fechar_cookie_banner()
 
             if not campo_email:
                 self._log(
