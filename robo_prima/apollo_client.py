@@ -44,6 +44,7 @@ class ApolloClient:
     def __init__(self):
         self.api_key = APOLLO_API_KEY
         self.buscas_hoje = 0
+        self._desabilitado = False
         self._ultimo_dia = -1
 
     def _log(self, msg: str, tipo: str = 'info'):
@@ -64,7 +65,7 @@ class ApolloClient:
 
     def disponivel(self) -> bool:
         """Verifica se Apollo está configurado e disponível."""
-        if not APOLLO_HABILITADO:
+        if not APOLLO_HABILITADO or self._desabilitado:
             return False
         if not self.api_key:
             return False
@@ -157,6 +158,13 @@ class ApolloClient:
                         'aviso'
                     )
                     await asyncio.sleep(60)
+                    return []
+                if resp.status_code == 403:
+                    self._log(
+                        "Apollo API nao disponivel no plano gratuito — desabilitando",
+                        'erro'
+                    )
+                    self._desabilitado = True
                     return []
                 if resp.status_code != 200:
                     self._log(
