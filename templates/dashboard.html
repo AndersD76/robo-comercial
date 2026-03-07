@@ -556,7 +556,7 @@
     </div>
     <div class="tab-pane">
       <div id="tab-wa" class="scroll-box">
-        <table><thead><tr><th style="width:28px"><input type="checkbox" id="sel-all-wa" onchange="toggleSelectAll(this)"></th><th>Empresa</th><th>Telefone</th><th>Email</th><th>Segmento</th><th>Status</th><th>Pts</th><th>Data</th><th style="width:60px"></th></tr></thead>
+        <table><thead><tr><th style="width:28px"><input type="checkbox" id="sel-all-wa" onchange="toggleSelectAll(this)"></th><th style="width:36px">#</th><th>Empresa</th><th>Telefone</th><th>Email</th><th>Segmento</th><th>Status</th><th>Pts</th><th>Data</th><th style="width:60px"></th></tr></thead>
         <tbody id="wa-tb"></tbody></table>
       </div>
       <div id="tab-li" style="display:none" class="scroll-box">
@@ -733,12 +733,13 @@ function loadWA(){
   fetch(`/api/${BOT}/leads`).then(r=>r.json()).then(d=>{
     _waLeads=d;
     const tb=document.getElementById('wa-tb');
-    if(!d.length){ tb.innerHTML='<tr><td colspan="7"><div class="empty-state"><i class="fa fa-inbox"></i>Nenhum lead ainda</div></td></tr>'; return; }
-    tb.innerHTML=d.map(l=>{
+    if(!d.length){ tb.innerHTML='<tr><td colspan="8"><div class="empty-state"><i class="fa fa-inbox"></i>Nenhum lead ainda</div></td></tr>'; return; }
+    tb.innerHTML=d.map((l,i)=>{
       let dt='—';
       if(l.encontrado_em){try{const d2=new Date(l.encontrado_em);dt=d2.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){}}
       return `<tr>
       <td><input type="checkbox" class="lead-chk" value="${l.id}" data-email="${l.email||''}"></td>
+      <td style="color:var(--muted);font-size:11px">${i+1}</td>
       <td><b>${l.nome_fantasia||'—'}</b></td>
       <td style="color:var(--muted);font-size:11px">${l.whatsapp||l.telefone||'—'}</td>
       <td style="color:var(--muted);font-size:11px">${l.email||'—'}</td>
