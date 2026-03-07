@@ -343,15 +343,41 @@ class LinkedInBot:
                 # Se checkpoint deu erro interno, tenta limpar cookies e relogar
                 if 'internal_error' in cur_url or 'errorKey' in cur_url:
                     self._log(
-                        "Checkpoint com erro interno — limpando sessão e tentando novamente em 30s...",
+                        "Checkpoint com erro interno — sessão flagged. "
+                        "Deletando sessão e reiniciando browser em 15s...",
                         'aviso'
                     )
-                    await asyncio.sleep(30)
-                    await self.context.clear_cookies()
-                    await self.page.goto(f'{LINKEDIN_URL}/login', wait_until='load')
-                    await asyncio.sleep(random.uniform(3, 5))
-                    # Tenta preencher novamente
+                    # Fecha browser atual
                     try:
+                        await self.context.close()
+                    except Exception:
+                        pass
+                    try:
+                        await self._pw.stop()
+                    except Exception:
+                        pass
+
+                    # Deleta pasta de sessão inteira
+                    import shutil
+                    try:
+                        shutil.rmtree(SESSION_DIR, ignore_errors=True)
+                        self._log("Sessão antiga deletada", 'aviso')
+                    except Exception as e_rm:
+                        self._log(f"Erro ao deletar sessão: {e_rm}", 'aviso')
+
+                    # Espera antes de recriar
+                    await asyncio.sleep(15)
+
+                    # Reinicia browser com sessão limpa
+                    try:
+                        await self.iniciar(headless=self._headless)
+                        self._log("Browser reiniciado com sessão limpa", 'aviso')
+                        # Tenta login de novo
+                        await self.page.goto(
+                            f'{LINKEDIN_URL}/login', wait_until='load'
+                        )
+                        await asyncio.sleep(random.uniform(3, 5))
+                        await self._fechar_cookie_banner()
                         for sel in seletores_email:
                             try:
                                 await self.page.wait_for_selector(sel, timeout=5000)
@@ -371,13 +397,17 @@ class LinkedInBot:
                                 break
                             except Exception:
                                 continue
-                        await asyncio.sleep(random.uniform(4, 7))
+                        await asyncio.sleep(random.uniform(5, 8))
                         if '/feed' in self.page.url:
                             self.conectado = True
-                            self._log("Login OK após retry", 'sucesso')
+                            self._log("Login OK com sessão limpa!", 'sucesso')
+                            return True
+                        elif '/checkpoint' not in self.page.url:
+                            self.conectado = True
+                            self._log(f"Pós-login URL: {self.page.url}", 'aviso')
                             return True
                     except Exception as e2:
-                        self._log(f"Retry login falhou: {e2}", 'aviso')
+                        self._log(f"Retry com sessão limpa falhou: {e2}", 'aviso')
                 self._log(
                     "LinkedIn exige verificação — resolva pelo "
                     "navegador interativo no dashboard (noVNC). "
