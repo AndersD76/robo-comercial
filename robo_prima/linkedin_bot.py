@@ -547,8 +547,8 @@ class LinkedInBot:
                 await asyncio.sleep(0.5)
             await asyncio.sleep(1)
 
-            # Extração: sibling-walking (sobe do link e pega texto dos próximos irmãos)
-            perfis_data = await self.page.evaluate('''() => {
+            # Extração: innerText do card <a> externo
+            perfis_data = await self.page.evaluate("""() => {
                 try {
                 const allLinks = [...document.querySelectorAll('a[href*="/in/"]')];
                 const seen = new Set();
@@ -570,8 +570,9 @@ class LinkedInBot:
                     'currículo', 'resume', 'salvar', 'save',
                 ];
                 const isNoise = (t) => {
-                    if (!t || t.length < 4 || /^\d+$/.test(t)) return true;
+                    if (!t || t.length < 4 || /^\\d+$/.test(t)) return true;
                     const tl = t.toLowerCase();
+                    if (/^\\d+\\s*(conex|connect|follower|seguidor)/i.test(tl)) return true;
                     return noise.some(n => tl.includes(n));
                 };
 
@@ -596,85 +597,67 @@ class LinkedInBot:
                     const ariaSpan = link.querySelector('span[aria-hidden="true"]');
                     if (ariaSpan) nome = ariaSpan.textContent.trim();
                     if (!nome) nome = link.textContent.trim();
-                    nome = nome.replace(/\\n/g, ' ').replace(/\s+/g, ' ').trim();
+                    nome = nome.replace(/\\n/g, ' ').replace(/\\s+/g, ' ').trim();
                     if (!nome || nome === 'LinkedIn Member' || nome.length > 80) continue;
 
                     let cargo = '';
                     let empresa = '';
                     const nomeLower = nome.toLowerCase();
-                    const debugInfo = [];
                     const wantDebug = debugCount < 2;
+                    const debugInfo = [];
 
-                    // ESTRATÉGIA: subir do link e pegar texto de irmãos seguintes
-                    // Em LinkedIn, a estrutura é algo como:
-                    //   <div card>
-                    //     <div avatar/>
-                    //     <div info>
-                    //       <div><a href="/in/...">Nome</a></div>
-                    //       <div>Cargo at Empresa</div>
-                    //       <div>Localização</div>
-                    //     </div>
-                    //   </div>
-                    // O cargo está num irmão (sibling) do ancestral do link
-
-                    const candidateTexts = [];
-
-                    // Sobe até 8 níveis de parent, em cada nível checa siblings
-                    let el = link;
-                    for (let level = 0; level < 8 && el; level++) {
-                        // Checa nextSibling e seus filhos
-                        let sib = el.nextElementSibling;
-                        let sibCount = 0;
-                        while (sib && sibCount < 5) {
-                            // Pula se tem link /in/ (é outro perfil)
-                            if (sib.querySelector && sib.querySelector('a[href*="/in/"]')) {
-                                sib = sib.nextElementSibling;
-                                sibCount++;
-                                continue;
-                            }
-                            // Pula buttons
-                            if (sib.tagName === 'BUTTON' || (sib.querySelector && sib.querySelector('button'))) {
-                                sib = sib.nextElementSibling;
-                                sibCount++;
-                                continue;
-                            }
-                            const t = (sib.textContent || '').trim().replace(/\\n/g, ' ').replace(/\s+/g, ' ');
-                            if (wantDebug) debugInfo.push('L' + level + 'S' + sibCount + ': "' + t.substring(0, 60) + '" tag=' + sib.tagName);
-                            if (t && t.length >= 4 && t.length <= 150) {
-                                const tl = t.toLowerCase();
-                                if (!isNoise(t) && !allNames.has(tl) &&
-                                    !nomeLower.includes(tl) && !tl.includes(nomeLower)) {
-                                    candidateTexts.push(t);
-                                }
-                            }
-                            sib = sib.nextElementSibling;
-                            sibCount++;
-                            if (candidateTexts.length >= 3) break;
+                    // Sobe até achar o <a> externo que envolve o card inteiro
+                    let outerA = link.parentElement;
+                    while (outerA) {
+                        if (outerA.tagName === 'A' && outerA !== link) break;
+                        if (outerA.tagName === 'BODY' || outerA.id === 'root') {
+                            outerA = null;
+                            break;
                         }
-                        if (candidateTexts.length >= 2) break;
-
-                        // Também checa o próprio parent do nível seguinte
-                        // (caso o texto esteja num wrapper junto com o link)
-                        if (!el.parentElement) break;
-                        el = el.parentElement;
-                        if (el.tagName === 'BODY' || el.id === 'root') break;
-                        if (wantDebug) debugInfo.push('UP->' + el.tagName + ' cls=' + (el.className||'').toString().substring(0,40));
+                        outerA = outerA.parentElement;
                     }
 
-                    if (candidateTexts.length >= 1) cargo = candidateTexts[0];
-                    if (candidateTexts.length >= 2) empresa = candidateTexts[1];
+                    // Pega TODO o texto visível do card via innerText
+                    const cardEl = outerA || link.parentElement;
+                    const cardText = (cardEl.innerText || '').trim();
+                    const lines = cardText.split('\\n')
+                        .map(l => l.trim())
+                        .filter(l => l.length >= 3);
+
+                    if (wantDebug) {
+                        debugInfo.push('outerA=' + (outerA ? outerA.tagName : 'null'));
+                        debugInfo.push('lines=' + JSON.stringify(lines.slice(0, 10)));
+                    }
+
+                    // Filtra linhas: remove nome, noise, nomes de outras pessoas
+                    const useful = [];
+                    for (const line of lines) {
+                        const ll = line.toLowerCase();
+                        if (isNoise(line)) continue;
+                        if (allNames.has(ll)) continue;
+                        if (ll === nomeLower) continue;
+                        if (nomeLower.includes(ll) && ll.length < nomeLower.length) continue;
+                        if (ll.includes(nomeLower) && nomeLower.length > 4) continue;
+                        if (line.length <= 3) continue;
+                        useful.push(line);
+                    }
+
+                    if (wantDebug) {
+                        debugInfo.push('useful=' + JSON.stringify(useful.slice(0, 5)));
+                    }
+
+                    if (useful.length >= 1) cargo = useful[0];
+                    if (useful.length >= 2) empresa = useful[1];
 
                     // Limpa
-                    cargo = (cargo || '').replace(/^Cargo atual:\s*/i, '').replace(/^Current:\s*/i, '').trim();
-                    empresa = (empresa || '').replace(/^Empresa atual:\s*/i, '').trim();
+                    cargo = (cargo || '').replace(/^Cargo atual:\\s*/i, '').replace(/^Current:\\s*/i, '').trim();
+                    empresa = (empresa || '').replace(/^Empresa atual:\\s*/i, '').trim();
                     if (cargo.length > 120) cargo = cargo.substring(0, 120);
                     if (empresa.length > 120) empresa = empresa.substring(0, 120);
 
                     const r = { nome, cargo, empresa, url: href };
                     if (wantDebug) {
                         r._debug = debugInfo;
-                        r._linkH = Math.round(rect.height);
-                        r._linkW = Math.round(rect.width);
                         debugCount++;
                     }
                     results.push(r);
@@ -683,7 +666,7 @@ class LinkedInBot:
                 } catch(err) {
                     return [{_error: err.message, _stack: (err.stack||'').substring(0, 300)}];
                 }
-            }''')
+            }""")
 
             n_total = len(perfis_data or [])
 
@@ -696,12 +679,12 @@ class LinkedInBot:
 
             self._log(f"  {n_total} perfis encontrados na página")
 
-            # Debug inline: mostra info de sibling-walking para primeiros perfis
+            # Debug inline
             if n_total > 0:
                 for p in perfis_data[:2]:
                     if p.get('_debug'):
-                        self._log(f"  [dbg] {p['nome']} linkH={p.get('_linkH')} linkW={p.get('_linkW')}", 'aviso')
-                        for d in p['_debug'][:10]:
+                        self._log(f"  [dbg] {p['nome']}", 'aviso')
+                        for d in p['_debug']:
                             self._log(f"    {d}", 'aviso')
                     if not p.get('cargo'):
                         self._log(f"  [sem-cargo] {p['nome']}", 'aviso')
