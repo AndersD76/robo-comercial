@@ -418,6 +418,15 @@
     ::-webkit-scrollbar-track { background:transparent; }
     ::-webkit-scrollbar-thumb { background:rgba(255,255,255,.12); border-radius:10px; }
     ::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,.22); }
+  
+    .row-btn {
+      background:transparent; border:1px solid var(--border); color:var(--sub);
+      width:26px; height:26px; border-radius:6px; cursor:pointer;
+      display:inline-flex; align-items:center; justify-content:center;
+      transition:all .15s;
+    }
+    .row-btn:hover { background:var(--surf2); color:var(--text); }
+    .row-btn-del:hover { background:rgba(248,113,113,.15); color:#f87171; border-color:rgba(248,113,113,.3); }
   </style>
 </head>
 <body>
@@ -547,11 +556,11 @@
     </div>
     <div class="tab-pane">
       <div id="tab-wa" class="scroll-box">
-        <table><thead><tr><th style="width:28px"><input type="checkbox" id="sel-all-wa" onchange="toggleSelectAll(this)"></th><th>Empresa</th><th>Telefone</th><th>Email</th><th>Segmento</th><th>Status</th><th>Pts</th><th>Data</th></tr></thead>
+        <table><thead><tr><th style="width:28px"><input type="checkbox" id="sel-all-wa" onchange="toggleSelectAll(this)"></th><th>Empresa</th><th>Telefone</th><th>Email</th><th>Segmento</th><th>Status</th><th>Pts</th><th>Data</th><th style="width:60px"></th></tr></thead>
         <tbody id="wa-tb"></tbody></table>
       </div>
       <div id="tab-li" style="display:none" class="scroll-box">
-        <table><thead><tr><th>Nome</th><th>Cargo</th><th>Empresa</th><th>Status</th></tr></thead>
+        <table><thead><tr><th>Nome</th><th>Cargo</th><th>Empresa</th><th>Status</th><th style="width:60px"></th></tr></thead>
         <tbody id="li-tb"></tbody></table>
       </div>
       <div id="tab-log" style="display:none" class="scroll-box">
@@ -719,7 +728,7 @@ function lbCls(t=''){
   return 'lb-info';
 }
 
-let _waLeads=[];
+let _waLeads=[],_liLeads=[];
 function loadWA(){
   fetch(`/api/${BOT}/leads`).then(r=>r.json()).then(d=>{
     _waLeads=d;
@@ -737,6 +746,10 @@ function loadWA(){
       <td>${statusChip(l.status,l.demo_status)}</td>
       <td style="color:var(--muted)">${l.score||0}</td>
       <td style="color:var(--muted);font-size:11px;white-space:nowrap">${dt}</td>
+      <td style="white-space:nowrap">
+        <button onclick="editWA(_waLeads.find(x=>x.id===${l.id}))" class="row-btn" title="Editar"><i class="fa fa-pen" style="font-size:10px"></i></button>
+        <button onclick="delWA(${l.id})" class="row-btn row-btn-del" title="Excluir"><i class="fa fa-trash" style="font-size:10px"></i></button>
+      </td>
     </tr>`;}).join('');
   }).catch(()=>{});
 }
@@ -790,6 +803,7 @@ function saveNewLead(){
 }
 function loadLI(){
   fetch(`/api/${BOT}/linkedin`).then(r=>r.json()).then(d=>{
+    _liLeads=d;
     const tb=document.getElementById('li-tb');
     if(!d.length){ tb.innerHTML='<tr><td colspan="4"><div class="empty-state"><i class="fa-brands fa-linkedin"></i>LinkedIn não iniciou</div></td></tr>'; return; }
     tb.innerHTML=d.map(l=>`<tr>
@@ -797,6 +811,10 @@ function loadLI(){
       <td style="color:var(--muted);font-size:11px">${l.cargo||'—'}</td>
       <td style="color:var(--muted);font-size:11px">${l.empresa||'—'}</td>
       <td>${liChip(l.status)}</td>
+      <td style="white-space:nowrap">
+        <button onclick="editLI(_liLeads.find(x=>x.id===${l.id}))" class="row-btn" title="Editar"><i class="fa fa-pen" style="font-size:10px"></i></button>
+        <button onclick="delLI(${l.id})" class="row-btn row-btn-del" title="Excluir"><i class="fa fa-trash" style="font-size:10px"></i></button>
+      </td>
     </tr>`).join('');
   }).catch(()=>{});
 }
@@ -1223,6 +1241,122 @@ function saveLiConfig(){
     msg.textContent='Erro de conexão ao servidor.';
   });
 }
+
+
+// == CRUD: Edit / Delete ==
+function closeEdit(e){
+  if(!e||e.target===document.getElementById('edit-overlay'))
+    document.getElementById('edit-overlay').classList.remove('open');
+}
+function _ef(label,id,value,type,options){
+  type=type||'text';
+  var v=(value||'').toString().replace(/"/g,'&quot;');
+  if(options){
+    var opts=options.map(function(o){return '<option value="'+o+'"'+(o===value?' selected':'')+'>'+o+'</option>';}).join('');
+    return '<div class="li-cfg-field"><label>'+label+'</label><select id="'+id+'">'+opts+'</select></div>';
+  }
+  return '<div class="li-cfg-field"><label>'+label+'</label><input type="'+type+'" id="'+id+'" value="'+v+'"></div>';
+}
+function editWA(l){
+  if(!l) return;
+  var st=['novo','contactada','respondeu','qualificado','convertido'];
+  document.getElementById('edit-title').textContent='Editar: '+(l.nome_fantasia||'Lead');
+  document.getElementById('edit-body').innerHTML=
+    _ef('Nome / Empresa','ed-nome',l.nome_fantasia)+
+    _ef('WhatsApp','ed-wa',l.whatsapp)+
+    _ef('Telefone','ed-tel',l.telefone)+
+    _ef('Email','ed-email',l.email,'email')+
+    _ef('Segmento','ed-seg',l.segmento)+
+    _ef('Status','ed-status',l.status,null,st)+
+    _ef('Score','ed-score',l.score,'number')+
+    _ef('Cidade','ed-cidade',l.cidade)+
+    _ef('Estado','ed-estado',l.estado)+
+    _ef('Website','ed-site',l.website)+
+    '<div id="ed-msg" style="display:none;font-size:12px;padding:6px 10px;border-radius:6px;margin-top:4px"></div>';
+  document.getElementById('edit-save-btn').onclick=function(){saveWA(l.id)};
+  document.getElementById('edit-overlay').classList.add('open');
+}
+function saveWA(id){
+  var body={
+    nome_fantasia:document.getElementById('ed-nome').value.trim(),
+    whatsapp:document.getElementById('ed-wa').value.trim()||null,
+    telefone:document.getElementById('ed-tel').value.trim()||null,
+    email:document.getElementById('ed-email').value.trim()||null,
+    segmento:document.getElementById('ed-seg').value.trim()||null,
+    status:document.getElementById('ed-status').value,
+    score:parseInt(document.getElementById('ed-score').value)||0,
+    cidade:document.getElementById('ed-cidade').value.trim()||null,
+    estado:document.getElementById('ed-estado').value.trim()||null,
+    website:document.getElementById('ed-site').value.trim()||null
+  };
+  var msg=document.getElementById('ed-msg');
+  fetch('/api/'+BOT+'/lead/'+id,{
+    method:'PUT',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)
+  }).then(function(r){return r.json()}).then(function(d){
+    if(d.ok){
+      msg.style.display='block';msg.style.color='#4ade80';msg.style.background='rgba(74,222,128,.1)';
+      msg.textContent='Salvo!';
+      setTimeout(function(){ closeEdit(); loadWA(); refreshStats(); loadPipe(); },800);
+    } else {
+      msg.style.display='block';msg.style.color='#f87171';msg.style.background='rgba(248,113,113,.1)';
+      msg.textContent='Erro: '+(d.error||'falha');
+    }
+  }).catch(function(){msg.style.display='block';msg.style.color='#f87171';msg.textContent='Erro de conexao';});
+}
+function delWA(id){
+  if(!confirm('Excluir este lead e todas suas interacoes?')) return;
+  fetch('/api/'+BOT+'/lead/'+id,{method:'DELETE'}).then(function(r){return r.json()}).then(function(d){
+    if(d.ok){ loadWA(); refreshStats(); loadPipe(); }
+    else alert('Erro: '+(d.error||'falha'));
+  }).catch(function(){alert('Erro de conexao')});
+}
+function editLI(l){
+  if(!l) return;
+  var st=['encontrado','conexao_enviada','conectado','dm_enviada','respondeu'];
+  document.getElementById('edit-title').textContent='Editar: '+(l.nome||'Lead');
+  document.getElementById('edit-body').innerHTML=
+    _ef('Nome','edli-nome',l.nome)+
+    _ef('Cargo','edli-cargo',l.cargo)+
+    _ef('Empresa','edli-empresa',l.empresa)+
+    _ef('Status','edli-status',l.status,null,st)+
+    _ef('Email','edli-email',l.email,'email')+
+    _ef('Telefone','edli-tel',l.telefone)+
+    '<div id="ed-msg" style="display:none;font-size:12px;padding:6px 10px;border-radius:6px;margin-top:4px"></div>';
+  document.getElementById('edit-save-btn').onclick=function(){saveLI(l.id)};
+  document.getElementById('edit-overlay').classList.add('open');
+}
+function saveLI(id){
+  var body={
+    nome:document.getElementById('edli-nome').value.trim(),
+    cargo:document.getElementById('edli-cargo').value.trim()||null,
+    empresa:document.getElementById('edli-empresa').value.trim()||null,
+    status:document.getElementById('edli-status').value,
+    email:document.getElementById('edli-email').value.trim()||null,
+    telefone:document.getElementById('edli-tel').value.trim()||null
+  };
+  var msg=document.getElementById('ed-msg');
+  fetch('/api/'+BOT+'/linkedin/'+id,{
+    method:'PUT',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)
+  }).then(function(r){return r.json()}).then(function(d){
+    if(d.ok){
+      msg.style.display='block';msg.style.color='#4ade80';msg.style.background='rgba(74,222,128,.1)';
+      msg.textContent='Salvo!';
+      setTimeout(function(){ closeEdit(); loadLI(); refreshStats(); loadPipe(); },800);
+    } else {
+      msg.style.display='block';msg.style.color='#f87171';msg.style.background='rgba(248,113,113,.1)';
+      msg.textContent='Erro: '+(d.error||'falha');
+    }
+  }).catch(function(){msg.style.display='block';msg.style.color='#f87171';msg.textContent='Erro de conexao';});
+}
+function delLI(id){
+  if(!confirm('Excluir este lead LinkedIn?')) return;
+  fetch('/api/'+BOT+'/linkedin/'+id,{method:'DELETE'}).then(function(r){return r.json()}).then(function(d){
+    if(d.ok){ loadLI(); refreshStats(); loadPipe(); }
+    else alert('Erro: '+(d.error||'falha'));
+  }).catch(function(){alert('Erro de conexao')});
+}
 </script>
 
 <!-- ADD LEAD MODAL -->
@@ -1246,5 +1380,20 @@ function saveLiConfig(){
   </div>
 </div>
 
+
+<!-- EDIT LEAD MODAL -->
+<div class="li-cfg-overlay" id="edit-overlay" onclick="closeEdit(event)">
+  <div class="li-cfg-card" style="width:480px;max-height:90vh;overflow-y:auto">
+    <div class="li-cfg-hd">
+      <i class="fa fa-pen-to-square" style="color:#60a5fa"></i> <span id="edit-title">Editar Lead</span>
+      <button onclick="closeEdit()"><i class="fa fa-times"></i></button>
+    </div>
+    <div class="li-cfg-body" id="edit-body"></div>
+    <div class="li-cfg-footer">
+      <button class="btn-cancel" onclick="closeEdit()">Cancelar</button>
+      <button class="btn-save" id="edit-save-btn"><i class="fa fa-check"></i> Salvar</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

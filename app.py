@@ -44,6 +44,10 @@ def _is_running(proc) -> bool:
     return proc is not None and proc.poll() is None
 
 
+
+def _valid_schema(bot):
+    return {'prisma': 'prisma', 'pili': 'pili'}.get(bot)
+
 # =============================================================================
 # HELPERS DE BANCO
 # =============================================================================
@@ -153,7 +157,7 @@ def get_leads(schema: str, limite: int = 50) -> list:
         c.execute(
             """SELECT id, nome_fantasia, whatsapp, telefone, email, score,
                       status, segmento, demo_status, cidade, estado,
-                      encontrado_em
+                      encontrado_em, cnpj, razao_social, website, linkedin, instagram, fonte, porte
                FROM empresas
                ORDER BY encontrado_em DESC
                LIMIT %s""",
@@ -193,8 +197,8 @@ def get_linkedin(schema: str, limite: int = 30) -> list:
         conn = get_db(schema)
         c = conn.cursor()
         c.execute(
-            "SELECT nome, cargo, empresa, url_perfil, status, demo_status, "
-            "encontrado_em FROM leads_linkedin "
+            "SELECT id, nome, cargo, empresa, url_perfil, status, demo_status, "
+            "email, telefone, encontrado_em FROM leads_linkedin "
             "ORDER BY encontrado_em DESC LIMIT %s",
             (limite,)
         )
@@ -449,7 +453,7 @@ def api_bot_stop(bot):
 # --- Adicionar lead manualmente ---
 @app.route('/api/<bot>/add-lead', methods=['POST'])
 def api_add_lead(bot):
-    schema = {'prisma': 'prisma', 'pili': 'pili'}.get(bot)
+    schema = _valid_schema(bot)
     if not schema:
         return jsonify({'error': 'bot invalido'}), 400
     data = request.get_json(silent=True) or {}
@@ -486,11 +490,103 @@ def api_add_lead(bot):
         return jsonify({'error': str(e)}), 500
 
 
+
+# --- CRUD: Atualizar lead WA (empresa) ---
+@app.route('/api/<bot>/lead/<int:lead_id>', methods=['PUT'])
+def api_update_lead(bot, lead_id):
+    schema = _valid_schema(bot)
+    if not schema:
+        return jsonify({'error': 'bot invalido'}), 400
+    data = request.get_json(silent=True) or {}
+    allowed = {
+        'nome_fantasia', 'whatsapp', 'telefone', 'email', 'segmento',
+        'status', 'score', 'cidade', 'estado', 'website', 'linkedin',
+        'instagram', 'porte', 'demo_status',
+    }
+    fields = {k: v for k, v in data.items() if k in allowed}
+    if not fields:
+        return jsonify({'error': 'nenhum campo valido'}), 400
+    try:
+        conn = get_db(schema)
+        c = conn.cursor()
+        sets = ', '.join(f'{k} = %s' for k in fields)
+        vals = list(fields.values()) + [lead_id]
+        c.execute(f'UPDATE empresas SET {sets} WHERE id = %s', vals)
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# --- CRUD: Deletar lead WA (empresa) ---
+@app.route('/api/<bot>/lead/<int:lead_id>', methods=['DELETE'])
+def api_delete_lead(bot, lead_id):
+    schema = _valid_schema(bot)
+    if not schema:
+        return jsonify({'error': 'bot invalido'}), 400
+    try:
+        conn = get_db(schema)
+        c = conn.cursor()
+        c.execute('DELETE FROM interacoes WHERE empresa_id = %s', (lead_id,))
+        c.execute('DELETE FROM contatos WHERE empresa_id = %s', (lead_id,))
+        c.execute('DELETE FROM empresas WHERE id = %s', (lead_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# --- CRUD: Atualizar lead LinkedIn ---
+@app.route('/api/<bot>/linkedin/<int:lead_id>', methods=['PUT'])
+def api_update_linkedin(bot, lead_id):
+    schema = _valid_schema(bot)
+    if not schema:
+        return jsonify({'error': 'bot invalido'}), 400
+    data = request.get_json(silent=True) or {}
+    allowed = {
+        'nome', 'cargo', 'empresa', 'status', 'email', 'telefone',
+        'demo_status',
+    }
+    fields = {k: v for k, v in data.items() if k in allowed}
+    if not fields:
+        return jsonify({'error': 'nenhum campo valido'}), 400
+    try:
+        conn = get_db(schema)
+        c = conn.cursor()
+        sets = ', '.join(f'{k} = %s' for k in fields)
+        vals = list(fields.values()) + [lead_id]
+        c.execute(f'UPDATE leads_linkedin SET {sets} WHERE id = %s', vals)
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# --- CRUD: Deletar lead LinkedIn ---
+@app.route('/api/<bot>/linkedin/<int:lead_id>', methods=['DELETE'])
+def api_delete_linkedin(bot, lead_id):
+    schema = _valid_schema(bot)
+    if not schema:
+        return jsonify({'error': 'bot invalido'}), 400
+    try:
+        conn = get_db(schema)
+        c = conn.cursor()
+        c.execute('DELETE FROM leads_linkedin WHERE id = %s', (lead_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # --- Envio de email em massa (mala direta via Brevo API) ---
 @app.route('/api/<bot>/send-emails', methods=['POST'])
 def api_send_emails(bot):
     import requests as http
-    schema = {'prisma': 'prisma', 'pili': 'pili'}.get(bot)
+    schema = _valid_schema(bot)
     if not schema:
         return jsonify({'error': 'bot invalido'}), 400
     data = request.get_json(silent=True) or {}
