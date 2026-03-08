@@ -270,8 +270,18 @@ class LinkedInBot:
             await self.page.goto(
                 f'{LINKEDIN_URL}/login', wait_until='load'
             )
-            await asyncio.sleep(random.uniform(3, 5))
+            await asyncio.sleep(random.uniform(4, 6))
             await self._fechar_cookie_banner()
+
+            # Se já redirecionou para checkpoint logo no login, abre noVNC
+            if '/checkpoint' in self.page.url:
+                self._log(f"LinkedIn redirecionou para checkpoint — URL: {self.page.url}", 'aviso')
+                resolvido = await self._aguardar_checkpoint()
+                if resolvido:
+                    self.conectado = True
+                    self._log("Login via noVNC OK", 'sucesso')
+                    return True
+                return False
 
             # Tenta diferentes seletores para o campo de email
             seletores_email = [
@@ -282,21 +292,25 @@ class LinkedInBot:
                 'input[type="email"]',
             ]
             campo_email = None
-            for tentativa in range(2):
+            for tentativa in range(3):
+                # Checa URL antes de cada tentativa
+                if '/checkpoint' in self.page.url or '/feed' in self.page.url:
+                    break
                 for sel in seletores_email:
                     try:
-                        await self.page.wait_for_selector(sel, timeout=5000)
+                        await self.page.wait_for_selector(sel, timeout=6000)
                         campo_email = sel
                         break
                     except Exception:
                         continue
                 if campo_email:
                     break
-                # Segunda tentativa: recarrega a página
-                self._log("Seletores não encontrados, recarregando página de login...")
-                await self.page.reload(wait_until='load')
-                await asyncio.sleep(random.uniform(3, 5))
-                await self._fechar_cookie_banner()
+                self._log(f"Tentativa {tentativa+1}: campos não encontrados (URL: {self.page.url}), aguardando...")
+                await asyncio.sleep(random.uniform(4, 7))
+                if tentativa < 2:
+                    await self.page.reload(wait_until='load')
+                    await asyncio.sleep(random.uniform(3, 5))
+                    await self._fechar_cookie_banner()
 
             if not campo_email:
                 self._log(
