@@ -1098,52 +1098,70 @@ class LinkedInBot:
             await self.page.goto(url, wait_until='domcontentloaded')
             await asyncio.sleep(random.uniform(2, 4))
 
-            # Botão "Conectar" — suporta LinkedIn regular e Sales Navigator
-            conectar_btn = await self.page.query_selector(
-                'button[aria-label*="Conectar"], button[aria-label*="Connect"]'
-            )
-            if not conectar_btn:
-                # Pode estar em "Mais" (…)
-                mais_btn = await self.page.query_selector(
-                    'button[aria-label*="Mais"], button[aria-label*="More"]'
-                )
-                if mais_btn:
-                    await mais_btn.click()
-                    await asyncio.sleep(1)
-                    conectar_btn = await self.page.query_selector(
-                        'div[aria-label*="Conectar"],'
-                        ' div[aria-label*="Connect"]'
-                    )
+            # JS puro para clicar — evita problemas de visibilidade do Playwright
+            js_click_connect = '''() => {
+                const sels = [
+                    'button[aria-label*="Conectar"]', 'button[aria-label*="Connect"]',
+                    'button[aria-label*="conectar"]', 'button[aria-label*="connect"]'
+                ];
+                for (const s of sels) {
+                    const btn = document.querySelector(s);
+                    if (btn) { btn.click(); return btn.getAttribute("aria-label") || "ok"; }
+                }
+                const all = [...document.querySelectorAll("button")];
+                const b = all.find(b => /^(conectar|connect)$/i.test((b.textContent||"").trim()));
+                if (b) { b.click(); return b.textContent.trim(); }
+                return null;
+            }'''
+            clicou = await self.page.evaluate(js_click_connect)
 
-            if not conectar_btn:
+            if not clicou:
+                # Tenta abrir menu Mais e clicar Conectar dentro
+                js_mais = '''() => {
+                    for (const s of ['button[aria-label*="Mais"]','button[aria-label*="More"]']) {
+                        const b = document.querySelector(s);
+                        if (b) { b.click(); return true; }
+                    }
+                    return false;
+                }'''
+                if await self.page.evaluate(js_mais):
+                    await asyncio.sleep(1)
+                    js_menu = '''() => {
+                        const items = [...document.querySelectorAll(
+                            ".artdeco-dropdown__item, li[aria-label], div[aria-label]"
+                        )];
+                        const it = items.find(el => /conectar|connect/i.test(el.textContent||""));
+                        if (it) { it.click(); return it.textContent.trim(); }
+                        return null;
+                    }'''
+                    clicou = await self.page.evaluate(js_menu)
+
+            if not clicou:
                 self._log(f"  Botão Conectar não encontrado para {nome}", 'aviso')
                 return False
 
-            # Scroll até o botão e clica
-            await conectar_btn.scroll_into_view_if_needed()
-            await asyncio.sleep(0.5)
-            try:
-                await conectar_btn.click(timeout=10000)
-            except Exception:
-                # Fallback: JS click se elemento coberto por overlay
-                await self.page.evaluate("el => el.click()", conectar_btn)
+            self._log(f"  Clicou Conectar ({clicou})", 'aviso')
             await asyncio.sleep(random.uniform(1, 2))
 
-            # Clica "Adicionar nota"
-            nota_btn = await self.page.query_selector(
-                'button[aria-label*="nota"], button[aria-label*="note"]'
-            )
-            if nota_btn:
-                await nota_btn.click()
-                await asyncio.sleep(1)
+            # Clica Adicionar nota
+            js_nota = '''() => {
+                for (const s of [
+                    'button[aria-label*="nota"]','button[aria-label*="note"]',
+                    'button[aria-label*="Nota"]','button[aria-label*="Note"]'
+                ]) {
+                    const b = document.querySelector(s);
+                    if (b) { b.click(); return true; }
+                }
+                return false;
+            }'''
+            await self.page.evaluate(js_nota)
+            await asyncio.sleep(1)
 
-                nota = await self._gerar_nota_conexao(perfil)
-                textarea = await self.page.query_selector(
-                    'textarea[name="message"]'
-                )
-                if textarea:
-                    await textarea.fill(nota)
-                    await asyncio.sleep(random.uniform(0.5, 1))
+            nota = await self._gerar_nota_conexao(perfil)
+            textarea = await self.page.query_selector('textarea[name="message"]')
+            if textarea:
+                await textarea.fill(nota)
+                await asyncio.sleep(random.uniform(0.5, 1))
 
             # Confirma envio
             enviar_btn = await self.page.query_selector(
