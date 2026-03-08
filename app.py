@@ -148,7 +148,7 @@ def get_stats(schema: str) -> dict:
     return zero
 
 
-def get_leads(schema: str, limite: int = 50) -> list:
+def get_leads(schema: str, limite: int = 500) -> list:
     if not DATABASE_URL:
         return []
     try:
@@ -190,7 +190,7 @@ def get_logs(schema: str, limite: int = 20) -> list:
         return []
 
 
-def get_linkedin(schema: str, limite: int = 30) -> list:
+def get_linkedin(schema: str, limite: int = 500) -> list:
     if not DATABASE_URL:
         return []
     try:
@@ -260,7 +260,7 @@ def api_prisma_stats():
 
 @app.route('/api/prisma/leads')
 def api_prisma_leads():
-    limite = request.args.get('limite', 30, type=int)
+    limite = request.args.get('limite', 500, type=int)
     return jsonify(get_leads('prisma', limite))
 
 
@@ -271,7 +271,7 @@ def api_prisma_logs():
 
 @app.route('/api/prisma/linkedin')
 def api_prisma_linkedin():
-    limite = request.args.get('limite', 30, type=int)
+    limite = request.args.get('limite', 500, type=int)
     return jsonify(get_linkedin('prisma', limite))
 
 
@@ -283,13 +283,13 @@ def api_pili_stats():
 
 @app.route('/api/pili/leads')
 def api_pili_leads():
-    limite = request.args.get('limite', 30, type=int)
+    limite = request.args.get('limite', 500, type=int)
     return jsonify(get_leads('pili', limite))
 
 
 @app.route('/api/pili/linkedin')
 def api_pili_linkedin():
-    limite = request.args.get('limite', 30, type=int)
+    limite = request.args.get('limite', 500, type=int)
     return jsonify(get_linkedin('pili', limite))
 
 
