@@ -1105,7 +1105,14 @@ class LinkedInBot:
                 self._log(f"  Botão Conectar não encontrado para {nome}", 'aviso')
                 return False
 
-            await conectar_btn.click()
+            # Scroll até o botão e clica
+            await conectar_btn.scroll_into_view_if_needed()
+            await asyncio.sleep(0.5)
+            try:
+                await conectar_btn.click(timeout=10000)
+            except Exception:
+                # Fallback: JS click se elemento coberto por overlay
+                await self.page.evaluate("el => el.click()", conectar_btn)
             await asyncio.sleep(random.uniform(1, 2))
 
             # Clica "Adicionar nota"
