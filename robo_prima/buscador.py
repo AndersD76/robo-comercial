@@ -448,6 +448,148 @@ class Buscador:
             print(f'  [ERRO] Brave HTTP: {e}')
         return resultados
 
+
+    # =========================================================================
+    # GOOGLE MAPS (Playwright)
+    # =========================================================================
+
+    async def buscar_google_maps(self, termo, cidade='São Paulo', max_resultados=15):
+        """Busca empresas no Google Maps e extrai nome, telefone e site."""
+        resultados = []
+        if not self.page:
+            return resultados
+        try:
+            query = f"{termo} {cidade} Brasil"
+            url = f"https://www.google.com/maps/search/{quote_plus(query)}"
+            await self.page.goto(url, wait_until='domcontentloaded', timeout=30000)
+            await asyncio.sleep(random.uniform(3, 5))
+
+            # Scrola painel lateral para carregar mais resultados
+            for _ in range(4):
+                await self.page.evaluate(
+                    '() => { const f = document.querySelector(\'[role="feed"]\'); if (f) f.scrollBy(0, 600); }'
+                )
+                await asyncio.sleep(1)
+
+            dados = await self.page.evaluate("""
+                (max) => {
+                    const results = [];
+                    const seen = new Set();
+                    const cards = [...document.querySelectorAll('a[href*="/maps/place/"]')];
+                    for (const card of cards) {
+                        const href = card.href.split('?')[0];
+                        if (seen.has(href)) continue;
+                        seen.add(href);
+                        const container = card.closest('[jsaction]') || card.parentElement;
+                        const raw = (container ? container.innerText : card.innerText || '').trim();
+                        const lines = raw.split('\\n').map(l => l.trim()).filter(l => l.length >= 2);
+                        const nome = lines[0] || '';
+                        if (!nome || nome.length < 3) continue;
+                        let telefone = '';
+                        let website = '';
+                        for (const line of lines.slice(1)) {
+                            if (!telefone && /\\d{3,}/.test(line) && /[()\\-\\s\\d]{7,}/.test(line)) {
+                                telefone = line;
+                            }
+                            if (!website && /\\.(com|br|net|org|io)\\b/i.test(line) && !line.includes('google')) {
+                                website = line;
+                            }
+                        }
+                        results.push({ nome, telefone, website, url: href,
+                            snippet: lines.slice(0, 5).join(' | ') });
+                        if (results.length >= max) break;
+                    }
+                    return results;
+                }
+            """, max_resultados)
+
+            for d in (dados or []):
+                nome = d.get('nome', '')
+                telefone = d.get('telefone', '')
+                website = d.get('website', '')
+                url_maps = d.get('url', '')
+                snippet = d.get('snippet', '')
+                telefones = self._extrair_telefones(telefone + ' ' + snippet)
+                resultados.append({
+                    'url': url_maps,
+                    'dominio': website or 'maps.google.com',
+                    'titulo': nome,
+                    'snippet': snippet,
+                    'telefones': telefones,
+                    'fonte': 'google_maps',
+                })
+        except Exception as e:
+            print(f'  [ERRO] Google Maps: {e}')
+        return resultados
+
+    # =========================================================================
+    # ECONODATA (HTTP)
+    # =========================================================================
+
+    async def buscar_econodata(self, termo, estado='SP', max_resultados=20):
+        """Busca empresas no Econodata.com.br via HTTP."""
+        resultados = []
+        try:
+            url = (
+                f'https://www.econodata.com.br/empresas/{estado.lower()}/'
+                f'?q={quote_plus(termo)}&order=funcionarios'
+            )
+            async with httpx.AsyncClient(
+                headers={
+                    **self._HTTP_HEADERS,
+                    'Referer': 'https://www.econodata.com.br/',
+                },
+                follow_redirects=True,
+                timeout=20.0,
+            ) as client:
+                resp = await client.get(url)
+                html = resp.text
+
+            # Cada empresa fica num bloco com link /empresa/
+            blocos = re.findall(
+                r'<(?:div|li|article)[^>]*>(.*?)</(?:div|li|article)>',
+                html, re.DOTALL
+            )
+
+            seen_slugs = set()
+            for bloco in blocos:
+                if '/empresa/' not in bloco:
+                    continue
+                m_link = re.search(r'href="(/empresa/[^"?]+)"', bloco)
+                if not m_link:
+                    continue
+                slug = m_link.group(1)
+                if slug in seen_slugs:
+                    continue
+                seen_slugs.add(slug)
+
+                text_raw = re.sub(r'<[^>]+>', ' ', bloco)
+                text_raw = re.sub(r'\s+', ' ', text_raw).strip()
+
+                parts = [p.strip() for p in text_raw.split('  ') if p.strip()]
+                nome = parts[0] if parts else slug.split('/')[-1].replace('-', ' ').title()
+                nome = nome[:120]
+
+                telefones = self._extrair_telefones(text_raw)
+                cnpj_m = re.search(r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}', bloco)
+                cnpj = self.validar_cnpj(cnpj_m.group(0)) if cnpj_m else None
+
+                resultados.append({
+                    'url': f'https://www.econodata.com.br{slug}',
+                    'dominio': 'econodata.com.br',
+                    'titulo': nome,
+                    'snippet': text_raw[:300],
+                    'telefones': telefones,
+                    'cnpj': cnpj,
+                    'fonte': 'econodata',
+                })
+                if len(resultados) >= max_resultados:
+                    break
+
+        except Exception as e:
+            print(f'  [ERRO] Econodata: {e}')
+        return resultados
+
     # =========================================================================
     # BUSCA PRINCIPAL
     # =========================================================================
@@ -492,6 +634,25 @@ class Buscador:
                 for r in pw_bing:
                     if r['url'] not in urls_vistas:
                         resultados.append(r)
+
+        # === FASE 3: Google Maps (Playwright) ===
+        if self.page:
+            maps_leads = await self.buscar_google_maps(termo)
+            if maps_leads:
+                print(f"  Google Maps: +{len(maps_leads)} resultados")
+                urls_vistas = {r['url'] for r in resultados}
+                for r in maps_leads:
+                    if r['url'] not in urls_vistas:
+                        resultados.append(r)
+
+        # === FASE 4: Econodata (HTTP) ===
+        eco_leads = await self.buscar_econodata(termo)
+        if eco_leads:
+            print(f"  Econodata: +{len(eco_leads)} resultados")
+            urls_vistas = {r['url'] for r in resultados}
+            for r in eco_leads:
+                if r['url'] not in urls_vistas:
+                    resultados.append(r)
 
         # Filtra e pontua
         leads = []
