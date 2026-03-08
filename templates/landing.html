@@ -196,7 +196,7 @@
       </div>
       <div class="card-name">Prisma</div>
       <div class="card-label">PrismaBiz</div>
-      <div class="card-desc">Gestão da Qualidade<br>WhatsApp + LinkedIn</div>
+      <div class="card-desc">Gestão da Qualidade<br>WhatsApp</div>
       <div class="card-stats">
         <div class="stat-box">
           <div class="stat-n" id="p-leads">{{ prisma.total_leads }}</div>
@@ -227,7 +227,7 @@
       </div>
       <div class="card-name">Pili</div>
       <div class="card-label">Equipamentos</div>
-      <div class="card-desc">Tombadores &amp; Coletores de Grãos<br>WhatsApp + LinkedIn</div>
+      <div class="card-desc">Tombadores &amp; Coletores de Grãos<br>WhatsApp</div>
       <div class="card-stats">
         <div class="stat-box">
           <div class="stat-n" id="l-leads">{{ pili.total_leads }}</div>
@@ -264,11 +264,9 @@ function loadStatus(bot){
     const badge = document.getElementById(`${px}-badge`);
     const txt   = document.getElementById(`${px}-badge-txt`);
     if(!badge) return;
-    if(d.wa || d.li){
+    if(d.wa){
       badge.className='card-status on';
-      if(d.wa && d.li) txt.textContent='WA + LinkedIn';
-      else if(d.wa)    txt.textContent='Internet ativo';
-      else             txt.textContent='LinkedIn ativo';
+      txt.textContent='Internet ativo';
     } else {
       badge.className='card-status off';
       txt.textContent='Parado';

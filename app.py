@@ -27,8 +27,8 @@ DATABASE_URL = _norm_db_url(os.environ.get('DATABASE_URL', ''))
 
 # Processos em background — {bot: {'wa': Popen|None, 'li': Popen|None}}
 _procs: dict = {
-    'prisma': {'wa': None, 'li': None},
-    'pili':   {'wa': None, 'li': None},
+    'prisma': {'wa': None},
+    'pili':   {'wa': None},
 }
 
 
@@ -65,13 +65,11 @@ def get_db(schema: str):
 
 
 def get_stats(schema: str) -> dict:
-    """Retorna métricas do robô (WhatsApp + LinkedIn)."""
+    """Retorna métricas do robô (WhatsApp)."""
     zero = {
         # WhatsApp
         'total_leads': 0, 'contactadas': 0, 'responderam': 0,
         'demos': 0, 'msgs_enviadas': 0, 'respostas': 0, 'msgs_hoje': 0,
-        # LinkedIn
-        'li_total': 0, 'li_conexoes': 0, 'li_responderam': 0, 'li_demos': 0,
     }
     if not DATABASE_URL:
         return zero
@@ -116,31 +114,6 @@ def get_stats(schema: str) -> dict:
         )
         row = c.fetchone()
         zero['msgs_hoje'] = row['quantidade'] if row else 0
-
-        # LinkedIn — rollback preventivo caso query anterior tenha falhado
-        try:
-            conn.rollback()
-            c = conn.cursor()
-            c.execute(f"SET search_path TO {schema}, public")
-            c.execute("SELECT COUNT(*) AS n FROM leads_linkedin")
-            zero['li_total'] = c.fetchone()['n']
-            c.execute(
-                "SELECT COUNT(*) AS n FROM leads_linkedin "
-                "WHERE status = 'conexao_enviada'"
-            )
-            zero['li_conexoes'] = c.fetchone()['n']
-            c.execute(
-                "SELECT COUNT(*) AS n FROM leads_linkedin WHERE respondeu = 1"
-            )
-            zero['li_responderam'] = c.fetchone()['n']
-            c.execute(
-                "SELECT COUNT(*) AS n FROM leads_linkedin "
-                "WHERE demo_status = 'confirmado'"
-            )
-            zero['li_demos'] = c.fetchone()['n']
-        except Exception as e:
-            print(f"[stats/{schema}/linkedin] erro: {e}")
-            pass  # tabela pode não existir ainda
 
         conn.close()
     except Exception as e:
@@ -189,25 +162,6 @@ def get_logs(schema: str, limite: int = 20) -> list:
         print(f"[logs/{schema}] erro: {e}")
         return []
 
-
-def get_linkedin(schema: str, limite: int = 500) -> list:
-    if not DATABASE_URL:
-        return []
-    try:
-        conn = get_db(schema)
-        c = conn.cursor()
-        c.execute(
-            "SELECT id, nome, cargo, empresa, url_perfil, status, demo_status, "
-            "email, telefone, encontrado_em FROM leads_linkedin "
-            "ORDER BY encontrado_em DESC LIMIT %s",
-            (limite,)
-        )
-        rows = [dict(r) for r in c.fetchall()]
-        conn.close()
-        return rows
-    except Exception as e:
-        print(f"[linkedin/{schema}] erro: {e}")
-        return []
 
 
 # =============================================================================
@@ -269,11 +223,6 @@ def api_prisma_logs():
     return jsonify(get_logs('prisma'))
 
 
-@app.route('/api/prisma/linkedin')
-def api_prisma_linkedin():
-    limite = request.args.get('limite', 500, type=int)
-    return jsonify(get_linkedin('prisma', limite))
-
 
 # --- API Pili ---
 @app.route('/api/pili/stats')
@@ -286,11 +235,6 @@ def api_pili_leads():
     limite = request.args.get('limite', 500, type=int)
     return jsonify(get_leads('pili', limite))
 
-
-@app.route('/api/pili/linkedin')
-def api_pili_linkedin():
-    limite = request.args.get('limite', 500, type=int)
-    return jsonify(get_linkedin('pili', limite))
 
 
 @app.route('/api/pili/logs')
@@ -358,41 +302,6 @@ def api_pipeline():
                 else:
                     stages['novo'].append(d)
 
-            # — LinkedIn leads —
-            try:
-                c.execute("""
-                    SELECT id, nome AS nome_fantasia, cargo AS segmento,
-                           empresa, url_perfil, status, demo_status,
-                           encontrado_em, respondeu, ultima_resposta,
-                           0 AS score, 'linkedin' AS canal,
-                           NULL AS whatsapp, NULL AS telefone, NULL AS email,
-                           NULL AS cidade, NULL AS estado,
-                           CASE WHEN dm_enviada_em IS NOT NULL THEN 1 ELSE 0 END AS msgs,
-                           CASE WHEN respondeu = 1 THEN 1 ELSE 0 END AS respostas,
-                           NULL AS msg_enviada,
-                           ultima_resposta AS ultima_resposta,
-                           dm_enviada_em AS ultima_msg,
-                           NULL AS respondido_em
-                    FROM leads_linkedin
-                    ORDER BY encontrado_em DESC
-                    LIMIT 200
-                """)
-                li_rows = c.fetchall()
-                for r in li_rows:
-                    d = dict(r)
-                    d['bot'] = schema
-                    st = d.get('status', 'encontrado')
-                    if d.get('demo_status') == 'confirmado':
-                        stages['demo'].append(d)
-                    elif st == 'respondeu' or d.get('respondeu') == 1:
-                        stages['respondeu'].append(d)
-                    elif st == 'conexao_enviada' or st == 'dm_enviada':
-                        stages['contactada'].append(d)
-                    else:
-                        stages['novo'].append(d)
-            except Exception as e2:
-                print(f"[pipeline/{schema}/linkedin] erro: {e2}")
-
             conn.close()
         except Exception as e:
             print(f"[pipeline/{schema}] erro: {e}")
@@ -407,7 +316,6 @@ def api_bot_status(bot):
         return jsonify({'error': 'bot invalido'}), 400
     return jsonify({
         'wa': _is_running(_procs[bot]['wa']),
-        'li': _is_running(_procs[bot]['li']),
     })
 
 
@@ -417,11 +325,11 @@ def api_bot_start(bot):
         return jsonify({'error': 'bot invalido'}), 400
     data = request.get_json(silent=True) or {}
     canal = data.get('canal', 'wa')
-    if canal not in ('wa', 'li'):
+    if canal not in ('wa',):
         return jsonify({'error': 'canal invalido'}), 400
     if _is_running(_procs[bot][canal]):
         return jsonify({'status': 'already_running'})
-    script = 'run_wa.py' if canal == 'wa' else 'linkedin_bot.py'
+    script = 'run_wa.py'
     bot_dir = _bot_dir(bot)
     log_path = os.path.join(bot_dir, f'{canal}.log')
     log_file = open(log_path, 'a', encoding='utf-8')
@@ -538,49 +446,6 @@ def api_delete_lead(bot, lead_id):
         return jsonify({'error': str(e)}), 500
 
 
-# --- CRUD: Atualizar lead LinkedIn ---
-@app.route('/api/<bot>/linkedin/<int:lead_id>', methods=['PUT'])
-def api_update_linkedin(bot, lead_id):
-    schema = _valid_schema(bot)
-    if not schema:
-        return jsonify({'error': 'bot invalido'}), 400
-    data = request.get_json(silent=True) or {}
-    allowed = {
-        'nome', 'cargo', 'empresa', 'status', 'email', 'telefone',
-        'demo_status',
-    }
-    fields = {k: v for k, v in data.items() if k in allowed}
-    if not fields:
-        return jsonify({'error': 'nenhum campo valido'}), 400
-    try:
-        conn = get_db(schema)
-        c = conn.cursor()
-        sets = ', '.join(f'{k} = %s' for k in fields)
-        vals = list(fields.values()) + [lead_id]
-        c.execute(f'UPDATE leads_linkedin SET {sets} WHERE id = %s', vals)
-        conn.commit()
-        conn.close()
-        return jsonify({'ok': True})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-# --- CRUD: Deletar lead LinkedIn ---
-@app.route('/api/<bot>/linkedin/<int:lead_id>', methods=['DELETE'])
-def api_delete_linkedin(bot, lead_id):
-    schema = _valid_schema(bot)
-    if not schema:
-        return jsonify({'error': 'bot invalido'}), 400
-    try:
-        conn = get_db(schema)
-        c = conn.cursor()
-        c.execute('DELETE FROM leads_linkedin WHERE id = %s', (lead_id,))
-        conn.commit()
-        conn.close()
-        return jsonify({'ok': True})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 
 # --- Envio de email em massa (mala direta via Brevo API) ---
 @app.route('/api/<bot>/send-emails', methods=['POST'])
@@ -694,68 +559,8 @@ def api_bot_console(bot):
         return jsonify({'lines': [], 'error': str(e)})
 
 
-# --- Salvar credenciais LinkedIn ---
-@app.route('/api/<bot>/linkedin-config', methods=['POST'])
-def api_linkedin_config(bot):
-    if bot not in _procs:
-        return jsonify({'error': 'bot invalido'}), 400
-    data = request.get_json(silent=True) or {}
-    email = (data.get('email') or '').strip()
-    password = data.get('password') or ''
-    if not email or not password:
-        return jsonify({'error': 'email e senha obrigatórios'}), 400
-    creds_file = os.path.join(_bot_dir(bot), 'linkedin_creds.json')
-    try:
-        with open(creds_file, 'w', encoding='utf-8') as f:
-            json.dump({'email': email, 'password': password}, f)
-        return jsonify({'ok': True})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 
-# --- LinkedIn checkpoint screenshot ---
-@app.route('/api/<bot>/li-checkpoint')
-def api_li_checkpoint(bot):
-    if bot not in _procs:
-        return ('', 404)
-    chk_path = os.path.join(_bot_dir(bot), 'li_checkpoint.png')
-    if os.path.exists(chk_path):
-        return send_file(chk_path, mimetype='image/png',
-                         max_age=0, conditional=False)
-    return ('', 404)
-
-
-# --- LinkedIn checkpoint interaction (click/type/press) ---
-@app.route('/api/<bot>/li-action', methods=['POST'])
-def api_li_action(bot):
-    if bot not in _procs:
-        return ('', 404)
-    data = request.get_json(silent=True) or {}
-    action = data.get('action')
-    if action not in ('click', 'type', 'press'):
-        return jsonify({'error': 'action must be click, type or press'}), 400
-    action_path = os.path.join(_bot_dir(bot), 'li_action.json')
-    with open(action_path, 'w', encoding='utf-8') as f:
-        json.dump(data, f)
-    return jsonify({'ok': True})
-
-
-# --- LinkedIn VNC status ---
-@app.route('/api/<bot>/li-vnc-status')
-def api_li_vnc_status(bot):
-    """Verifica se o noVNC está ativo (porta 6080 respondendo)."""
-    import socket
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(1)
-        s.connect(('localhost', 6080))
-        s.close()
-        return jsonify({'vnc': True})
-    except Exception:
-        return jsonify({'vnc': False})
-
-
-# --- Health check ---
 @app.route('/health')
 def health():
     return jsonify({'status': 'ok', 'bots': ['prisma', 'pili']})

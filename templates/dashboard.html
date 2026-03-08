@@ -22,9 +22,6 @@
       --accent:      {{ color }};
       --accent-dim:  {{ color_dim }};
       --accent-bd:   {{ color_bd }};
-      --li:    #60a5fa;
-      --li-dim: rgba(59,130,246,.14);
-      --li-bd: rgba(59,130,246,.25);
     }
 
     body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
@@ -136,16 +133,6 @@
     .kpi-box:last-child { border-right:none; }
     .kpi-n { font-size:48px; font-weight:900; line-height:1; margin-bottom:7px; letter-spacing:-2px; color:var(--accent); }
     .kpi-l { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--sub); }
-
-    /* LinkedIn strip — mesmo tamanho do KPI row */
-    .li-row {
-      display:grid; grid-template-columns:repeat(3,1fr);
-      border-bottom:1px solid var(--li-bd);
-    }
-    .li-box { padding:26px 16px; text-align:center; border-right:1px solid var(--li-bd); background:var(--li-dim); }
-    .li-box:last-child { border-right:none; }
-    .li-n { font-size:48px; font-weight:900; line-height:1; margin-bottom:7px; letter-spacing:-2px; color:var(--li); }
-    .li-l { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--li); opacity:.8; }
 
     /* Funnel */
     .funnel-row { display:flex; padding:14px 16px; border-bottom:1px solid var(--border); }
@@ -326,7 +313,6 @@
     }
     .console-dot.off { background:var(--muted); animation:none; }
 
-    /* ── Configurar LinkedIn ── */
     .btn-cfg {
       font-family:inherit; font-size:12px; font-weight:600;
       padding:6px 11px; border-radius:8px; cursor:pointer;
@@ -335,7 +321,6 @@
     }
     .btn-cfg:hover { background:rgba(59,130,246,.2); border-color:rgba(59,130,246,.4); }
 
-    /* ── Modal credenciais LinkedIn ── */
     .li-cfg-overlay {
       display:none; position:fixed; inset:0; z-index:500;
       background:rgba(0,0,0,.7); backdrop-filter:blur(6px);
@@ -411,7 +396,6 @@
     .console-col { flex:1; min-width:0; }
     .console-col-hd { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.8px; padding:3px 14px; border-bottom:1px solid rgba(255,255,255,.04); display:flex; align-items:center; gap:5px; }
     .console-col-hd.hd-wa { color:#22c55e; }
-    .console-col-hd.hd-li { color:#60a5fa; }
     .console-split .console-col + .console-col { border-left:1px solid rgba(255,255,255,.08); }
 
     ::-webkit-scrollbar { width:4px; height:4px; }
@@ -454,21 +438,9 @@
 
     <div class="ctrl-bar">
       <span class="ctrl-label">Via</span>
-      <div class="seg-ctrl" id="seg-ctrl">
-        <button class="seg-btn on" onclick="setTipo('wa',this)">
-          <i class="fa-brands fa-whatsapp"></i> Internet
-        </button>
-        <button class="seg-btn" onclick="setTipo('li',this)">
-          <i class="fa-brands fa-linkedin"></i> LinkedIn
-        </button>
-        <button class="seg-btn" onclick="setTipo('all',this)">
-          <i class="fa fa-layer-group"></i> Ambos
-        </button>
-      </div>
-      <div class="ctrl-actions">
-        <button class="btn-cfg" onclick="openLiConfig()" title="Credenciais LinkedIn"><i class="fa-brands fa-linkedin"></i> Configurar</button>
-        <button class="btn-stop"  onclick="botStopSel(this)"><i class="fa fa-stop"></i> Parar</button>
-        <button class="btn-start" onclick="botStartSel(this)"><i class="fa fa-play"></i> Iniciar</button>
+      <div class="ctrl-actions" style="margin-left:auto">
+        <button class="btn-stop"  onclick="botStop(this)"><i class="fa fa-stop"></i> Parar</button>
+        <button class="btn-start" onclick="botStart(this)"><i class="fa fa-play"></i> Iniciar</button>
       </div>
     </div>
 
@@ -490,20 +462,7 @@
           <span class="ln ln-ts">$ aguardando início do robô...</span>
         </div>
       </div>
-      <div id="console-dual" style="display:none" class="console-split">
-        <div class="console-col">
-          <div class="console-col-hd hd-wa"><i class="fa-brands fa-whatsapp"></i> WhatsApp</div>
-          <div class="console-body" id="console-out-wa">
-            <span class="ln ln-ts">$ aguardando...</span>
-          </div>
-        </div>
-        <div class="console-col">
-          <div class="console-col-hd hd-li"><i class="fa-brands fa-linkedin"></i> LinkedIn</div>
-          <div class="console-body" id="console-out-li">
-            <span class="ln ln-ts">$ aguardando...</span>
-          </div>
-        </div>
-      </div>
+
     </div>
 
     <div class="kpi-row">
@@ -521,20 +480,6 @@
       </div>
     </div>
 
-    <div class="li-row">
-      <div class="li-box">
-        <div class="li-n" id="li-total">{{ stats.li_total }}</div>
-        <div class="li-l"><i class="fa-brands fa-linkedin"></i>&nbsp;Perfis</div>
-      </div>
-      <div class="li-box">
-        <div class="li-n" id="li-conn">{{ stats.li_conexoes }}</div>
-        <div class="li-l">Conexões</div>
-      </div>
-      <div class="li-box">
-        <div class="li-n" id="li-demos">{{ stats.li_demos }}</div>
-        <div class="li-l">Demo LI</div>
-      </div>
-    </div>
 
     <div class="funnel-row">
       <div class="fstep"><span class="fn" id="f1">{{ stats.total_leads }}</span><span class="ft">Achados</span></div>
@@ -546,7 +491,6 @@
     <div class="tabs-bar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <div style="display:flex;gap:2px;">
         <button class="tab-btn on" onclick="goTab('wa',this)"><i class="fa-brands fa-whatsapp"></i> Leads WA</button>
-        <button class="tab-btn"   onclick="goTab('li',this)"><i class="fa-brands fa-linkedin"></i> LinkedIn</button>
         <button class="tab-btn"   onclick="goTab('log',this)"><i class="fa fa-list-ul"></i> Logs</button>
       </div>
       <div style="margin-left:auto;display:flex;gap:6px;" id="lead-actions">
@@ -558,10 +502,6 @@
       <div id="tab-wa" class="scroll-box">
         <table><thead><tr><th style="width:28px"><input type="checkbox" id="sel-all-wa" onchange="toggleSelectAll(this)"></th><th style="width:36px">#</th><th>Empresa</th><th>Telefone</th><th>Email</th><th>Segmento</th><th>Status</th><th>Pts</th><th>Data</th><th style="width:60px"></th></tr></thead>
         <tbody id="wa-tb"></tbody></table>
-      </div>
-      <div id="tab-li" style="display:none" class="scroll-box">
-        <table><thead><tr><th>Nome</th><th>Cargo</th><th>Empresa</th><th>Status</th><th style="width:60px"></th></tr></thead>
-        <tbody id="li-tb"></tbody></table>
       </div>
       <div id="tab-log" style="display:none" class="scroll-box">
         <ul id="log-ul" style="list-style:none"></ul>
@@ -608,59 +548,6 @@
   </div>
 </div>
 
-<!-- LINKEDIN CHECKPOINT OVERLAY -->
-<div class="qr-overlay" id="li-chk-overlay">
-  <div class="qr-card" style="max-width:900px;width:95vw">
-    <button class="qr-close" onclick="stopChkPolling()" title="Fechar">✕</button>
-    <div class="qr-title" style="color:#f59e0b">&#9888; Verificação LinkedIn</div>
-    <div class="qr-sub">Resolva a verificação diretamente no navegador do bot</div>
-    <!-- noVNC iframe (browser real interativo) -->
-    <div id="vnc-container" style="display:none;margin-top:10px">
-      <iframe id="vnc-iframe" style="width:100%;height:500px;border:1px solid #334155;border-radius:8px;background:#000" allowfullscreen></iframe>
-    </div>
-    <!-- Fallback: screenshot estático -->
-    <div id="chk-fallback" style="margin-top:10px">
-      <div class="qr-img-wrap" style="background:#0f172a">
-        <img id="li-chk-img" src="" alt="LinkedIn Checkpoint"
-             style="width:100%;max-width:860px;height:auto;max-height:480px;object-fit:contain;display:block;border-radius:6px">
-      </div>
-      <p style="color:#94a3b8;font-size:13px;margin-top:8px;text-align:center">Aguardando noVNC conectar...</p>
-    </div>
-    <div class="qr-pulse" style="color:#f59e0b;margin-top:10px">
-      <span class="qr-pulse-dot" style="background:#f59e0b"></span> Aguardando resolução...
-    </div>
-  </div>
-</div>
-
-<!-- LINKEDIN CREDENTIALS MODAL -->
-<div class="li-cfg-overlay" id="li-cfg-overlay" onclick="closeLiConfig(event)">
-  <div class="li-cfg-card">
-    <div class="li-cfg-hd">
-      <i class="fa-brands fa-linkedin" style="color:#3b82f6"></i>
-      Credenciais LinkedIn
-      <button onclick="closeLiConfig()"><i class="fa fa-times"></i></button>
-    </div>
-    <div class="li-cfg-body">
-      <div class="li-cfg-field">
-        <label>E-mail</label>
-        <input type="email" id="li-email" placeholder="seu@email.com" autocomplete="username">
-      </div>
-      <div class="li-cfg-field">
-        <label>Senha</label>
-        <input type="password" id="li-password" placeholder="••••••••" autocomplete="current-password">
-      </div>
-      <div class="li-cfg-hint">
-        <i class="fa fa-lock"></i>
-        Salvo localmente no servidor. Sobrepõe a variável de ambiente LINKEDIN_EMAIL/PASSWORD.
-      </div>
-      <div id="li-cfg-msg" style="display:none;font-size:12px;font-weight:600;padding:8px 10px;border-radius:8px"></div>
-    </div>
-    <div class="li-cfg-footer">
-      <button class="btn-cancel" onclick="closeLiConfig()">Cancelar</button>
-      <button class="btn-save" onclick="saveLiConfig()"><i class="fa fa-check"></i> Salvar</button>
-    </div>
-  </div>
-</div>
 
 <div class="overlay" id="overlay" onclick="closeModal(event)">
   <div class="modal">
@@ -674,37 +561,18 @@
 
 <script>
 const BOT = '{{ bot }}';
-let _tipo = 'wa';
 
 function tick(){ document.getElementById('clock').textContent=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }
 tick(); setInterval(tick,10000);
 
 function goTab(panel,btn){
-  ['wa','li','log'].forEach(t=>{ const el=document.getElementById(`tab-${t}`); if(el) el.style.display=t===panel?'':'none'; });
+  ['wa','log'].forEach(t=>{ const el=document.getElementById(`tab-${t}`); if(el) el.style.display=t===panel?'':'none'; });
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   if(panel==='wa')  loadWA();
-  if(panel==='li')  loadLI();
   if(panel==='log') loadLog();
 }
 
-function setTipo(tipo,btn){
-  _tipo=tipo;
-  document.querySelectorAll('#seg-ctrl .seg-btn').forEach(b=>b.classList.remove('on'));
-  btn.classList.add('on');
-  updateConsoleLayout();
-}
-function updateConsoleLayout(){
-  const single=document.getElementById('console-single');
-  const dual=document.getElementById('console-dual');
-  if(_tipo==='all'){
-    single.style.display='none';
-    dual.style.display='';
-  } else {
-    single.style.display='';
-    dual.style.display='none';
-  }
-}
 
 function statusChip(s,d){
   if(d==='confirmado') return '<span class="chip c-demo">📅 Demo</span>';
@@ -714,12 +582,6 @@ function statusChip(s,d){
   if(s==='contactada') return '<span class="chip c-cont">Contactado</span>';
   return '<span class="chip c-novo">Novo</span>';
 }
-function liChip(s){
-  if(s==='dm_enviada')      return '<span class="chip c-qualif">DM</span>';
-  if(s==='conectado')       return '<span class="chip c-resp">Conectado</span>';
-  if(s==='conexao_enviada') return '<span class="chip c-cont">Conexão</span>';
-  return '<span class="chip c-novo">Encontrado</span>';
-}
 function lbCls(t=''){
   t=t.toLowerCase();
   if(t.includes('erro')||t.includes('error')) return 'lb-error';
@@ -728,7 +590,7 @@ function lbCls(t=''){
   return 'lb-info';
 }
 
-let _waLeads=[],_liLeads=[];
+let _waLeads=[];
 function loadWA(){
   fetch(`/api/${BOT}/leads`).then(r=>r.json()).then(d=>{
     _waLeads=d;
@@ -802,23 +664,6 @@ function saveNewLead(){
     }
   }).catch(()=>{ msg.style.display='block'; msg.style.color='#f87171'; msg.textContent='Erro de conexão'; });
 }
-function loadLI(){
-  fetch(`/api/${BOT}/linkedin`).then(r=>r.json()).then(d=>{
-    _liLeads=d;
-    const tb=document.getElementById('li-tb');
-    if(!d.length){ tb.innerHTML='<tr><td colspan="4"><div class="empty-state"><i class="fa-brands fa-linkedin"></i>LinkedIn não iniciou</div></td></tr>'; return; }
-    tb.innerHTML=d.map(l=>`<tr>
-      <td><a href="${l.url_perfil||'#'}" target="_blank" style="color:var(--text);font-weight:500;text-decoration:none">${l.nome||'—'}</a></td>
-      <td style="color:var(--muted);font-size:11px">${l.cargo||'—'}</td>
-      <td style="color:var(--muted);font-size:11px">${l.empresa||'—'}</td>
-      <td>${liChip(l.status)}</td>
-      <td style="white-space:nowrap">
-        <button onclick="editLI(_liLeads.find(x=>x.id===${l.id}))" class="row-btn" title="Editar"><i class="fa fa-pen" style="font-size:10px"></i></button>
-        <button onclick="delLI(${l.id})" class="row-btn row-btn-del" title="Excluir"><i class="fa fa-trash" style="font-size:10px"></i></button>
-      </td>
-    </tr>`).join('');
-  }).catch(()=>{});
-}
 function loadLog(){
   fetch(`/api/${BOT}/logs`).then(r=>r.json()).then(d=>{
     const ul=document.getElementById('log-ul');
@@ -839,9 +684,7 @@ function refreshStats(){
     document.getElementById('f2').textContent=d.contactadas;
     document.getElementById('f3').textContent=d.responderam;
     document.getElementById('f4').textContent=d.demos;
-    document.getElementById('li-total').textContent=d.li_total??0;
-    document.getElementById('li-conn').textContent=d.li_conexoes??0;
-    document.getElementById('li-demos').textContent=d.li_demos??0;
+
   }).catch(()=>{});
 }
 
@@ -862,14 +705,14 @@ function loadPipe(){
         const dt=l.ultima_msg?new Date(l.ultima_msg).toLocaleDateString('pt-BR'):
                  l.encontrado_em?new Date(l.encontrado_em).toLocaleDateString('pt-BR'):'';
         const resp=l.respostas>0?`<span style="color:#4ade80">✓ ${l.respostas} resp</span>`:'';
-        const icon=l.canal==='linkedin'?'<i class="fa-brands fa-linkedin" style="color:#60a5fa"></i>':'<i class="fa-brands fa-whatsapp" style="color:#22c55e"></i>';
+        const icon='<i class="fa-brands fa-whatsapp" style="color:#22c55e"></i>';
         return `
         <div class="lcard" onclick="openLead(${JSON.stringify(l).replace(/"/g,'&quot;')})">
           <div class="lcard-name">${icon} ${l.nome_fantasia||'—'}</div>
           <div class="lcard-seg">${l.segmento||'—'}${l.empresa?' • '+l.empresa:''}</div>
           ${fone?`<div style="font-size:10px;color:var(--muted);margin-top:2px">📞 ${fone}</div>`:''}
           ${l.email?`<div style="font-size:10px;color:var(--muted)">✉ ${l.email}</div>`:''}
-          ${l.url_perfil?`<div style="font-size:10px;color:var(--muted)">🔗 LinkedIn</div>`:''}
+
           <div class="lcard-msgs">${l.msgs||0} msg${l.msgs!==1?'s':''} ${resp}</div>
           <div class="lcard-foot">
             <span class="lcard-score">★ ${l.score||0}</span>
@@ -889,27 +732,22 @@ function botFetch(canal,action){
     body:JSON.stringify({canal})
   }).then(r=>r.json());
 }
-function botStartSel(btn){
+function botStart(btn){
   btn.disabled=true;
-  updateConsoleLayout();
-  const calls=_tipo==='all'?[botFetch('wa','start'),botFetch('li','start')]:[botFetch(_tipo,'start')];
-  Promise.all(calls).then(()=>{
+  botFetch('wa','start').then(()=>{
     btn.disabled=false;
     loadBotStatus();
     startConsolePolling();
-    if(_tipo!=='li') setTimeout(startQrPolling,4000);
-    if(_tipo!=='wa') setTimeout(startChkPolling,15000);
+    setTimeout(startQrPolling,4000);
   }).catch(()=>{btn.disabled=false;});
 }
-function botStopSel(btn){
+function botStop(btn){
   btn.disabled=true;
-  const calls=_tipo==='all'?[botFetch('wa','stop'),botFetch('li','stop')]:[botFetch(_tipo,'stop')];
-  Promise.all(calls).then(()=>{
+  botFetch('wa','stop').then(()=>{
     btn.disabled=false;
     loadBotStatus();
     stopConsolePolling();
     stopQrPolling();
-    stopChkPolling();
   }).catch(()=>{btn.disabled=false;});
 }
 function loadBotStatus(){
@@ -918,12 +756,10 @@ function loadBotStatus(){
     const txt=document.getElementById('status-txt');
     const startBtn=document.querySelector('.btn-start');
     if(!badge) return;
-    const rodando=d.wa||d.li;
+    const rodando=d.wa;
     if(rodando){
       badge.classList.add('running');
-      if(d.wa&&d.li) txt.textContent='WA + LinkedIn';
-      else if(d.wa)  txt.textContent='Internet ativo';
-      else           txt.textContent='LinkedIn ativo';
+      txt.textContent='Internet ativo';
     } else {
       badge.classList.remove('running');
       txt.textContent='Parado';
@@ -944,17 +780,12 @@ function loadBotStatus(){
 function openLead(l){
   document.getElementById('modal-title').textContent=l.nome_fantasia||'Lead';
   const fmt=v=>v?new Date(v).toLocaleString('pt-BR'):'—';
-  const isLi=l.canal==='linkedin';
-  const canalIcon=isLi?'<i class="fa-brands fa-linkedin" style="color:#60a5fa"></i> LinkedIn':'<i class="fa-brands fa-whatsapp" style="color:#22c55e"></i> WhatsApp';
   document.getElementById('modal-content').innerHTML=`
-    <div class="m-row"><span class="m-lbl">Canal</span><span class="m-val">${canalIcon}</span></div>
-    ${isLi&&l.empresa?`<div class="m-row"><span class="m-lbl">Empresa</span><span class="m-val">${l.empresa}</span></div>`:''}
-    <div class="m-row"><span class="m-lbl">${isLi?'Cargo':'Segmento'}</span><span class="m-val">${l.segmento||'—'}</span></div>
+    <div class="m-row"><span class="m-lbl">Segmento</span><span class="m-val">${l.segmento||'—'}</span></div>
     <div class="m-row"><span class="m-lbl">Localização</span><span class="m-val">${[l.cidade,l.estado].filter(Boolean).join(', ')||'—'}</span></div>
-    ${!isLi?`<div class="m-row"><span class="m-lbl">Telefone</span><span class="m-val">${l.telefone||'—'}</span></div>`:''}
-    ${!isLi?`<div class="m-row"><span class="m-lbl">WhatsApp</span><span class="m-val">${l.whatsapp||'—'}</span></div>`:''}
+    <div class="m-row"><span class="m-lbl">Telefone</span><span class="m-val">${l.telefone||'—'}</span></div>
+    <div class="m-row"><span class="m-lbl">WhatsApp</span><span class="m-val">${l.whatsapp||'—'}</span></div>
     <div class="m-row"><span class="m-lbl">Email</span><span class="m-val">${l.email||'—'}</span></div>
-    ${isLi&&l.url_perfil?`<div class="m-row"><span class="m-lbl">Perfil</span><span class="m-val"><a href="${l.url_perfil}" target="_blank" style="color:#60a5fa">Abrir LinkedIn ↗</a></span></div>`:''}
     <div class="m-row"><span class="m-lbl">Score</span><span class="m-val">★ ${l.score||0}</span></div>
     <div class="m-row"><span class="m-lbl">Status</span>${statusChip(l.status,l.demo_status)}</div>
     <div class="m-row"><span class="m-lbl">Mensagens</span><span class="m-val">${l.msgs||0}</span></div>
@@ -1005,66 +836,6 @@ function pollQr(){
     }).catch(()=>{});
 }
 
-// ── LinkedIn Checkpoint ───────────────────────────────────────────────────────
-let _chkTimer=null, _chkSeen=false;
-
-function startChkPolling(){
-  if(_chkTimer) return;
-  _chkSeen=false;
-  _chkTimer=setInterval(pollChk,2000);
-  pollChk();
-}
-function stopChkPolling(){
-  if(_chkTimer){ clearInterval(_chkTimer); _chkTimer=null; }
-  _chkSeen=false;
-  _vncLoaded=false;
-  document.getElementById('li-chk-overlay').classList.remove('open');
-  // Limpa iframe noVNC
-  const vf=document.getElementById('vnc-iframe');
-  if(vf) vf.src='';
-  const vc=document.getElementById('vnc-container');
-  if(vc) vc.style.display='none';
-  const cf=document.getElementById('chk-fallback');
-  if(cf) cf.style.display='block';
-}
-let _vncLoaded=false;
-function pollChk(){
-  fetch(`/api/${BOT}/li-checkpoint?t=${Date.now()}`)
-    .then(r=>{
-      if(r.ok){
-        r.blob().then(b=>{
-          const url=URL.createObjectURL(b);
-          const img=document.getElementById('li-chk-img');
-          if(img._prevUrl) URL.revokeObjectURL(img._prevUrl);
-          img._prevUrl=url;
-          img.src=url;
-          _chkSeen=true;
-          document.getElementById('li-chk-overlay').classList.add('open');
-
-          // Tenta carregar noVNC (browser interativo real)
-          if(!_vncLoaded){
-            fetch(`/api/${BOT}/li-vnc-status`)
-              .then(r2=>r2.json())
-              .then(d=>{
-                if(d.vnc){
-                  _vncLoaded=true;
-                  const vncUrl=location.origin+'/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true&reconnect_delay=2000&path=vnc/websockify';
-                  document.getElementById('vnc-iframe').src=vncUrl;
-                  document.getElementById('vnc-container').style.display='block';
-                  document.getElementById('chk-fallback').style.display='none';
-                }
-              }).catch(()=>{});
-          }
-        });
-      } else {
-        if(_chkSeen){
-          _vncLoaded=false;
-          stopChkPolling();
-          loadBotStatus();
-        }
-      }
-    }).catch(()=>{});
-}
 
 // ── Console ──────────────────────────────────────────────────────────────────
 let _conMinimized=false, _conTimer=null;
@@ -1095,17 +866,8 @@ function renderTo(el,lines){
 }
 
 function pollConsole(){
-  if(_tipo==='all'){
-    // Split mode: fetch both
-    fetch(`/api/${BOT}/console?canal=wa&n=200`)
-      .then(r=>r.json()).then(d=>{ renderTo(document.getElementById('console-out-wa'),d.lines||[]); }).catch(()=>{});
-    fetch(`/api/${BOT}/console?canal=li&n=200`)
-      .then(r=>r.json()).then(d=>{ renderTo(document.getElementById('console-out-li'),d.lines||[]); }).catch(()=>{});
-  } else {
-    const canal=_tipo==='li'?'li':'wa';
-    fetch(`/api/${BOT}/console?canal=${canal}&n=200`)
-      .then(r=>r.json()).then(d=>{ renderTo(document.getElementById('console-out'),d.lines||[]); }).catch(()=>{});
-  }
+  fetch(`/api/${BOT}/console?canal=wa&n=200`)
+    .then(r=>r.json()).then(d=>{ renderTo(document.getElementById('console-out'),d.lines||[]); }).catch(()=>{});
 }
 
 function startConsolePolling(){
@@ -1122,19 +884,10 @@ function stopConsolePolling(){
 }
 function clearConsole(){
   document.getElementById('console-out').innerHTML='';
-  document.getElementById('console-out-wa').innerHTML='';
-  document.getElementById('console-out-li').innerHTML='';
 }
 function copyConsole(btn){
-  let text='';
-  if(_tipo==='all'){
-    const wa=Array.from(document.getElementById('console-out-wa').querySelectorAll('.ln')).map(s=>s.textContent).join('\n');
-    const li=Array.from(document.getElementById('console-out-li').querySelectorAll('.ln')).map(s=>s.textContent).join('\n');
-    text='── WhatsApp ──\n'+wa+'\n\n── LinkedIn ──\n'+li;
-  } else {
-    const out=document.getElementById('console-out');
-    text=Array.from(out.querySelectorAll('.ln')).map(s=>s.textContent).join('\n');
-  }
+  const out=document.getElementById('console-out');
+  let text=Array.from(out.querySelectorAll('.ln')).map(s=>s.textContent).join('\n');
   navigator.clipboard.writeText(text).then(()=>{
     const orig=btn.innerHTML;
     btn.innerHTML='<i class="fa fa-check"></i> Copiado!';
@@ -1155,8 +908,7 @@ function toggleConsole(){
   const single=document.getElementById('console-single');
   const dual=document.getElementById('console-dual');
   _conMinimized=!_conMinimized;
-  if(_tipo==='all'){ dual.style.display=_conMinimized?'none':''; }
-  else { single.style.display=_conMinimized?'none':''; }
+  single.style.display=_conMinimized?'none':'';
   event.target.textContent=_conMinimized?'Expandir':'Minimizar';
 }
 
@@ -1174,22 +926,9 @@ pollConsole();
 fetch(`/api/${BOT}/status`).then(r=>r.json()).then(d=>{
   const badge=document.getElementById('status-badge');
   const txt=document.getElementById('status-txt');
-  if(d.wa||d.li){
+  if(d.wa){
     badge.classList.add('running');
-    if(d.wa&&d.li){
-      txt.textContent='WA + LinkedIn';
-      _tipo='all';
-      const btns=document.querySelectorAll('#seg-ctrl .seg-btn');
-      btns.forEach(b=>b.classList.remove('on'));
-      btns[2].classList.add('on');
-      updateConsoleLayout();
-    } else if(d.wa){
-      txt.textContent='Internet ativo';
-      _tipo='wa';
-    } else {
-      txt.textContent='LinkedIn ativo';
-      _tipo='li';
-    }
+    txt.textContent='Internet ativo';
     startConsolePolling();
   }
 }).catch(()=>{});
@@ -1197,51 +936,6 @@ fetch(`/api/${BOT}/status`).then(r=>r.json()).then(d=>{
 setInterval(refreshStats,30000);
 setInterval(loadPipe,60000);
 setInterval(loadBotStatus,10000);
-
-// ── LinkedIn credentials modal ────────────────────────────────────────────────
-function openLiConfig(){
-  document.getElementById('li-cfg-overlay').classList.add('open');
-  document.getElementById('li-cfg-msg').style.display='none';
-}
-function closeLiConfig(e){
-  if(!e||e.target===document.getElementById('li-cfg-overlay'))
-    document.getElementById('li-cfg-overlay').classList.remove('open');
-}
-function saveLiConfig(){
-  const email=document.getElementById('li-email').value.trim();
-  const pwd=document.getElementById('li-password').value;
-  const msg=document.getElementById('li-cfg-msg');
-  if(!email||!pwd){
-    msg.style.display='block';
-    msg.style.background='rgba(248,113,113,.12)';
-    msg.style.color='#f87171';
-    msg.textContent='Preencha e-mail e senha.';
-    return;
-  }
-  fetch(`/api/${BOT}/linkedin-config`,{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({email,password:pwd})
-  }).then(r=>r.json()).then(d=>{
-    if(d.ok){
-      msg.style.display='block';
-      msg.style.background='rgba(74,222,128,.1)';
-      msg.style.color='#4ade80';
-      msg.textContent='✓ Credenciais salvas! Reinicie o bot LinkedIn para aplicar.';
-      setTimeout(()=>{ document.getElementById('li-cfg-overlay').classList.remove('open'); },2000);
-    } else {
-      msg.style.display='block';
-      msg.style.background='rgba(248,113,113,.12)';
-      msg.style.color='#f87171';
-      msg.textContent='Erro: '+(d.error||'falha ao salvar');
-    }
-  }).catch(()=>{
-    msg.style.display='block';
-    msg.style.background='rgba(248,113,113,.12)';
-    msg.style.color='#f87171';
-    msg.textContent='Erro de conexão ao servidor.';
-  });
-}
 
 
 // == CRUD: Edit / Delete ==
@@ -1309,52 +1003,6 @@ function delWA(id){
   if(!confirm('Excluir este lead e todas suas interacoes?')) return;
   fetch('/api/'+BOT+'/lead/'+id,{method:'DELETE'}).then(function(r){return r.json()}).then(function(d){
     if(d.ok){ loadWA(); refreshStats(); loadPipe(); }
-    else alert('Erro: '+(d.error||'falha'));
-  }).catch(function(){alert('Erro de conexao')});
-}
-function editLI(l){
-  if(!l) return;
-  var st=['encontrado','conexao_enviada','conectado','dm_enviada','respondeu'];
-  document.getElementById('edit-title').textContent='Editar: '+(l.nome||'Lead');
-  document.getElementById('edit-body').innerHTML=
-    _ef('Nome','edli-nome',l.nome)+
-    _ef('Cargo','edli-cargo',l.cargo)+
-    _ef('Empresa','edli-empresa',l.empresa)+
-    _ef('Status','edli-status',l.status,null,st)+
-    _ef('Email','edli-email',l.email,'email')+
-    _ef('Telefone','edli-tel',l.telefone)+
-    '<div id="ed-msg" style="display:none;font-size:12px;padding:6px 10px;border-radius:6px;margin-top:4px"></div>';
-  document.getElementById('edit-save-btn').onclick=function(){saveLI(l.id)};
-  document.getElementById('edit-overlay').classList.add('open');
-}
-function saveLI(id){
-  var body={
-    nome:document.getElementById('edli-nome').value.trim(),
-    cargo:document.getElementById('edli-cargo').value.trim()||null,
-    empresa:document.getElementById('edli-empresa').value.trim()||null,
-    status:document.getElementById('edli-status').value,
-    email:document.getElementById('edli-email').value.trim()||null,
-    telefone:document.getElementById('edli-tel').value.trim()||null
-  };
-  var msg=document.getElementById('ed-msg');
-  fetch('/api/'+BOT+'/linkedin/'+id,{
-    method:'PUT',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify(body)
-  }).then(function(r){return r.json()}).then(function(d){
-    if(d.ok){
-      msg.style.display='block';msg.style.color='#4ade80';msg.style.background='rgba(74,222,128,.1)';
-      msg.textContent='Salvo!';
-      setTimeout(function(){ closeEdit(); loadLI(); refreshStats(); loadPipe(); },800);
-    } else {
-      msg.style.display='block';msg.style.color='#f87171';msg.style.background='rgba(248,113,113,.1)';
-      msg.textContent='Erro: '+(d.error||'falha');
-    }
-  }).catch(function(){msg.style.display='block';msg.style.color='#f87171';msg.textContent='Erro de conexao';});
-}
-function delLI(id){
-  if(!confirm('Excluir este lead LinkedIn?')) return;
-  fetch('/api/'+BOT+'/linkedin/'+id,{method:'DELETE'}).then(function(r){return r.json()}).then(function(d){
-    if(d.ok){ loadLI(); refreshStats(); loadPipe(); }
     else alert('Erro: '+(d.error||'falha'));
   }).catch(function(){alert('Erro de conexao')});
 }

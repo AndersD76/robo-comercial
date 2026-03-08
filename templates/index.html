@@ -393,7 +393,7 @@
       <div class="bot-hd">
         <div>
           <h2>Prisma <span style="font-size:13px;font-weight:500;color:var(--sub)">PrismaBiz</span></h2>
-          <p>Gestão da Qualidade — WhatsApp + LinkedIn</p>
+          <p>Gestão da Qualidade — WhatsApp + </p>
         </div>
         <div class="status-badge" id="p-status-badge">
           <div class="sdot"></div>
@@ -408,7 +408,7 @@
             <i class="fa-brands fa-whatsapp"></i> Internet
           </button>
           <button class="seg-btn" onclick="setTipo('prisma','li',this)">
-            <i class="fa-brands fa-linkedin"></i> LinkedIn
+            <i class="fa-brands fa-linkedin"></i> 
           </button>
           <button class="seg-btn" onclick="setTipo('prisma','all',this)">
             <i class="fa fa-layer-group"></i> Ambos
@@ -463,7 +463,7 @@
 
       <div class="tabs-bar">
         <button class="tab-btn on" onclick="goTab('prisma','wa',this)"><i class="fa-brands fa-whatsapp"></i> Leads</button>
-        <button class="tab-btn"   onclick="goTab('prisma','li',this)"><i class="fa-brands fa-linkedin"></i> LinkedIn</button>
+        <button class="tab-btn"   onclick="goTab('prisma','li',this)"><i class="fa-brands fa-linkedin"></i> </button>
         <button class="tab-btn"   onclick="goTab('prisma','log',this)"><i class="fa fa-list-ul"></i> Logs</button>
       </div>
       <div class="tab-pane">
@@ -486,7 +486,7 @@
       <div class="bot-hd">
         <div>
           <h2>Pili <span style="font-size:13px;font-weight:500;color:var(--sub)">Equipamentos</span></h2>
-          <p>Tombadores &amp; Coletores de Grãos — WhatsApp + LinkedIn</p>
+          <p>Tombadores &amp; Coletores de Grãos — WhatsApp + </p>
         </div>
         <div class="status-badge" id="l-status-badge">
           <div class="sdot"></div>
@@ -501,7 +501,7 @@
             <i class="fa-brands fa-whatsapp"></i> Internet
           </button>
           <button class="seg-btn" onclick="setTipo('pili','li',this)">
-            <i class="fa-brands fa-linkedin"></i> LinkedIn
+            <i class="fa-brands fa-linkedin"></i> 
           </button>
           <button class="seg-btn" onclick="setTipo('pili','all',this)">
             <i class="fa fa-layer-group"></i> Ambos
@@ -556,7 +556,7 @@
 
       <div class="tabs-bar">
         <button class="tab-btn on" onclick="goTab('pili','wa',this)"><i class="fa-brands fa-whatsapp"></i> Leads</button>
-        <button class="tab-btn"   onclick="goTab('pili','li',this)"><i class="fa-brands fa-linkedin"></i> LinkedIn</button>
+        <button class="tab-btn"   onclick="goTab('pili','li',this)"><i class="fa-brands fa-linkedin"></i> </button>
         <button class="tab-btn"   onclick="goTab('pili','log',this)"><i class="fa fa-list-ul"></i> Logs</button>
       </div>
       <div class="tab-pane">
@@ -676,12 +676,12 @@ function loadWA(bot){
   }).catch(()=>{});
 }
 
-// Load LinkedIn leads
+// Load  leads
 function loadLI(bot){
   fetch(`/api/${bot}/linkedin`).then(r=>r.json()).then(d=>{
     const tb=document.getElementById(`${bot}-li-tb`);
     if(!d.length){
-      tb.innerHTML='<tr><td colspan="4"><div class="empty-state"><i class="fa-brands fa-linkedin"></i>LinkedIn não iniciou</div></td></tr>';
+      tb.innerHTML='<tr><td colspan="4"><div class="empty-state"><i class="fa-brands fa-linkedin"></i> não iniciou</div></td></tr>';
       return;
     }
     tb.innerHTML=d.map(l=>`<tr>
@@ -850,9 +850,9 @@ function loadBotStatus(bot){
     if(!badge) return;
     if(d.wa || d.li){
       badge.classList.add('running');
-      if(d.wa && d.li) txt.textContent='WA + LinkedIn';
+      if(d.wa && d.li) txt.textContent='WA + ';
       else if(d.wa)    txt.textContent='Internet ativo';
-      else             txt.textContent='LinkedIn ativo';
+      else             txt.textContent=' ativo';
     } else {
       badge.classList.remove('running');
       txt.textContent='Parado';
