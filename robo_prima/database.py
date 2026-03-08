@@ -335,6 +335,38 @@ def get_empresa_por_whatsapp(numero):
         conn.close()
 
 
+
+def get_decisor_empresa(empresa_id):
+    """Retorna o contato decisor (decisor=1) da empresa, se existir."""
+    if not empresa_id:
+        return None
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """SELECT * FROM contatos
+           WHERE empresa_id = %s AND decisor = 1
+           ORDER BY id DESC LIMIT 1""",
+        (empresa_id,)
+    )
+    row = c.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def decisor_ja_existe(empresa_id, nome):
+    """Verifica se ja existe contato decisor com esse nome."""
+    if not empresa_id or not nome:
+        return False
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT id FROM contatos WHERE empresa_id = %s AND nome = %s AND decisor = 1",
+        (empresa_id, nome)
+    )
+    row = c.fetchone()
+    conn.close()
+    return row is not None
+
 # =============================================================================
 # CONTATOS
 # =============================================================================

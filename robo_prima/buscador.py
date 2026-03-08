@@ -13,7 +13,9 @@ import httpx
 
 from config import (
     TERMOS_BUSCA, INTERVALO_BUSCA_MIN, INTERVALO_BUSCA_MAX,
-    PALAVRAS_POSITIVAS, PALAVRAS_NEGATIVAS, ESTADOS_PRIORIDADE
+    PALAVRAS_POSITIVAS, PALAVRAS_NEGATIVAS, ESTADOS_PRIORIDADE,
+    APOLLO_API_KEY, APOLLO_HABILITADO, APOLLO_MAX_BUSCAS_DIA, APOLLO_FILTROS,
+    HUNTER_API_KEY, HUNTER_HABILITADO,
 )
 
 
@@ -589,6 +591,140 @@ class Buscador:
         except Exception as e:
             print(f'  [ERRO] Econodata: {e}')
         return resultados
+
+
+    # =========================================================================
+    # APOLLO.IO — decisores de compra por cargo/titulo
+    # =========================================================================
+
+    async def buscar_apollo(self, max_resultados=25):
+        """Busca decisores via Apollo.io People Search API.
+        Retorna leads com decisor_nome, decisor_cargo, decisor_email, decisor_telefone.
+        """
+        if not APOLLO_HABILITADO:
+            return []
+
+        resultados = []
+        titulos = APOLLO_FILTROS.get('titulos', [])
+        if not titulos:
+            return []
+
+        titulos_busca = random.sample(titulos, min(4, len(titulos)))
+        por_titulo = max(1, max_resultados // len(titulos_busca))
+
+        for titulo in titulos_busca:
+            try:
+                payload = {
+                    'api_key': APOLLO_API_KEY,
+                    'q_person_title': titulo,
+                    'person_locations': APOLLO_FILTROS.get('localizacao', ['Brazil']),
+                    'q_keywords': ' '.join(
+                        APOLLO_FILTROS.get('palavras_chave', [])
+                    ),
+                    'page': 1,
+                    'per_page': por_titulo,
+                    'prospected_by_current_team': 'no',
+                }
+                async with httpx.AsyncClient(
+                    headers={
+                        'Content-Type': 'application/json',
+                        'Cache-Control': 'no-cache',
+                    },
+                    timeout=20.0,
+                    follow_redirects=True,
+                ) as client:
+                    resp = await client.post(
+                        'https://api.apollo.io/v1/mixed_people/search',
+                        json=payload,
+                    )
+                if resp.status_code != 200:
+                    print(f'  [Apollo] HTTP {resp.status_code} para "{titulo}"')
+                    continue
+                data = resp.json()
+
+                for p in (data.get('people', []) or []):
+                    if len(resultados) >= max_resultados:
+                        break
+
+                    nome = (p.get('name', '') or
+                            f"{p.get('first_name', '')} {p.get('last_name', '')}".strip())
+                    cargo = p.get('title', '') or p.get('headline', '')
+                    email = p.get('email', '') or ''
+                    org = p.get('organization') or {}
+                    empresa_nome = (p.get('organization_name', '') or
+                                    org.get('name', '') or '')
+                    website = (p.get('website_url', '') or
+                               org.get('website_url', '') or '')
+
+                    # Telefone — Apollo retorna com planos pagos
+                    telefone = None
+                    for ph in (p.get('phone_numbers', []) or []):
+                        raw = ph.get('raw_number', '') or ph.get('sanitized_number', '')
+                        v = self.validar_telefone(raw)
+                        if v:
+                            telefone = v
+                            break
+
+                    if not nome or not empresa_nome:
+                        continue
+
+                    dominio = urlparse(website).netloc.lower() if website else ''
+                    resultados.append({
+                        'url': website or '',
+                        'dominio': dominio,
+                        'titulo': empresa_nome,
+                        'snippet': f'{nome} — {cargo}',
+                        'telefones': [telefone] if telefone else [],
+                        'fonte': 'apollo',
+                        'decisor_nome': nome,
+                        'decisor_cargo': cargo,
+                        'decisor_email': email if (email and '@' in email) else None,
+                        'decisor_telefone': telefone,
+                    })
+
+                await asyncio.sleep(random.uniform(1.0, 2.0))
+
+            except Exception as e:
+                print(f'  [ERRO] Apollo "{titulo}": {e}')
+
+        if resultados:
+            print(f'  Apollo: {len(resultados)} decisores encontrados')
+        return resultados
+
+    # =========================================================================
+    # HUNTER.IO — emails de decisores por dominio
+    # =========================================================================
+
+    async def buscar_hunter_email(self, dominio: str):
+        """Retorna lista de dicts {nome, cargo, email} para o dominio via Hunter.io."""
+        if not HUNTER_HABILITADO or not dominio:
+            return []
+        try:
+            d = re.sub(r'^www\.', '', dominio.lower().strip())
+            url = (
+                f'https://api.hunter.io/v2/domain-search'
+                f'?domain={d}&api_key={HUNTER_API_KEY}&limit=5&type=professional'
+            )
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(url)
+                if resp.status_code != 200:
+                    return []
+                data = resp.json().get('data', {}) or {}
+
+            contatos = []
+            for em in (data.get('emails', []) or []):
+                email = em.get('value', '')
+                if not email or '@' not in email:
+                    continue
+                nome = ' '.join(
+                    p for p in [em.get('first_name', ''), em.get('last_name', '')] if p
+                ).strip()
+                cargo = em.get('position', '')
+                contatos.append({'nome': nome, 'cargo': cargo, 'email': email})
+            return contatos
+        except Exception as e:
+            print(f'  [ERRO] Hunter {dominio}: {e}')
+            return []
 
     # =========================================================================
     # BUSCA PRINCIPAL

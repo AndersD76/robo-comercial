@@ -46,6 +46,13 @@ APOLLO_FILTROS = {
     ],
 }
 
+
+# =============================================================================
+# HUNTER.IO (busca emails de decisores por dominio)
+# =============================================================================
+HUNTER_API_KEY = os.environ.get('HUNTER_API_KEY', '')
+HUNTER_HABILITADO = bool(HUNTER_API_KEY)
+
 # Link do Google Calendar Appointment Scheduling
 DEMO_CAL_LINK = os.environ.get(
     'DEMO_CAL_LINK',

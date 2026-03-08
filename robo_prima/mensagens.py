@@ -44,17 +44,25 @@ class GeradorMensagens:
 
         # Fallback: template com ambos os links
         template = random.choice(MENSAGENS['inicial'])
+        decisor = lead.get('decisor_nome', '')
+        if decisor:
+            saudacao = f'Olá, {decisor.split()[0]}!'
+            msg = template.format(segmento=segmento, cal_link=DEMO_CAL_LINK)
+            return msg.replace('Olá!', saudacao).replace('Oi!', saudacao)
         return template.format(segmento=segmento, cal_link=DEMO_CAL_LINK)
 
     def _gerar_inicial_ia(self, lead, segmento):
         """Gera mensagem inicial usando Claude — sempre inclui ambos os links"""
         try:
+            decisor = lead.get('decisor_nome', '')
+            decisor_cargo = lead.get('decisor_cargo', '')
             info = (
                 f"Empresa: {lead.get('nome_fantasia', 'N/A')}\n"
                 f"Segmento: {lead.get('segmento', segmento)}\n"
                 f"Porte: {lead.get('porte', 'N/A')}\n"
                 f"Cidade: {lead.get('cidade', 'N/A')}, "
                 f"{lead.get('estado', 'N/A')}\n"
+                + (f"Decisor: {decisor} ({decisor_cargo})\n" if decisor else '')
             )
 
             response = self.ai_client.messages.create(
@@ -70,8 +78,8 @@ SOBRE O PRISMABIZ:
 
 REGRAS DA MENSAGEM:
 1. Máximo 6 linhas (WhatsApp é rápido)
-2. Comece com "Olá!" ou "Oi!"
-3. Mencione o segmento da empresa
+2. Se tiver nome do decisor, comece com "Olá, [primeiro nome]!" — caso contrário "Olá!"
+3. Mencione o segmento ou cargo do decisor
 4. OBRIGATÓRIO: inclua o link de cadastro (prismabiz.com.br/cadastro)
 5. OBRIGATÓRIO: inclua o link de agendamento ({DEMO_CAL_LINK})
 6. Termine com pergunta ou convite para demo

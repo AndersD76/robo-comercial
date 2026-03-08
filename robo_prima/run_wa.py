@@ -21,7 +21,8 @@ from database import (
     get_empresas_contactadas, get_estagio_conversa,
     marcar_demo_proposto, marcar_demo_confirmado,
     get_empresa_por_whatsapp, salvar_empresa, telefone_existe,
-    get_empresas_para_followup,
+    get_empresas_para_followup, salvar_contato, get_decisor_empresa,
+    decisor_ja_existe,
 )
 from whatsapp import WhatsAppBot
 from mensagens import GeradorMensagens
@@ -32,6 +33,7 @@ from config import (
     SCORE_CNAE_INDUSTRIAL, SCORE_PORTE_MEDIO_GRANDE,
     CNPJ_API_URL, CNPJ_API_DELAY,
     FOLLOWUP1_DIAS, FOLLOWUP2_DIAS,
+    APOLLO_HABILITADO,
 )
 
 _BRT = timezone(timedelta(hours=-3))
@@ -306,6 +308,13 @@ def _consultar_cnpj_sync(cnpj: str) -> dict | None:
         tel = _valida_telefone(d.get('telefone', ''))
         logr = d.get('logradouro', '')
         num = d.get('numero', '')
+        # QSA: socios/socias = decisores em PMEs
+        socios = []
+        for s in (d.get('qsa', []) or []):
+            nome_s = s.get('nome', '') or s.get('nome_socio', '')
+            qual_s = s.get('qual', '') or s.get('qualificacao_socio', '')
+            if nome_s:
+                socios.append({'nome': nome_s, 'cargo': qual_s})
         return {
             'razao_social': d.get('nome', ''),
             'nome_fantasia': d.get('fantasia') or d.get('nome', ''),
@@ -318,6 +327,7 @@ def _consultar_cnpj_sync(cnpj: str) -> dict | None:
             'telefone': tel,
             'whatsapp': _tel_para_wa(tel) if tel else None,
             'email': (d.get('email') or '').lower() or None,
+            'socios': socios,
         }
     except Exception:
         return None
@@ -348,6 +358,38 @@ async def ciclo_busca(buscador_ext=None):
             f"[WA/Prisma {_ts()}] ℹ Prospecção: '{termo}'",
             flush=True
         )
+
+        # === Apollo.io: decisores diretos (executado 1x a cada 3 ciclos) ===
+        if APOLLO_HABILITADO:
+            try:
+                apollo_leads = await buscador.buscar_apollo(max_resultados=20)
+                for ar in apollo_leads:
+                    empresa_nome = ar.get('titulo', '')
+                    website = ar.get('url', '')
+                    if not empresa_nome:
+                        continue
+                    lead_ap = {
+                        'nome_fantasia': empresa_nome[:100],
+                        'website': website,
+                        'whatsapp': ar.get('decisor_telefone') and _tel_para_wa(ar['decisor_telefone']),
+                        'telefone': ar.get('decisor_telefone'),
+                        'email': ar.get('decisor_email'),
+                        'fonte': 'apollo',
+                        'score': 60,
+                    }
+                    numero_ap = lead_ap.get('whatsapp') or lead_ap.get('telefone')
+                    if numero_ap and not telefone_existe(numero_ap):
+                        empresa_id_ap = salvar_empresa(lead_ap)
+                        if empresa_id_ap:
+                            _salvar_decisor(
+                                empresa_id_ap,
+                                ar.get('decisor_nome', ''),
+                                ar.get('decisor_cargo', ''),
+                                ar.get('decisor_email'),
+                                ar.get('decisor_telefone'),
+                            )
+            except Exception as e:
+                print(f'[WA/Prisma {_ts()}] ⚠ Apollo: {e}', flush=True)
 
         resultados = await buscador.buscar_leads(termo, max_resultados=8)
         print(
@@ -428,6 +470,9 @@ async def ciclo_busca(buscador_ext=None):
                             lead['nome_fantasia'] = dados_rf.get(
                                 'nome_fantasia', ''
                             )
+                        # Socios QSA = decisores em PMEs
+                        if dados_rf.get('socios'):
+                            lead['_socios'] = dados_rf['socios']
                 except Exception as e:
                     print(
                         f"  [DBG] erro CNPJ {lead['cnpj']}: "
@@ -455,7 +500,7 @@ async def ciclo_busca(buscador_ext=None):
             lead['score'] = _calcular_score(lead)
 
             try:
-                salvar_empresa(lead)
+                empresa_id = salvar_empresa(lead)
                 salvos += 1
                 tipo = 'WA' if lead.get('whatsapp') else 'TEL'
                 nf = lead['nome_fantasia'][:45]
@@ -464,6 +509,29 @@ async def ciclo_busca(buscador_ext=None):
                     f"score={lead['score']} | {nf}",
                     flush=True
                 )
+
+                # Salva decisor se disponivel
+                if empresa_id:
+                    # Fonte Apollo: decisor direto
+                    if r.get('decisor_nome'):
+                        _salvar_decisor(empresa_id, r.get('decisor_nome'),
+                                        r.get('decisor_cargo', ''),
+                                        r.get('decisor_email'),
+                                        r.get('decisor_telefone'))
+                    # Fonte ReceitaWS: socios QSA
+                    for socio in lead.get('_socios', []):
+                        _salvar_decisor(empresa_id, socio['nome'],
+                                        socio.get('cargo', ''), None, None)
+                    # Hunter.io: emails com cargo
+                    if lead.get('website') and empresa_id:
+                        dominio = lead.get('website', '').replace('https://', '').replace('http://', '').split('/')[0]
+                        try:
+                            hunter = await buscador.buscar_hunter_email(dominio)
+                            for h in hunter:
+                                _salvar_decisor(empresa_id, h.get('nome', ''),
+                                                h.get('cargo', ''), h.get('email'), None)
+                        except Exception:
+                            pass
             except Exception as e:
                 print(
                     f"[WA/Prisma {_ts()}] ✗ Erro salvando "
@@ -522,6 +590,11 @@ async def ciclo_envio(
             continue
 
         nome = lead.get('nome_fantasia', 'empresa')
+        # Injeta decisor no lead para personalizar mensagem
+        decisor = get_decisor_empresa(lead.get('id'))
+        if decisor:
+            lead['decisor_nome'] = decisor.get('nome', '')
+            lead['decisor_cargo'] = decisor.get('cargo', '')
         mensagem = gerador.gerar_inicial(lead)
 
         seg = lead.get('segmento', '')
