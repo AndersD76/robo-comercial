@@ -642,16 +642,30 @@ function getSelectedIds(){
 function enviarEmailSel(){
   const ids=getSelectedIds();
   if(!ids.length){ alert('Selecione ao menos 1 lead com checkbox'); return; }
-  const comEmail=Array.from(document.querySelectorAll('.lead-chk:checked')).filter(c=>c.dataset.email).length;
-  if(!comEmail){ alert('Nenhum lead selecionado tem email'); return; }
-  if(!confirm(`Enviar email para ${comEmail} lead(s) com email?`)) return;
+  const chks=Array.from(document.querySelectorAll('.lead-chk:checked'));
+  const comEmail=chks.filter(c=>c.dataset.email&&c.dataset.email.includes('@')).length;
+  if(!comEmail){ alert('Nenhum lead selecionado tem email válido'); return; }
+  if(!confirm(`Enviar email para ${comEmail} lead(s) com email?\n\n(${ids.length} selecionados, ${ids.length-comEmail} sem email serão ignorados)`)) return;
+  // Feedback visual
+  const btn=document.querySelector('[onclick="enviarEmailSel()"]');
+  const oldHtml=btn.innerHTML;
+  btn.innerHTML='<i class="fa fa-spinner fa-spin"></i> Enviando...';
+  btn.disabled=true;
   fetch(`/api/${BOT}/send-emails`,{
     method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({ids})
   }).then(r=>r.json()).then(d=>{
-    if(d.ok) alert(`✓ ${d.enviados} email(s) enviado(s), ${d.erros} erro(s)`);
-    else alert('Erro: '+(d.error||'falha'));
-  }).catch(()=>alert('Erro de conexão'));
+    btn.innerHTML=oldHtml; btn.disabled=false;
+    if(d.ok){
+      alert(`✓ ${d.enviados} email(s) enviado(s)${d.erros?', '+d.erros+' erro(s)':''}`);
+      loadWA(); // recarrega para mostrar tags de email
+    } else {
+      alert('Erro: '+(d.error||'falha no envio'));
+    }
+  }).catch(e=>{
+    btn.innerHTML=oldHtml; btn.disabled=false;
+    alert('Erro de conexão: '+e.message);
+  });
 }
 function openAddLead(){
   document.getElementById('add-lead-overlay').classList.add('open');
