@@ -635,10 +635,11 @@ class Buscador:
                         json=payload,
                     )
                 if resp.status_code == 403:
-                    print('  [Apollo] Plano gratuito não suporta busca de pessoas — configure APOLLO_API_KEY com plano pago para ativar.')
+                    print(f'  [Apollo] HTTP 403 para "{titulo}": {resp.text[:300]}')
+                    print('  [Apollo] Verifique se a API key está correta e o plano pago está ativo.')
                     return []
                 if resp.status_code != 200:
-                    print(f'  [Apollo] HTTP {resp.status_code} para "{titulo}": {resp.text[:200]}')
+                    print(f'  [Apollo] HTTP {resp.status_code} para "{titulo}": {resp.text[:300]}')
                     continue
                 data = resp.json()
 

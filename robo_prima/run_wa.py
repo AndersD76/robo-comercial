@@ -625,10 +625,12 @@ async def ciclo_envio(
             lead['decisor_cargo'] = decisor.get('cargo', '')
         mensagem = gerador.gerar_inicial(lead)
 
-        seg = lead.get('segmento', '')
+        seg = lead.get('segmento') or ''
+        decisor_log = lead.get('decisor_nome', '')
+        decisor_info = f' | decisor: {decisor_log.split()[0]}' if decisor_log else ''
         print(
             f"[WA/Prisma {_ts()}] ℹ → {nome[:40]} "
-            f"(score {lead.get('score', 0)} | {seg})",
+            f"(score {lead.get('score', 0)} | {seg or 'sem segmento'}{decisor_info})",
             flush=True
         )
         try:
