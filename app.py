@@ -130,7 +130,8 @@ def get_leads(schema: str, limite: int = 500) -> list:
         c.execute(
             """SELECT id, nome_fantasia, whatsapp, telefone, email, score,
                       status, segmento, demo_status, cidade, estado,
-                      encontrado_em, cnpj, razao_social, website, linkedin, instagram, fonte, porte
+                      encontrado_em, cnpj, razao_social, website, linkedin, instagram, fonte, porte,
+                      email_enviado
                FROM empresas
                ORDER BY encontrado_em DESC
                LIMIT %s""",
@@ -518,6 +519,14 @@ def api_send_emails(bot):
             )
             if r.status_code in (200, 201):
                 enviados += 1
+                try:
+                    conn2 = get_db(schema)
+                    c2 = conn2.cursor()
+                    c2.execute("UPDATE empresas SET email_enviado = NOW() WHERE id = %s", (lead['id'],))
+                    conn2.commit()
+                    conn2.close()
+                except Exception:
+                    pass
             else:
                 print(f"[EMAIL] erro {lead['email']}: {r.text}", flush=True)
                 erros += 1

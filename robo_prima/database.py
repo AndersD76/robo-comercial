@@ -58,7 +58,8 @@ def init_database():
         encontrado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         status        TEXT DEFAULT 'novo',
         demo_agendado TIMESTAMP,
-        demo_status   TEXT
+        demo_status   TEXT,
+        email_enviado TIMESTAMP
     )""")
 
     c.execute("""CREATE TABLE IF NOT EXISTS contatos (
@@ -134,6 +135,13 @@ def init_database():
         except Exception:
             conn.rollback()
             c.execute("SET search_path TO %s, public", (DB_SCHEMA,))
+
+    # Migração: adiciona email_enviado em empresas (tabela já existente)
+    try:
+        c.execute("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS email_enviado TIMESTAMP")
+    except Exception:
+        conn.rollback()
+        c.execute("SET search_path TO %s, public", (DB_SCHEMA,))
 
     c.execute("INSERT INTO execucao (id, status) VALUES (1, 'parado') ON CONFLICT (id) DO NOTHING")
     conn.commit()
