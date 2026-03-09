@@ -19,7 +19,7 @@ ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 # APOLLO.IO (API para enriquecimento e busca de leads)
 # =============================================================================
 APOLLO_API_KEY = os.environ.get('APOLLO_API_KEY', '')
-APOLLO_HABILITADO = bool(APOLLO_API_KEY)
+APOLLO_HABILITADO = False  # desabilitado — plano free não funciona via API
 APOLLO_MAX_BUSCAS_DIA = int(os.environ.get('APOLLO_MAX_BUSCAS', '50'))
 
 # Filtros Apollo.io

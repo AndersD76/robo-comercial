@@ -252,7 +252,7 @@ class WhatsAppBot:
                             await btn_ok.click()
                     except Exception:
                         pass
-                    return False
+                    return 'no_whatsapp'
 
             enviado = await self._clicar_enviar()
 

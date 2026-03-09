@@ -260,6 +260,23 @@ def salvar_empresa(dados):
         conn.close()
 
 
+def atualizar_campos_empresa(empresa_id: int, campos: dict):
+    """Atualiza campos específicos de uma empresa (só os que têm valor)."""
+    if not empresa_id or not campos:
+        return
+    allowed = {'segmento', 'porte', 'cidade', 'estado', 'cnpj', 'razao_social'}
+    updates = {k: v for k, v in campos.items() if k in allowed and v}
+    if not updates:
+        return
+    conn = get_connection()
+    c = conn.cursor()
+    sets = ', '.join(f'{k} = %s' for k in updates)
+    vals = list(updates.values()) + [empresa_id]
+    c.execute(f"UPDATE empresas SET {sets} WHERE id = %s", vals)
+    conn.commit()
+    conn.close()
+
+
 def atualizar_status_empresa(empresa_id, status):
     conn = get_connection()
     c = conn.cursor()
@@ -289,6 +306,7 @@ def get_empresas_para_followup(dias, tipo_followup):
     c.execute("""SELECT e.*, MAX(i.enviado_em) as ultima_msg, COUNT(i.id) as total_msgs
         FROM empresas e INNER JOIN interacoes i ON e.id = i.empresa_id
         WHERE i.respondeu = 0 AND i.canal = 'whatsapp'
+        AND e.status NOT IN ('sem_whatsapp', 'encerrado', 'robo_wa')
         AND NOT EXISTS (SELECT 1 FROM interacoes i2 WHERE i2.empresa_id = e.id AND i2.tipo = %s)
         GROUP BY e.id, e.cnpj, e.razao_social, e.nome_fantasia, e.segmento, e.porte,
                  e.funcionarios, e.endereco, e.cidade, e.estado, e.telefone, e.telefone2,
@@ -308,7 +326,7 @@ def get_empresas_contactadas(limite=20):
                MAX(i.enviado_em) as ultima_msg, COUNT(i.id) as total_msgs
         FROM empresas e INNER JOIN interacoes i ON e.id = i.empresa_id
         WHERE i.canal = 'whatsapp' AND e.whatsapp IS NOT NULL AND e.whatsapp != ''
-        AND e.status NOT IN ('convertido', 'encerrado', 'robo_wa')
+        AND e.status NOT IN ('convertido', 'encerrado', 'robo_wa', 'sem_whatsapp')
         GROUP BY e.id, e.nome_fantasia, e.whatsapp, e.status, e.demo_status
         ORDER BY MAX(i.enviado_em) DESC LIMIT %s""", (limite,))
     results = [dict(row) for row in c.fetchall()]

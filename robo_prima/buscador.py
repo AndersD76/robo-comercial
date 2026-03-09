@@ -786,9 +786,11 @@ class Buscador:
                 for raw in _PAT_CNPJ_TEXTO.findall(texto):
                     cnpj = self.validar_cnpj(raw)
                     if cnpj:
+                        print(f'  [CNPJ] encontrado {cnpj} para "{nome_limpo}" via Bing', flush=True)
                         return cnpj
-        except Exception:
-            pass
+            print(f'  [CNPJ] nenhum CNPJ encontrado para "{nome_limpo}"', flush=True)
+        except Exception as e:
+            print(f'  [CNPJ] erro Bing para "{nome_limpo}": {e}', flush=True)
 
         return None
 

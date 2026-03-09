@@ -22,7 +22,7 @@ from database import (
     marcar_demo_proposto, marcar_demo_confirmado,
     get_empresa_por_whatsapp, salvar_empresa, telefone_existe,
     get_empresas_para_followup, salvar_contato, get_decisor_empresa,
-    decisor_ja_existe,
+    decisor_ja_existe, atualizar_campos_empresa,
 )
 from whatsapp import WhatsAppBot
 from mensagens import GeradorMensagens
@@ -561,12 +561,16 @@ async def ciclo_busca(buscador_ext=None):
                                         _consultar_cnpj_sync, cnpj_extra
                                     )
                                     if dados_qsa:
+                                        campos_update = {}
                                         for campo in (
                                             'segmento', 'cnae_codigo',
                                             'porte', 'cidade', 'estado',
                                         ):
-                                            if not lead.get(campo):
-                                                lead[campo] = dados_qsa.get(campo)
+                                            if not lead.get(campo) and dados_qsa.get(campo):
+                                                lead[campo] = dados_qsa[campo]
+                                                campos_update[campo] = dados_qsa[campo]
+                                        if campos_update and empresa_id:
+                                            atualizar_campos_empresa(empresa_id, campos_update)
                                         for socio in (dados_qsa.get('socios') or []):
                                             _salvar_decisor(
                                                 empresa_id,
@@ -574,8 +578,8 @@ async def ciclo_busca(buscador_ext=None):
                                                 socio.get('cargo', ''),
                                                 None, None,
                                             )
-                            except Exception:
-                                pass
+                            except Exception as exc_qsa:
+                                print(f'  [QSA] erro ao buscar decisor p/ "{nf}": {exc_qsa}', flush=True)
                     # Hunter.io: emails com cargo
                     if lead.get('website') and empresa_id:
                         dominio = lead.get('website', '').replace('https://', '').replace('http://', '').split('/')[0]
@@ -677,7 +681,7 @@ async def ciclo_envio(
                 flush=True)
             ok = False
 
-        if ok:
+        if ok is True:
             registrar_interacao(
                 lead['id'], None, 'whatsapp', 'inicial', mensagem
             )
@@ -742,12 +746,15 @@ async def ciclo_followup(bot: WhatsAppBot, gerador: GeradorMensagens):
                     flush=True)
                 ok = False
 
-            if ok:
+            if ok is True:
                 registrar_interacao(
                     lead['id'], None, 'whatsapp', tipo, msg
                 )
                 # registrar_interacao já chama incrementar_contagem
                 log_acao('info', f"Follow-up {n_fu}: {nome}")
+            elif ok == 'no_whatsapp':
+                # Número confirmado não está no WhatsApp
+                atualizar_status_empresa(lead['id'], 'sem_whatsapp')
 
             await bot.delay_entre_mensagens()
 
