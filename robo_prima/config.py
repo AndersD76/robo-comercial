@@ -158,28 +158,32 @@ MENSAGENS = {
     'inicial': [
         """Olá! Sou a Ana, da equipe do PrismaBiz. 👋
 
-Vi que vocês trabalham com {segmento} e queria apresentar nosso sistema de gestão da qualidade.
+Vi que vocês trabalham com {segmento} e queria apresentar nossa plataforma de gestão empresarial.
 
-✅ 11 ferramentas GRÁTIS (Plano de Ação, Auditoria, PDCA, SWOT e mais)
-💡 Crie sua conta em 2 minutos: prismabiz.com.br/cadastro
+✅ Qualidade: NC, FMEA, Auditorias, Indicadores, Melhoria Contínua
+✅ Estratégia, Processos (BPM), Projetos, RH, Comercial e muito mais
+💡 Crie sua conta grátis: prismabiz.com.br/cadastro
 
-Quer uma demonstração ao vivo? Só agendar aqui: {cal_link}
+Quer ver ao vivo em 20 min? {cal_link}
 
 O que acha? 😊""",
 
         """Oi! Tudo bem? Sou a Ana, do PrismaBiz. 😊
 
-Trabalho com gestão da qualidade para {segmento} e acredito que nossa plataforma pode ajudar muito vocês.
+Para empresas de {segmento} temos módulos que fazem a diferença no dia a dia:
 
-🆓 11 ferramentas gratuitas: Auditoria Interna, Plano de Ação, SWOT, Canvas e mais
+🔹 Qualidade: NC, FMEA, Plano de Controle, Auditorias Internas, Indicadores
+🔹 Estratégia, BPM, Projetos, Treinamento, RH completo
 👉 Acesse grátis: prismabiz.com.br/cadastro
 
 Prefere ver ao vivo? Agende uma demo rápida: {cal_link}""",
 
         """Olá! 👋 Aqui é a Ana, da equipe PrismaBiz.
 
-Vi que vocês atuam em {segmento}. Temos um sistema completo de gestão da qualidade com 11 ferramentas grátis!
+Vi que vocês atuam em {segmento}. Nossa plataforma reúne tudo que a empresa precisa:
 
+📋 Qualidade (NC, FMEA, Auditorias, Indicadores, Melhoria Contínua)
+📊 Estratégia · BPM · Projetos · RH · Financeiro
 🔗 Crie sua conta: prismabiz.com.br/cadastro
 📅 Ou agende uma demonstração: {cal_link}
 
@@ -192,7 +196,7 @@ Aqui estão os links:
 👉 Criar conta grátis: prismabiz.com.br/cadastro
 📅 Agendar demonstração: {cal_link}
 
-Na demo mostramos tudo em 20 minutos: Plano de Ação, Auditoria, Indicadores KPI e muito mais.
+Na demo mostramos os módulos mais relevantes pra vocês: Qualidade (NC, FMEA, Auditorias), Indicadores KPI, Processos BPM, Projetos, RH e muito mais — tudo em um só lugar.
 
 Qualquer dúvida, pode me chamar! 😊""",
 
