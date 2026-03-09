@@ -16,7 +16,10 @@ from config import (
     PALAVRAS_POSITIVAS, PALAVRAS_NEGATIVAS, ESTADOS_PRIORIDADE,
     APOLLO_API_KEY, APOLLO_HABILITADO, APOLLO_MAX_BUSCAS_DIA, APOLLO_FILTROS,
     HUNTER_API_KEY, HUNTER_HABILITADO,
+    BRASIL_IO_TOKEN,
 )
+
+_PAT_CNPJ_TEXTO = re.compile(r'\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}')
 
 
 class Buscador:
@@ -575,6 +578,11 @@ class Buscador:
                 telefones = self._extrair_telefones(text_raw)
                 cnpj_m = re.search(r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}', bloco)
                 cnpj = self.validar_cnpj(cnpj_m.group(0)) if cnpj_m else None
+                # Econodata costuma ter CNPJ (14 dígitos) no final do slug
+                if not cnpj:
+                    slug_cnpj = re.search(r'(\d{14})/?$', slug)
+                    if slug_cnpj:
+                        cnpj = self.validar_cnpj(slug_cnpj.group(1))
 
                 resultados.append({
                     'url': f'https://www.econodata.com.br{slug}',
@@ -726,6 +734,63 @@ class Buscador:
         except Exception as e:
             print(f'  [ERRO] Hunter {dominio}: {e}')
             return []
+
+    # =========================================================================
+    # BRASIL.IO — busca CNPJ por nome (gratuito, token opcional)
+    # =========================================================================
+
+    async def buscar_cnpj_por_nome(self, nome: str) -> str | None:
+        """Busca CNPJ pelo nome da empresa.
+        Tenta: 1) Brasil.io API (token grátis)  2) Bing snippet
+        """
+        if not nome or len(nome.strip()) < 4:
+            return None
+        nome_limpo = re.sub(
+            r'[^\w\sáàâãéêíóôõúüçÁÀÂÃÉÊÍÓÔÕÚÜÇ]', ' ', nome
+        ).strip()[:60]
+
+        # 1. Brasil.io (token grátis em brasil.io/auth/login)
+        if BRASIL_IO_TOKEN:
+            try:
+                url = (
+                    'https://brasil.io/api/dataset/socios-brasil'
+                    '/empresas/data/'
+                    f'?search={quote_plus(nome_limpo)}'
+                    '&fields=cnpj,razao_social'
+                )
+                async with httpx.AsyncClient(
+                    headers={
+                        **self._HTTP_HEADERS,
+                        'Authorization': f'Token {BRASIL_IO_TOKEN}',
+                    },
+                    timeout=10.0,
+                    follow_redirects=True,
+                ) as client:
+                    resp = await client.get(url)
+                    if resp.status_code == 200:
+                        for item in (resp.json().get('results', []) or []):
+                            raw = re.sub(r'\D', '', item.get('cnpj', ''))
+                            cnpj = self.validar_cnpj(raw)
+                            if cnpj:
+                                return cnpj
+            except Exception as e:
+                print(f'  [Brasil.io] {e}')
+
+        # 2. Bing: busca "[nome]" CNPJ e extrai do snippet
+        try:
+            resultados = await self._buscar_bing_http(
+                f'"{nome_limpo}" CNPJ site:.com.br', max_resultados=5
+            )
+            for r in resultados:
+                texto = r.get('snippet', '') + ' ' + r.get('titulo', '')
+                for raw in _PAT_CNPJ_TEXTO.findall(texto):
+                    cnpj = self.validar_cnpj(raw)
+                    if cnpj:
+                        return cnpj
+        except Exception:
+            pass
+
+        return None
 
     # =========================================================================
     # BUSCA PRINCIPAL

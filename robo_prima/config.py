@@ -53,6 +53,11 @@ APOLLO_FILTROS = {
 HUNTER_API_KEY = os.environ.get('HUNTER_API_KEY', '')
 HUNTER_HABILITADO = bool(HUNTER_API_KEY)
 
+# =============================================================================
+# BRASIL.IO (busca CNPJ por nome — token grátis em brasil.io/auth/login)
+# =============================================================================
+BRASIL_IO_TOKEN = os.environ.get('BRASIL_IO_TOKEN', '')
+
 # Link do Google Calendar Appointment Scheduling
 DEMO_CAL_LINK = os.environ.get(
     'DEMO_CAL_LINK',

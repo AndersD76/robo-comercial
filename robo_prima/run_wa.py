@@ -550,6 +550,32 @@ async def ciclo_busca(buscador_ext=None):
                     for socio in lead.get('_socios', []):
                         _salvar_decisor(empresa_id, socio['nome'],
                                         socio.get('cargo', ''), None, None)
+                    # Se ainda sem QSA e tem nome → busca CNPJ por nome → QSA
+                    if not lead.get('_socios') and not r.get('decisor_nome'):
+                        nf = lead.get('nome_fantasia', '')
+                        if nf and len(nf) > 5:
+                            try:
+                                cnpj_extra = await buscador.buscar_cnpj_por_nome(nf)
+                                if cnpj_extra:
+                                    dados_qsa = await asyncio.to_thread(
+                                        _consultar_cnpj_sync, cnpj_extra
+                                    )
+                                    if dados_qsa:
+                                        for campo in (
+                                            'segmento', 'cnae_codigo',
+                                            'porte', 'cidade', 'estado',
+                                        ):
+                                            if not lead.get(campo):
+                                                lead[campo] = dados_qsa.get(campo)
+                                        for socio in (dados_qsa.get('socios') or []):
+                                            _salvar_decisor(
+                                                empresa_id,
+                                                socio['nome'],
+                                                socio.get('cargo', ''),
+                                                None, None,
+                                            )
+                            except Exception:
+                                pass
                     # Hunter.io: emails com cargo
                     if lead.get('website') and empresa_id:
                         dominio = lead.get('website', '').replace('https://', '').replace('http://', '').split('/')[0]
