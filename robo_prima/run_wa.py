@@ -334,6 +334,34 @@ def _consultar_cnpj_sync(cnpj: str) -> dict | None:
 
 
 # =============================================================================
+# SALVAR DECISOR
+# =============================================================================
+
+def _salvar_decisor(empresa_id, nome, cargo='', email=None, telefone=None):
+    """Salva contato decisor (flag decisor=1) evitando duplicatas."""
+    if not empresa_id or not nome or not str(nome).strip():
+        return
+    nome = str(nome).strip()[:200]
+    if decisor_ja_existe(empresa_id, nome):
+        return
+    try:
+        salvar_contato(empresa_id, {
+            'nome': nome,
+            'cargo': (cargo or '')[:200],
+            'email': email,
+            'telefone': telefone,
+            'decisor': 1,
+        })
+        print(
+            f'  [Decisor] {nome[:40]} ({(cargo or "")[:30]}) '
+            f'→ empresa #{empresa_id}',
+            flush=True
+        )
+    except Exception as e:
+        print(f'  [ERRO] _salvar_decisor: {e}', flush=True)
+
+
+# =============================================================================
 # CICLO PROSPECÇÃO COMPLETA
 # =============================================================================
 
