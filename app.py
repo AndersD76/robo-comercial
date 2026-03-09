@@ -121,11 +121,26 @@ def get_stats(schema: str) -> dict:
     return zero
 
 
+_migrated = {}
+def _ensure_email_enviado(conn, schema):
+    """Garante que a coluna email_enviado existe (roda 1x por schema)."""
+    if schema in _migrated:
+        return
+    try:
+        c = conn.cursor()
+        c.execute("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS email_enviado TIMESTAMP")
+        conn.commit()
+        _migrated[schema] = True
+    except Exception:
+        conn.rollback()
+
+
 def get_leads(schema: str, limite: int = 500) -> list:
     if not DATABASE_URL:
         return []
     try:
         conn = get_db(schema)
+        _ensure_email_enviado(conn, schema)
         c = conn.cursor()
         c.execute(
             """SELECT id, nome_fantasia, whatsapp, telefone, email, score,
