@@ -616,19 +616,16 @@ class Buscador:
             try:
                 payload = {
                     'api_key': APOLLO_API_KEY,
-                    'q_person_title': titulo,
+                    'person_titles': [titulo],
                     'person_locations': APOLLO_FILTROS.get('localizacao', ['Brazil']),
-                    'q_keywords': ' '.join(
-                        APOLLO_FILTROS.get('palavras_chave', [])
-                    ),
                     'page': 1,
                     'per_page': por_titulo,
-                    'prospected_by_current_team': 'no',
                 }
                 async with httpx.AsyncClient(
                     headers={
                         'Content-Type': 'application/json',
                         'Cache-Control': 'no-cache',
+                        'X-Api-Key': APOLLO_API_KEY,
                     },
                     timeout=20.0,
                     follow_redirects=True,
@@ -638,7 +635,7 @@ class Buscador:
                         json=payload,
                     )
                 if resp.status_code != 200:
-                    print(f'  [Apollo] HTTP {resp.status_code} para "{titulo}"')
+                    print(f'  [Apollo] HTTP {resp.status_code} para "{titulo}": {resp.text[:200]}')
                     continue
                 data = resp.json()
 
