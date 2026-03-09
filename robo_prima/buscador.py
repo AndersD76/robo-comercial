@@ -634,6 +634,9 @@ class Buscador:
                         'https://api.apollo.io/v1/mixed_people/search',
                         json=payload,
                     )
+                if resp.status_code == 403:
+                    print('  [Apollo] Plano gratuito não suporta busca de pessoas — configure APOLLO_API_KEY com plano pago para ativar.')
+                    return []
                 if resp.status_code != 200:
                     print(f'  [Apollo] HTTP {resp.status_code} para "{titulo}": {resp.text[:200]}')
                     continue
