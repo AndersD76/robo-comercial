@@ -15,7 +15,7 @@ import psycopg2
 import psycopg2.extras
 from functools import wraps
 from flask import (Flask, jsonify, redirect, render_template,
-                   request, send_file, session, url_for)
+                   request, session, url_for)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'mv-saas-2025-change-in-prod')
@@ -265,7 +265,7 @@ def get_logs(schema: str, limite: int = 60) -> list:
         rows = [dict(r) for r in c.fetchall()]
         conn.close()
         return rows
-    except Exception as e:
+    except Exception:
         return []
 
 
@@ -445,14 +445,15 @@ def api_bot_start(bot):
     schema = _get_schema() or bot
     data = request.get_json(silent=True) or {}
     canal = data.get('canal', 'busca')
-    if canal not in ('busca', 'linkedin'):
-        return jsonify({'error': 'canal inválido (busca|linkedin)'}), 400
+    if canal not in ('busca', 'linkedin', 'wa'):
+        return jsonify({'error': 'canal inválido (busca|linkedin|wa)'}), 400
     if _proc_running(schema, canal):
         return jsonify({'status': 'already_running'})
 
     base = os.path.dirname(os.path.abspath(__file__))
     bot_dir = os.path.join(base, 'robo_pili')
-    script = 'run_busca.py' if canal == 'busca' else 'run_linkedin.py'
+    scripts = {'busca': 'run_busca.py', 'linkedin': 'run_linkedin.py', 'wa': 'run_full.py'}
+    script = scripts[canal]
     log_path = os.path.join(bot_dir, f'{canal}.log')
     log_file = open(log_path, 'a', encoding='utf-8')
     proc = subprocess.Popen(
@@ -480,7 +481,6 @@ def api_bot_stop(bot):
 @app.route('/api/<bot>/console')
 @login_required
 def api_bot_console(bot):
-    schema = _get_schema() or bot
     canal = request.args.get('canal', 'busca')
     n = request.args.get('n', 60, type=int)
     base = os.path.dirname(os.path.abspath(__file__))
@@ -488,7 +488,7 @@ def api_bot_console(bot):
     try:
         with open(log_path, 'r', encoding='utf-8', errors='replace') as f:
             lines = f.readlines()
-        return jsonify({'lines': [l.rstrip('\n') for l in lines[-n:]]})
+        return jsonify({'lines': [ln.rstrip('\n') for ln in lines[-n:]]})
     except FileNotFoundError:
         return jsonify({'lines': []})
     except Exception as e:
