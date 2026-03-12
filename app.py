@@ -29,6 +29,41 @@ elif DATABASE_URL.startswith('postgres://'):
 # Processos em background: {schema: {'busca': Popen, 'linkedin': Popen}}
 _procs: dict = {}
 
+# Inicializa tabelas globais ao importar (gunicorn não chama __main__)
+def _init_public_schema_safe():
+    if not DATABASE_URL:
+        return
+    try:
+        conn = psycopg2.connect(DATABASE_URL,
+                                cursor_factory=psycopg2.extras.RealDictCursor)
+        c = conn.cursor()
+        c.execute("""CREATE TABLE IF NOT EXISTS users (
+            id            BIGSERIAL PRIMARY KEY,
+            email         TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            empresa_nome  TEXT,
+            website       TEXT,
+            descricao     TEXT,
+            schema_name   TEXT UNIQUE,
+            plano         TEXT DEFAULT 'trial',
+            ativo         BOOLEAN DEFAULT TRUE,
+            criado_em     TIMESTAMP DEFAULT NOW()
+        )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS api_tokens (
+            id        BIGSERIAL PRIMARY KEY,
+            user_id   BIGINT REFERENCES users(id) ON DELETE CASCADE,
+            token     TEXT UNIQUE NOT NULL,
+            label     TEXT,
+            ativo     BOOLEAN DEFAULT TRUE,
+            criado_em TIMESTAMP DEFAULT NOW()
+        )""")
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f'[startup] init_public_schema: {e}')
+
+_init_public_schema_safe()
+
 
 # =============================================================================
 # DB HELPERS
