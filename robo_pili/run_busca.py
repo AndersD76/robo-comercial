@@ -11,7 +11,6 @@ import json
 import os
 import random
 import sys
-import time
 
 import psycopg2
 import psycopg2.extras
@@ -101,7 +100,7 @@ def get_contagem_diaria(schema: str, tipo: str) -> int:
         return 0
 
 
-def salvar_empresa(schema: str, dados: dict) -> int | None:
+def salvar_empresa(schema: str, dados: dict):
     conn = _conn(schema)
     c = conn.cursor()
     try:

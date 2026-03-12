@@ -34,7 +34,7 @@ _procs: dict = {}
 # DB HELPERS
 # =============================================================================
 
-def _conn(schema: str | None = None):
+def _conn(schema=None):
     conn = psycopg2.connect(DATABASE_URL,
                             cursor_factory=psycopg2.extras.RealDictCursor)
     if schema:
