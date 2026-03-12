@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Entrar — Máquina de Vendas</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',sans-serif;background:#060b18;color:#f1f5f9;
+         min-height:100vh;display:flex;align-items:center;justify-content:center}
+    .bg-glow{position:fixed;inset:0;pointer-events:none;
+        background:radial-gradient(ellipse at 50% 0%,rgba(99,102,241,.12) 0%,transparent 60%)}
+    .card{width:100%;max-width:420px;background:#0d1526;border:1px solid rgba(99,102,241,.2);
+        border-radius:20px;padding:40px;position:relative;z-index:1}
+    .logo{text-align:center;margin-bottom:32px}
+    .logo-mark{width:48px;height:48px;border-radius:14px;margin:0 auto 12px;
+        background:linear-gradient(135deg,#6366f1,#8b5cf6);
+        display:flex;align-items:center;justify-content:center;font-size:22px}
+    .logo-text{font-size:20px;font-weight:900;letter-spacing:-.5px}
+    .logo-text span{color:#6366f1}
+    .logo-sub{color:#64748b;font-size:13px;margin-top:4px}
+    h2{font-size:22px;font-weight:800;margin-bottom:6px;text-align:center}
+    .subtitle{color:#64748b;font-size:14px;text-align:center;margin-bottom:28px}
+    .field{margin-bottom:16px}
+    label{display:block;font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:6px}
+    input{width:100%;background:#111d35;border:1px solid rgba(255,255,255,.08);
+        border-radius:10px;padding:12px 14px;color:#f1f5f9;font-size:15px;
+        font-family:'Inter',sans-serif;outline:none;transition:.2s}
+    input:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.15)}
+    input::placeholder{color:#475569}
+    .btn{width:100%;background:linear-gradient(135deg,#6366f1,#8b5cf6);
+        color:#fff;border:none;border-radius:10px;padding:13px;font-size:15px;
+        font-weight:700;cursor:pointer;margin-top:8px;transition:.2s;font-family:'Inter',sans-serif}
+    .btn:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(99,102,241,.4)}
+    .error{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);
+        color:#fca5a5;border-radius:10px;padding:12px 14px;font-size:13px;margin-bottom:16px}
+    .footer-link{text-align:center;margin-top:20px;font-size:14px;color:#64748b}
+    .footer-link a{color:#818cf8;text-decoration:none;font-weight:600}
+    .footer-link a:hover{color:#6366f1}
+    .divider{display:flex;align-items:center;gap:12px;margin:20px 0;color:#334155;font-size:12px}
+    .divider::before,.divider::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.06)}
+  </style>
+</head>
+<body>
+<div class="bg-glow"></div>
+<div class="card">
+  <div class="logo">
+    <div class="logo-mark">⚡</div>
+    <div class="logo-text">Máquina<span>Vendas</span></div>
+    <div class="logo-sub">Prospecção B2B com Inteligência Artificial</div>
+  </div>
+  <h2>Bem-vindo de volta</h2>
+  <p class="subtitle">Entre na sua conta para continuar</p>
+
+  {% if error %}
+  <div class="error"><i class="fa fa-circle-exclamation"></i> {{ error }}</div>
+  {% endif %}
+
+  <form method="POST">
+    <div class="field">
+      <label>Email</label>
+      <input type="email" name="email" placeholder="seu@email.com" required autocomplete="email">
+    </div>
+    <div class="field">
+      <label>Senha</label>
+      <input type="password" name="senha" placeholder="••••••••" required autocomplete="current-password">
+    </div>
+    <button type="submit" class="btn">
+      <i class="fa fa-arrow-right-to-bracket"></i> Entrar
+    </button>
+  </form>
+
+  <div class="divider">ou</div>
+  <div class="footer-link">
+    Não tem conta? <a href="/cadastro">Criar conta grátis →</a>
+  </div>
+  <div class="footer-link" style="margin-top:8px">
+    <a href="/" style="color:#475569;font-size:12px">← Voltar ao início</a>
+  </div>
+</div>
+</body>
+</html>

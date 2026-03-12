@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python /c/Users/danie/AppData/Local/Temp/apply_extraction.py)"
+    ]
+  }
+}

@@ -418,16 +418,18 @@
 
 <header>
   <div class="hdr-left">
-    <a href="/" class="back-btn"><i class="fa fa-chevron-left"></i> Início</a>
+    <a href="/" class="back-btn"><i class="fa fa-chevron-left"></i></a>
     <span class="hdr-sep">|</span>
-    <span class="hdr-bot-name">{{ name }}</span>
-    <span class="hdr-bot-sub">{{ label }}</span>
+    <span class="hdr-bot-name">⚡ Máquina de Vendas</span>
+    <span class="hdr-bot-sub">{{ name }}</span>
   </div>
   <div class="hdr-right">
     <div class="status-badge" id="status-badge">
       <div class="sdot"></div>
       <span id="status-txt">Parado</span>
     </div>
+    <a href="/configurar" class="back-btn" style="gap:5px"><i class="fa fa-gear"></i> Config</a>
+    <a href="/logout" class="back-btn" style="gap:5px"><i class="fa fa-right-from-bracket"></i></a>
     <div class="hdr-clock" id="clock">--:--</div>
   </div>
 </header>
@@ -438,10 +440,17 @@
   <div class="bot-card">
 
     <div class="ctrl-bar">
-      <span class="ctrl-label">Via</span>
+      <span class="ctrl-label"><i class="fa fa-magnifying-glass"></i> Busca Web</span>
       <div class="ctrl-actions" style="margin-left:auto">
-        <button class="btn-stop"  onclick="botStop(this)"><i class="fa fa-stop"></i> Parar</button>
-        <button class="btn-start" onclick="botStart(this)"><i class="fa fa-play"></i> Iniciar</button>
+        <button class="btn-stop"  onclick="botStop('busca',this)"><i class="fa fa-stop"></i> Parar</button>
+        <button class="btn-start" onclick="botStart('busca',this)"><i class="fa fa-play"></i> Iniciar Busca</button>
+      </div>
+    </div>
+    <div class="ctrl-bar" style="margin-top:8px">
+      <span class="ctrl-label"><i class="fab fa-linkedin" style="color:#0a66c2"></i> LinkedIn</span>
+      <div class="ctrl-actions" style="margin-left:auto">
+        <button class="btn-stop"  onclick="botStop('linkedin',this)"><i class="fa fa-stop"></i> Parar</button>
+        <button class="btn-start" onclick="botStart('linkedin',this)"><i class="fab fa-linkedin"></i> Iniciar LinkedIn</button>
       </div>
     </div>
 
@@ -763,34 +772,43 @@ function botFetch(canal,action){
     body:JSON.stringify({canal})
   }).then(r=>r.json());
 }
-function botStart(btn){
-  btn.disabled=true;
-  botFetch('wa','start').then(()=>{
-    btn.disabled=false;
+function botStart(canal,btn){
+  if(btn){btn.disabled=true;}
+  fetch(`/api/${BOT}/start`,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({canal})
+  }).then(r=>r.json()).then(d=>{
+    if(btn){btn.disabled=false;}
     loadBotStatus();
     startConsolePolling();
-    setTimeout(startQrPolling,4000);
-  }).catch(()=>{btn.disabled=false;});
+    if(canal==='busca') document.getElementById('console-canal').value='busca';
+    if(canal==='linkedin') document.getElementById('console-canal').value='linkedin';
+  }).catch(()=>{if(btn)btn.disabled=false;});
 }
-function botStop(btn){
-  btn.disabled=true;
-  botFetch('wa','stop').then(()=>{
-    btn.disabled=false;
+function botStop(canal,btn){
+  if(btn){btn.disabled=true;}
+  fetch(`/api/${BOT}/stop`,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({canal})
+  }).then(r=>r.json()).then(()=>{
+    if(btn){btn.disabled=false;}
     loadBotStatus();
     stopConsolePolling();
-    stopQrPolling();
-  }).catch(()=>{btn.disabled=false;});
+  }).catch(()=>{if(btn)btn.disabled=false;});
 }
 function loadBotStatus(){
   fetch(`/api/${BOT}/status`).then(r=>r.json()).then(d=>{
     const badge=document.getElementById('status-badge');
     const txt=document.getElementById('status-txt');
-    const startBtn=document.querySelector('.btn-start');
     if(!badge) return;
-    const rodando=d.wa;
+    const rodando=d.busca||d.linkedin||d.wa;
+    const ativos=[];
+    if(d.busca) ativos.push('Busca');
+    if(d.linkedin) ativos.push('LinkedIn');
+    if(d.wa) ativos.push('WA');
     if(rodando){
       badge.classList.add('running');
-      txt.textContent='Internet ativo';
+      txt.textContent=ativos.join(' + ')+' ativo';
     } else {
       badge.classList.remove('running');
       txt.textContent='Parado';
