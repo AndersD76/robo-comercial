@@ -13,6 +13,7 @@ import random
 import re
 import sys
 
+import aiohttp
 import psycopg2
 import psycopg2.extras
 
@@ -192,6 +193,61 @@ def _extrair_telefones_texto(texto):
     return resultado
 
 
+_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/121.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml',
+    'Accept-Language': 'pt-BR,pt;q=0.9',
+}
+
+# Páginas de contato comuns
+_CONTATO_PATHS = ['', '/contato', '/contact', '/fale-conosco', '/sobre', '/about']
+
+
+async def _scrape_contatos(url: str) -> dict:
+    """Acessa o site e extrai telefone e email da página."""
+    resultado = {'telefones': [], 'emails': []}
+    if not url:
+        return resultado
+
+    # Normaliza URL
+    base = url.rstrip('/')
+    if not base.startswith('http'):
+        base = 'https://' + base
+
+    timeout = aiohttp.ClientTimeout(total=8)
+    try:
+        async with aiohttp.ClientSession(timeout=timeout, headers=_HEADERS) as sess:
+            for path in _CONTATO_PATHS:
+                try:
+                    target = base + path
+                    async with sess.get(target, ssl=False, allow_redirects=True) as resp:
+                        if resp.status != 200:
+                            continue
+                        html = await resp.text(errors='replace')
+                        # Extrai emails
+                        emails = _extrair_emails(html)
+                        # Filtra emails genéricos / imagens
+                        for e in emails:
+                            low = e.lower()
+                            if any(x in low for x in ['@sentry', '@example', '@test', '.png', '.jpg', '.svg', 'wixpress']):
+                                continue
+                            if e not in resultado['emails']:
+                                resultado['emails'].append(e)
+                        # Extrai telefones
+                        tels = _extrair_telefones_texto(html)
+                        for t in tels:
+                            if t not in resultado['telefones']:
+                                resultado['telefones'].append(t)
+                        # Se já achou contato, para
+                        if resultado['emails'] or resultado['telefones']:
+                            break
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return resultado
+
+
 def _resultado_para_empresa(r):
     """Converte resultado do buscador para formato de empresa."""
     titulo = r.get('titulo', '')
@@ -291,9 +347,31 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list) -> int:
     salvos = 0
     for r in resultados:
         lead = _resultado_para_empresa(r)
-        # Salva se tem qualquer contato OU pelo menos um website/nome
-        if not lead.get('telefone') and not lead.get('whatsapp') and not lead.get('email') and not lead.get('website'):
+        if not lead.get('website'):
             continue
+
+        # Scrapa o site para pegar telefone e email
+        if not lead.get('telefone') and not lead.get('email'):
+            url_scrape = r.get('url', lead.get('website', ''))
+            try:
+                contatos = await _scrape_contatos(url_scrape)
+                if contatos['emails'] and not lead.get('email'):
+                    lead['email'] = contatos['emails'][0]
+                if contatos['telefones']:
+                    if not lead.get('telefone'):
+                        lead['telefone'] = contatos['telefones'][0]
+                    # Verifica se algum é celular (WhatsApp)
+                    if not lead.get('whatsapp'):
+                        for t in contatos['telefones']:
+                            if len(t) == 11 and t[2] == '9':
+                                lead['whatsapp'] = '55' + t
+                                break
+                if contatos['emails'] or contatos['telefones']:
+                    print(f'[{schema}]   📞 Scrape {lead["website"]}: '
+                          f'{len(contatos["telefones"])} tel, {len(contatos["emails"])} email', flush=True)
+            except Exception:
+                pass
+
         empresa_id = salvar_empresa(schema, lead)
         if empresa_id:
             salvos += 1
