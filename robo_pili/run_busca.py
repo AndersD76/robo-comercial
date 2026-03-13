@@ -280,32 +280,76 @@ def _extrair_mailto_tel(html):
     return emails, tels
 
 
+def _nome_valido(nome):
+    """Verifica se parece um nome de pessoa (2-4 palavras capitalizadas, sem lixo)."""
+    if not nome or len(nome) < 5 or len(nome) > 50:
+        return False
+    palavras = nome.split()
+    if len(palavras) < 2 or len(palavras) > 5:
+        return False
+    # Cada palavra deve começar com maiúscula e ter >1 char
+    for p in palavras:
+        if len(p) < 2:
+            return False
+        if not p[0].isupper():
+            return False
+    # Rejeita se tem palavras que não são nomes
+    lixo = ['home', 'page', 'menu', 'site', 'click', 'ver', 'mais', 'nosso', 'nossa',
+            'contato', 'sobre', 'aqui', 'whatsapp', 'email', 'telefone', 'rodovia',
+            'ltda', 'eireli', 'unidade', 'grãos', 'grão', 'soja', 'milho',
+            'cooperativa', 'armazém', 'armazem', 'silo', 'agro', 'top', 'footer',
+            'header', 'nav', 'link', 'button', 'endereço', 'rua', 'avenida']
+    for p in palavras:
+        if p.lower() in lixo:
+            return False
+    return True
+
+
+def _cargo_valido(cargo):
+    """Verifica se parece um cargo real (curto, com palavra-chave de cargo)."""
+    if not cargo or len(cargo) < 5 or len(cargo) > 60:
+        return False
+    low = cargo.lower()
+    # Deve conter pelo menos uma palavra-chave de cargo
+    cargo_palavras = ['diretor', 'gerente', 'coordenador', 'supervisor', 'responsável',
+                      'presidente', 'sócio', 'socio', 'proprietário', 'proprietario',
+                      'CEO', 'head', 'manager', 'director', 'compras', 'comercial',
+                      'operações', 'operacoes', 'logística', 'logistica', 'financeiro',
+                      'administrativo', 'recebimento', 'produção', 'producao']
+    if not any(kw in low for kw in cargo_palavras):
+        return False
+    # Rejeita se muito longo ou com lixo
+    if any(x in low for x in ['http', 'www', 'click', '.com', 'whatsapp', 'ver mais', 'saiba']):
+        return False
+    return True
+
+
 def _extrair_decisores(html):
     """Extrai nomes e cargos de possíveis decisores do HTML."""
     decisores = []
-    # Remove tags script/style
-    limpo = re.sub(r'<(script|style)[^>]*>.*?</\1>', '', html, flags=re.DOTALL | re.IGNORECASE)
-    # Remove tags HTML
-    texto = re.sub(r'<[^>]+>', ' ', limpo)
+    # Remove tags script/style/nav
+    limpo = re.sub(r'<(script|style|nav|header|footer)[^>]*>.*?</\1>', '', html, flags=re.DOTALL | re.IGNORECASE)
+    # Remove tags HTML mas preserva separação
+    texto = re.sub(r'<[^>]+>', ' | ', limpo)
     texto = re.sub(r'\s+', ' ', texto)
 
-    # Procura padrões "Nome - Cargo" ou "Cargo: Nome" ou "Nome | Cargo"
-    for cargo_kw in _CARGOS_DECISOR:
-        # "Nome Sobrenome - Diretor Comercial" ou "Nome Sobrenome | Gerente de Compras"
-        padrao1 = rf'([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)+)\s*[-–|/]\s*([^<\n]{{0,60}}?{cargo_kw}[^<\n]{{0,40}})'
-        for m in re.finditer(padrao1, texto, re.IGNORECASE):
-            nome = m.group(1).strip()
-            cargo = m.group(2).strip()
-            if 3 < len(nome) < 60 and len(cargo) < 80:
-                decisores.append({'nome': nome, 'cargo': cargo})
+    # Padrão: Nome Sobrenome - Cargo (ex: "João Silva - Diretor Comercial")
+    _NOME = r'([A-ZÀ-Ú][a-zà-ú]+(?:\s+(?:de|da|do|dos|das|e)?\s*[A-ZÀ-Ú][a-zà-ú]+){1,3})'
+    _CARGO = r'([A-ZÀ-Úa-zà-ú][^|]{4,55})'
 
-        # "Diretor Comercial: Nome Sobrenome" ou "Gerente - Nome"
-        padrao2 = rf'({cargo_kw}[^<\n]{{0,40}})\s*[-–:|]\s*([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)+)'
-        for m in re.finditer(padrao2, texto, re.IGNORECASE):
-            cargo = m.group(1).strip()
-            nome = m.group(2).strip()
-            if 3 < len(nome) < 60 and len(cargo) < 80:
-                decisores.append({'nome': nome, 'cargo': cargo})
+    # "Nome - Cargo"
+    for m in re.finditer(_NOME + r'\s*[-–|/]\s*' + _CARGO, texto):
+        nome = m.group(1).strip()
+        cargo = m.group(2).strip()
+        if _nome_valido(nome) and _cargo_valido(cargo):
+            decisores.append({'nome': nome, 'cargo': cargo})
+
+    # "Cargo: Nome" ou "Cargo - Nome"
+    for m in re.finditer(_CARGO + r'\s*[-–:|]\s*' + _NOME, texto):
+        cargo = m.group(1).strip()
+        nome = m.group(2).strip()
+        if _nome_valido(nome) and _cargo_valido(cargo):
+            decisores.append({'nome': nome, 'cargo': cargo})
 
     # Deduplica por nome
     vistos = set()
@@ -314,7 +358,7 @@ def _extrair_decisores(html):
         if d['nome'] not in vistos:
             vistos.add(d['nome'])
             unicos.append(d)
-    return unicos[:5]
+    return unicos[:3]
 
 
 async def _scrape_site(url: str) -> dict:
