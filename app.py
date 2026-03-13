@@ -464,7 +464,7 @@ def api_pipeline():
         for st in stages:
             c.execute("""SELECT id, nome_fantasia, segmento, cidade, estado,
                                 telefone, whatsapp, email, score, status,
-                                msgs, respostas, ultima_msg, encontrado_em
+                                email_enviado, encontrado_em
                          FROM empresas WHERE status=%s ORDER BY score DESC LIMIT 30""", (st,))
             result[st] = [dict(r) for r in c.fetchall()]
         conn.close()

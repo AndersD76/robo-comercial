@@ -757,20 +757,17 @@ function loadPipe(){
       if(!leads.length){ col.innerHTML='<div class="col-empty">—</div>'; return; }
       col.innerHTML=leads.map(l=>{
         const fone=l.whatsapp||l.telefone||'';
-        const dt=l.ultima_msg?new Date(l.ultima_msg).toLocaleDateString('pt-BR'):
-                 l.encontrado_em?new Date(l.encontrado_em).toLocaleDateString('pt-BR'):'';
-        const resp=l.respostas>0?`<span style="color:#4ade80">✓ ${l.respostas} resp</span>`:'';
-        const icon='<i class="fa-brands fa-whatsapp" style="color:#22c55e"></i>';
+        const dt=l.encontrado_em?new Date(l.encontrado_em).toLocaleDateString('pt-BR'):'';
+        const emailTag=l.email_enviado?`<span style="color:#fb923c;font-size:10px">✉ email</span>`:'';
         return `
         <div class="lcard" onclick="openLead(${JSON.stringify(l).replace(/"/g,'&quot;')})">
-          <div class="lcard-name">${icon} ${l.nome_fantasia||'—'}</div>
-          <div class="lcard-seg">${l.segmento||'—'}${l.empresa?' • '+l.empresa:''}</div>
+          <div class="lcard-name"><i class="fa fa-building" style="color:#6366f1;font-size:11px"></i> ${l.nome_fantasia||'—'}</div>
+          <div class="lcard-seg">${l.segmento||'—'}</div>
           ${fone?`<div style="font-size:10px;color:var(--muted);margin-top:2px">📞 ${fone}</div>`:''}
           ${l.email?`<div style="font-size:10px;color:var(--muted)">✉ ${l.email}</div>`:''}
-
-          <div class="lcard-msgs">${l.msgs||0} msg${l.msgs!==1?'s':''} ${resp}</div>
           <div class="lcard-foot">
             <span class="lcard-score">★ ${l.score||0}</span>
+            <span>${emailTag}</span>
             ${dt?`<span style="font-size:9px;color:var(--muted)">${dt}</span>`:''}
           </div>
         </div>`}).join('');
