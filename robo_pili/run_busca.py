@@ -320,9 +320,9 @@ async def main_loop(schema: str):
             print(f'[{schema}] Erro no ciclo: {e}', flush=True)
             log_db(schema, 'erro', str(e))
 
-        # Intervalo entre ciclos: 3-7 min para não sobrecarregar
-        wait = random.randint(180, 420)
-        print(f'[{schema}] Aguardando {wait}s até o próximo ciclo...', flush=True)
+        # Intervalo entre ciclos: 15-30s
+        wait = random.randint(15, 30)
+        print(f'[{schema}] Próximo ciclo em {wait}s...', flush=True)
         await asyncio.sleep(wait)
 
 
