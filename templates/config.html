@@ -166,7 +166,7 @@
     </div>
     <div class="field">
       <label>Cargos-alvo <small>(um por linha)</small></label>
-      <textarea id="li_cargos" rows="4" placeholder="gerente de compras&#10;diretor comercial&#10;CEO&#10;responsável pela compra">{% if cfg.linkedin_cargos %}{% for c in cfg.linkedin_cargos %}{{ c }}
+      <textarea id="li_cargos" rows="4" placeholder="Clique em "Gerar com IA" para sugerir cargos automaticamente">{% if cfg.linkedin_cargos %}{% for c in cfg.linkedin_cargos %}{{ c }}
 {% endfor %}{% endif %}</textarea>
     </div>
   </div>
@@ -254,7 +254,10 @@ async function generateTerms() {
     if (d.ok && d.termos) {
       terms = d.termos
       renderTerms()
-      showToast(`✓ ${d.termos.length} termos gerados pela IA`, true)
+      if (d.cargos && d.cargos.length) {
+        document.getElementById('li_cargos').value = d.cargos.join('\n')
+      }
+      showToast(`✓ ${d.termos.length} termos e ${(d.cargos||[]).length} cargos gerados pela IA`, true)
     } else {
       showToast('Erro ao gerar termos: ' + (d.error || 'falha'), false)
     }

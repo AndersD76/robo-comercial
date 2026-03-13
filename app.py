@@ -698,7 +698,10 @@ def api_save_config(bot):
     li_cargos = data.get('linkedin_cargos') or []
 
     if not termos and descricao:
-        termos = _gerar_termos_ia(empresa_nome, descricao, website)
+        ia = _gerar_termos_ia(empresa_nome, descricao, website)
+        termos = ia['termos']
+        if not li_cargos:
+            li_cargos = ia['cargos']
 
     try:
         conn = _conn(schema)
@@ -739,43 +742,52 @@ def api_save_config(bot):
 @login_required
 def api_generate_terms(bot):
     data = request.get_json(silent=True) or {}
-    termos = _gerar_termos_ia(
+    result = _gerar_termos_ia(
         data.get('empresa_nome', ''),
         data.get('descricao', ''),
         data.get('website', '')
     )
-    return jsonify({'ok': True, 'termos': termos})
+    return jsonify({'ok': True, 'termos': result['termos'], 'cargos': result['cargos']})
 
 
-def _gerar_termos_ia(empresa_nome: str, descricao: str, website: str) -> list:
+def _gerar_termos_ia(empresa_nome: str, descricao: str, website: str) -> dict:
+    """Retorna {'termos': [...], 'cargos': [...]}"""
     api_key = os.environ.get('ANTHROPIC_API_KEY', '')
     if not api_key:
-        return _termos_fallback(descricao)
+        return {'termos': _termos_fallback(descricao), 'cargos': []}
     try:
         import anthropic
         client = anthropic.Anthropic(api_key=api_key)
         msg = client.messages.create(
             model='claude-haiku-4-5-20251001',
-            max_tokens=500,
+            max_tokens=800,
             messages=[{'role': 'user', 'content': f"""Você é especialista em prospecção B2B no Brasil.
 
 Empresa: {empresa_nome}
 Site: {website}
 Descrição: {descricao}
 
-Gere 15 termos de busca Google para encontrar potenciais clientes B2B que precisam deste produto/serviço.
-Use variações com estados brasileiros (SP, MG, RJ, PR, RS, GO, MT, SC, BA, PE),
-palavras do segmento-alvo e "site:.com.br contato" ou "telefone".
+Retorne um JSON com dois campos:
+1. "termos": array com 15 termos de busca Google para encontrar potenciais clientes B2B que precisam deste produto/serviço.
+   Use variações com estados brasileiros (SP, MG, RJ, PR, RS, GO, MT, SC, BA, PE),
+   palavras do segmento-alvo e "site:.com.br contato" ou "telefone".
+2. "cargos": array com 8 cargos/funções das pessoas decisoras dentro das empresas-alvo que compram este produto.
+   Seja específico ao segmento (ex: "gerente de compras de cooperativa", "diretor agrícola", "responsável por insumos").
 
-Responda SOMENTE com JSON array de strings. Exemplo: ["termo 1", "termo 2"]"""}]
+Responda SOMENTE com JSON válido. Exemplo:
+{{"termos": ["termo 1", "termo 2"], "cargos": ["cargo 1", "cargo 2"]}}"""}]
         )
         text = msg.content[0].text.strip()
-        match = re.search(r'\[.*?\]', text, re.DOTALL)
+        match = re.search(r'\{.*\}', text, re.DOTALL)
         if match:
-            return json.loads(match.group())
+            data = json.loads(match.group())
+            termos = data.get('termos') or []
+            cargos = data.get('cargos') or []
+            if termos:
+                return {'termos': termos, 'cargos': cargos}
     except Exception as e:
         print(f'[gerar_termos] {e}')
-    return _termos_fallback(descricao)
+    return {'termos': _termos_fallback(descricao), 'cargos': []}
 
 
 def _termos_fallback(descricao: str) -> list:
