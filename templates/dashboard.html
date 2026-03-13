@@ -440,17 +440,10 @@
   <div class="bot-card">
 
     <div class="ctrl-bar">
-      <span class="ctrl-label"><i class="fa fa-magnifying-glass"></i> Busca Web</span>
+      <span class="ctrl-label"><i class="fa fa-robot"></i> Robô de Prospecção</span>
       <div class="ctrl-actions" style="margin-left:auto">
-        <button class="btn-stop"  onclick="botStop('busca',this)"><i class="fa fa-stop"></i> Parar</button>
-        <button class="btn-start" onclick="botStart('busca',this)"><i class="fa fa-play"></i> Iniciar Busca</button>
-      </div>
-    </div>
-    <div class="ctrl-bar" style="margin-top:8px">
-      <span class="ctrl-label"><i class="fab fa-linkedin" style="color:#0a66c2"></i> LinkedIn</span>
-      <div class="ctrl-actions" style="margin-left:auto">
-        <button class="btn-stop"  onclick="botStop('linkedin',this)"><i class="fa fa-stop"></i> Parar</button>
-        <button class="btn-start" onclick="botStart('linkedin',this)"><i class="fab fa-linkedin"></i> Iniciar LinkedIn</button>
+        <button class="btn-stop"  id="btn-stop-all"  onclick="botStopAll(this)"><i class="fa fa-stop"></i> Parar</button>
+        <button class="btn-start" id="btn-start-all" onclick="botStartAll(this)"><i class="fa fa-play"></i> Iniciar Robô</button>
       </div>
     </div>
 
@@ -772,25 +765,22 @@ function botFetch(canal,action){
     body:JSON.stringify({canal})
   }).then(r=>r.json());
 }
-function botStart(canal,btn){
-  if(btn){btn.disabled=true;}
-  fetch(`/api/${BOT}/start`,{
-    method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({canal})
-  }).then(r=>r.json()).then(d=>{
-    if(btn){btn.disabled=false;}
+function botStartAll(btn){
+  if(btn){btn.disabled=true; btn.innerHTML='<i class="fa fa-spinner fa-spin"></i> Iniciando...';}
+  const canais = ['busca','linkedin'];
+  Promise.all(canais.map(canal=>
+    fetch(`/api/${BOT}/start`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({canal})}).then(r=>r.json())
+  )).then(()=>{
     loadBotStatus();
     startConsolePolling();
-    if(canal==='busca') document.getElementById('console-canal').value='busca';
-    if(canal==='linkedin') document.getElementById('console-canal').value='linkedin';
-  }).catch(()=>{if(btn)btn.disabled=false;});
+  }).catch(()=>{if(btn){btn.disabled=false; btn.innerHTML='<i class="fa fa-play"></i> Iniciar Robô';}});
 }
-function botStop(canal,btn){
+function botStopAll(btn){
   if(btn){btn.disabled=true;}
-  fetch(`/api/${BOT}/stop`,{
-    method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({canal})
-  }).then(r=>r.json()).then(()=>{
+  const canais = ['busca','linkedin'];
+  Promise.all(canais.map(canal=>
+    fetch(`/api/${BOT}/stop`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({canal})}).then(r=>r.json())
+  )).then(()=>{
     if(btn){btn.disabled=false;}
     loadBotStatus();
     stopConsolePolling();
@@ -813,14 +803,20 @@ function loadBotStatus(){
       badge.classList.remove('running');
       txt.textContent='Parado';
     }
-    // Animação no botão Iniciar quando está rodando
-    if(startBtn){
+    // Atualiza botão unificado
+    const btnStart = document.getElementById('btn-start-all');
+    const btnStop  = document.getElementById('btn-stop-all');
+    if(btnStart){
       if(rodando){
-        startBtn.classList.add('running');
-        startBtn.innerHTML='<i class="fa fa-circle-notch"></i> Rodando...';
+        btnStart.classList.add('running');
+        btnStart.innerHTML='<i class="fa fa-circle-notch fa-spin"></i> Rodando...';
+        btnStart.disabled=true;
+        if(btnStop) btnStop.disabled=false;
       } else {
-        startBtn.classList.remove('running');
-        startBtn.innerHTML='<i class="fa fa-play"></i> Iniciar';
+        btnStart.classList.remove('running');
+        btnStart.innerHTML='<i class="fa fa-play"></i> Iniciar Robô';
+        btnStart.disabled=false;
+        if(btnStop) btnStop.disabled=true;
       }
     }
   }).catch(()=>{});
