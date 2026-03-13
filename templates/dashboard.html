@@ -733,7 +733,7 @@ function loadLog(){
 function refreshStats(){
   fetch(`/api/${BOT}/stats`).then(r=>r.json()).then(d=>{
     document.getElementById('kpi-leads').textContent=d.total_leads;
-    document.getElementById('kpi-hoje').textContent=d.msgs_hoje;
+    document.getElementById('kpi-hoje').textContent=d.buscas_hoje;
     document.getElementById('kpi-demos').textContent=d.demos;
     document.getElementById('f1').textContent=d.total_leads;
     document.getElementById('f2').textContent=d.contactadas;
@@ -786,24 +786,20 @@ function botFetch(canal,action){
 }
 function botStartAll(btn){
   if(btn){btn.disabled=true; btn.innerHTML='<i class="fa fa-spinner fa-spin"></i> Iniciando...';}
-  const canais = ['busca','linkedin'];
-  Promise.all(canais.map(canal=>
-    fetch(`/api/${BOT}/start`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({canal})}).then(r=>r.json())
-  )).then(()=>{
-    loadBotStatus();
-    startConsolePolling();
-  }).catch(()=>{if(btn){btn.disabled=false; btn.innerHTML='<i class="fa fa-play"></i> Iniciar Robô';}});
+  fetch(`/api/${BOT}/start`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({canal:'busca'})})
+    .then(r=>r.json()).then(()=>{
+      loadBotStatus();
+      startConsolePolling();
+    }).catch(()=>{if(btn){btn.disabled=false; btn.innerHTML='<i class="fa fa-play"></i> Iniciar Robô';}});
 }
 function botStopAll(btn){
   if(btn){btn.disabled=true;}
-  const canais = ['busca','linkedin'];
-  Promise.all(canais.map(canal=>
-    fetch(`/api/${BOT}/stop`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({canal})}).then(r=>r.json())
-  )).then(()=>{
-    if(btn){btn.disabled=false;}
-    loadBotStatus();
-    stopConsolePolling();
-  }).catch(()=>{if(btn)btn.disabled=false;});
+  fetch(`/api/${BOT}/stop`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({canal:'busca'})})
+    .then(r=>r.json()).then(()=>{
+      if(btn){btn.disabled=false;}
+      loadBotStatus();
+      stopConsolePolling();
+    }).catch(()=>{if(btn)btn.disabled=false;});
 }
 function loadBotStatus(){
   fetch(`/api/${BOT}/status`).then(r=>r.json()).then(d=>{
@@ -930,7 +926,7 @@ function renderTo(el,lines){
 }
 
 function pollConsole(){
-  fetch(`/api/${BOT}/console?canal=wa&n=200`)
+  fetch(`/api/${BOT}/console?canal=busca&n=200`)
     .then(r=>r.json()).then(d=>{ renderTo(document.getElementById('console-out'),d.lines||[]); }).catch(()=>{});
 }
 
@@ -979,20 +975,14 @@ function toggleConsole(){
 loadWA();
 loadPipe();
 
-// Insert Daniel Anders as test lead on first load (idempotent)
-fetch(`/api/${BOT}/add-lead`,{
-  method:'POST',headers:{'Content-Type':'application/json'},
-  body:JSON.stringify({nome_fantasia:'Daniel Anders (TESTE)',whatsapp:'5554999648368',email:'daniel.anders@outlook.com.br',segmento:'Teste',score:90})
-}).catch(()=>{});
-
 // On page load: show last log + start console if bot running
 pollConsole();
 fetch(`/api/${BOT}/status`).then(r=>r.json()).then(d=>{
   const badge=document.getElementById('status-badge');
   const txt=document.getElementById('status-txt');
-  if(d.wa){
+  if(d.busca){
     badge.classList.add('running');
-    txt.textContent='Internet ativo';
+    txt.textContent='Busca ativo';
     startConsolePolling();
   }
 }).catch(()=>{});
