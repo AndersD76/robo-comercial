@@ -703,8 +703,11 @@ def api_email_campanha(bot):
     data = request.get_json(silent=True) or {}
     assunto = data.get('assunto', '').strip()
     corpo = data.get('corpo', '').strip()
-    if not assunto or not corpo:
-        return jsonify({'error': 'assunto e corpo são obrigatórios'}), 400
+    html_template = data.get('html_template', '').strip()
+    if not assunto:
+        return jsonify({'error': 'assunto é obrigatório'}), 400
+    if not corpo and not html_template:
+        return jsonify({'error': 'corpo ou template HTML é obrigatório'}), 400
 
     api_key = os.environ.get('BREVO_API_KEY', '')
     sender_email = os.environ.get('EMAIL_FROM', '')
@@ -717,7 +720,9 @@ def api_email_campanha(bot):
     try:
         conn = _conn(schema)
         c = conn.cursor()
-        c.execute("SELECT id, nome_fantasia, email FROM empresas WHERE email IS NOT NULL AND email != '' ORDER BY score DESC LIMIT 500")
+        c.execute("""SELECT id, nome_fantasia, email, segmento, cidade, estado
+                     FROM empresas WHERE email IS NOT NULL AND email != ''
+                     ORDER BY score DESC LIMIT 500""")
         leads = c.fetchall()
         conn.close()
     except Exception as e:
@@ -726,18 +731,36 @@ def api_email_campanha(bot):
     if not leads:
         return jsonify({'error': 'nenhum lead com email cadastrado'}), 400
 
-    # Converte corpo texto em HTML simples
-    corpo_html = '<br>'.join(corpo.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').split('\n'))
     enviados = erros = 0
     for lead in leads:
         nome = lead['nome_fantasia'] or 'empresa'
-        html = f'<div style="font-family:sans-serif;font-size:15px;line-height:1.6;color:#333">{corpo_html.replace("{{nome}}", nome)}</div>'
+        vars_map = {
+            '{{nome}}': nome,
+            '{{email}}': lead['email'] or '',
+            '{{segmento}}': lead.get('segmento') or '',
+            '{{cidade}}': lead.get('cidade') or '',
+        }
+        if html_template:
+            html = html_template
+            for k, v in vars_map.items():
+                html = html.replace(k, v)
+        else:
+            corpo_esc = corpo.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            corpo_html = '<br>'.join(corpo_esc.split('\n'))
+            for k, v in vars_map.items():
+                corpo_html = corpo_html.replace(k, v)
+            html = f'<div style="font-family:sans-serif;font-size:15px;line-height:1.6;color:#333">{corpo_html}</div>'
+
+        subj = assunto
+        for k, v in vars_map.items():
+            subj = subj.replace(k, v)
+
         try:
             r = http.post('https://api.brevo.com/v3/smtp/email',
                           headers={'api-key': api_key, 'Content-Type': 'application/json'},
                           json={'sender': {'name': sender_name, 'email': sender_email},
                                 'to': [{'email': lead['email'], 'name': nome}],
-                                'subject': assunto.replace('{{nome}}', nome),
+                                'subject': subj,
                                 'htmlContent': html},
                           timeout=10)
             if r.status_code in (200, 201):
