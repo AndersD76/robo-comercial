@@ -10,6 +10,7 @@ import asyncio
 import json
 import os
 import random
+import re
 import sys
 
 import psycopg2
@@ -148,6 +149,81 @@ def salvar_empresa(schema: str, dados: dict):
         conn.close()
 
 
+def _extrair_emails(texto):
+    """Extrai emails de um texto."""
+    if not texto:
+        return []
+    return re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', texto)
+
+
+def _resultado_para_empresa(r):
+    """Converte resultado do buscador para formato de empresa."""
+    titulo = r.get('titulo', '')
+    snippet = r.get('snippet', '')
+    dominio = r.get('dominio', '')
+    telefones = r.get('telefones', [])
+    url = r.get('url', '')
+    texto_completo = titulo + ' ' + snippet
+
+    # Extrair nome da empresa do título (remove sufixos comuns)
+    nome = re.sub(
+        r'\s*[-–|]\s*(Fone|Tel|Contato|Home|Página|Site).*$', '',
+        titulo, flags=re.IGNORECASE
+    ).strip()
+    if len(nome) > 100:
+        nome = nome[:100]
+    if not nome or len(nome) < 3:
+        nome = dominio.replace('www.', '').split('.')[0].title()
+
+    # Extrair emails do snippet
+    emails = _extrair_emails(texto_completo)
+    email = emails[0] if emails else None
+
+    # Telefone principal
+    telefone = telefones[0] if telefones else None
+
+    # WhatsApp: telefones com 9 dígitos no número local
+    whatsapp = None
+    for t in telefones:
+        digitos = t if isinstance(t, str) else str(t)
+        # Celular tem 11 dígitos (DDD + 9xxxx-xxxx)
+        if len(digitos) == 11 and digitos[2] == '9':
+            whatsapp = '55' + digitos
+            break
+
+    # Extrair cidade/estado do snippet
+    estado = None
+    cidade = None
+    estados_map = {
+        'SP': 'São Paulo', 'RJ': 'Rio de Janeiro', 'MG': 'Minas Gerais',
+        'RS': 'Rio Grande do Sul', 'PR': 'Paraná', 'SC': 'Santa Catarina',
+        'BA': 'Bahia', 'GO': 'Goiás', 'MT': 'Mato Grosso',
+        'MS': 'Mato Grosso do Sul', 'PE': 'Pernambuco', 'CE': 'Ceará',
+        'PA': 'Pará', 'MA': 'Maranhão', 'ES': 'Espírito Santo',
+        'TO': 'Tocantins', 'PI': 'Piauí', 'RN': 'Rio Grande do Norte',
+    }
+    for uf, nome_estado in estados_map.items():
+        if f' {uf} ' in texto_completo or f' {uf},' in texto_completo:
+            estado = uf
+            break
+        if nome_estado.lower() in texto_completo.lower():
+            estado = uf
+            break
+
+    return {
+        'nome_fantasia': nome,
+        'website': url,
+        'telefone': telefone,
+        'whatsapp': whatsapp,
+        'email': email,
+        'cidade': cidade,
+        'estado': estado,
+        'fonte': r.get('fonte', 'web'),
+        'score': r.get('relevancia', 0),
+        'segmento': '',
+    }
+
+
 async def ciclo_busca(schema: str, buscador: Buscador, termos: list) -> int:
     """Um ciclo de busca. Retorna qtd de leads salvos."""
     MAX_DIA = 120
@@ -166,7 +242,8 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list) -> int:
         return 0
 
     salvos = 0
-    for lead in resultados:
+    for r in resultados:
+        lead = _resultado_para_empresa(r)
         if not lead.get('telefone') and not lead.get('whatsapp') and not lead.get('email'):
             continue
         empresa_id = salvar_empresa(schema, lead)
