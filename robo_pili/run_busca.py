@@ -199,11 +199,13 @@ _HEADERS = {
     'Accept-Language': 'pt-BR,pt;q=0.9',
 }
 
-# Páginas onde normalmente tem contato
+# Páginas onde normalmente tem contato — ordem de prioridade
 _CONTATO_PATHS = [
     '', '/contato', '/contact', '/fale-conosco', '/contatos',
     '/sobre', '/about', '/quem-somos', '/institucional',
     '/empresa', '/a-empresa', '/sobre-nos',
+    '/equipe', '/diretoria', '/time', '/nossa-equipe',
+    '/footer', '/rodape',
 ]
 
 _EMAIL_BLACKLIST = [
@@ -211,6 +213,18 @@ _EMAIL_BLACKLIST = [
     '@schema.org', '@googlegroups', '@apple.com', '@microsoft',
     '.png', '.jpg', '.svg', '.gif', '.webp', '.css', '.js',
     'noreply', 'no-reply', 'mailer-daemon', 'postmaster',
+    'wordpress', 'cookie', 'privacy', 'webmaster', 'hostmaster',
+    'prefixo@dominio',
+]
+
+# Cargos de decisor de compra
+_CARGOS_DECISOR = [
+    'diretor', 'gerente', 'coordenador', 'supervisor', 'responsável',
+    'compras', 'comercial', 'operações', 'operacoes', 'logística',
+    'logistica', 'administrativo', 'financeiro', 'CEO', 'proprietário',
+    'proprietario', 'sócio', 'socio', 'presidente', 'head',
+    'manager', 'director', 'buyer', 'purchasing',
+    'recebimento', 'armazenagem', 'produção', 'producao',
 ]
 
 
@@ -218,11 +232,9 @@ def _extrair_cnpj(texto):
     """Extrai CNPJ de um texto (XX.XXX.XXX/XXXX-XX ou só dígitos)."""
     if not texto:
         return None
-    # Formato com pontuação
     m = re.search(r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}', texto)
     if m:
         return m.group()
-    # 14 dígitos seguidos
     m = re.search(r'(?<!\d)(\d{14})(?!\d)', texto)
     if m:
         d = m.group()
@@ -235,31 +247,96 @@ def _email_valido(email):
     low = email.lower()
     if any(x in low for x in _EMAIL_BLACKLIST):
         return False
-    # Muito curto ou muito longo
     if len(email) < 6 or len(email) > 80:
+        return False
+    # Rejeita emails com domínio genérico demais
+    dominio = low.split('@')[-1]
+    if dominio in ('dominio.com.br', 'empresa.com.br', 'seusite.com.br', 'email.com'):
         return False
     return True
 
 
+def _extrair_mailto_tel(html):
+    """Extrai emails de mailto: e telefones de tel: / href com whatsapp."""
+    emails = []
+    tels = []
+    # mailto:
+    for m in re.findall(r'mailto:([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})', html):
+        if _email_valido(m) and m not in emails:
+            emails.append(m)
+    # tel: e wa.me
+    for m in re.findall(r'(?:tel:|href=["\']tel:)[\s]*([+\d\s\-().]+)', html):
+        digitos = re.sub(r'\D', '', m)
+        if 10 <= len(digitos) <= 13 and digitos not in tels:
+            tels.append(digitos)
+    # wa.me links
+    for m in re.findall(r'wa\.me/(\d+)', html):
+        if m not in tels:
+            tels.append(m)
+    # api.whatsapp.com
+    for m in re.findall(r'api\.whatsapp\.com/send\?phone=(\d+)', html):
+        if m not in tels:
+            tels.append(m)
+    return emails, tels
+
+
+def _extrair_decisores(html):
+    """Extrai nomes e cargos de possíveis decisores do HTML."""
+    decisores = []
+    # Remove tags script/style
+    limpo = re.sub(r'<(script|style)[^>]*>.*?</\1>', '', html, flags=re.DOTALL | re.IGNORECASE)
+    # Remove tags HTML
+    texto = re.sub(r'<[^>]+>', ' ', limpo)
+    texto = re.sub(r'\s+', ' ', texto)
+
+    # Procura padrões "Nome - Cargo" ou "Cargo: Nome" ou "Nome | Cargo"
+    for cargo_kw in _CARGOS_DECISOR:
+        # "Nome Sobrenome - Diretor Comercial" ou "Nome Sobrenome | Gerente de Compras"
+        padrao1 = rf'([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)+)\s*[-–|/]\s*([^<\n]{{0,60}}?{cargo_kw}[^<\n]{{0,40}})'
+        for m in re.finditer(padrao1, texto, re.IGNORECASE):
+            nome = m.group(1).strip()
+            cargo = m.group(2).strip()
+            if 3 < len(nome) < 60 and len(cargo) < 80:
+                decisores.append({'nome': nome, 'cargo': cargo})
+
+        # "Diretor Comercial: Nome Sobrenome" ou "Gerente - Nome"
+        padrao2 = rf'({cargo_kw}[^<\n]{{0,40}})\s*[-–:|]\s*([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)+)'
+        for m in re.finditer(padrao2, texto, re.IGNORECASE):
+            cargo = m.group(1).strip()
+            nome = m.group(2).strip()
+            if 3 < len(nome) < 60 and len(cargo) < 80:
+                decisores.append({'nome': nome, 'cargo': cargo})
+
+    # Deduplica por nome
+    vistos = set()
+    unicos = []
+    for d in decisores:
+        if d['nome'] not in vistos:
+            vistos.add(d['nome'])
+            unicos.append(d)
+    return unicos[:5]
+
+
 async def _scrape_site(url: str) -> dict:
-    """Acessa o site e extrai telefone, email e CNPJ."""
-    resultado = {'telefones': [], 'emails': [], 'cnpj': None}
+    """Acessa o site e extrai telefone, email, CNPJ e decisores."""
+    resultado = {'telefones': [], 'emails': [], 'cnpj': None, 'decisores': []}
     if not url:
         return resultado
 
-    # Normaliza base URL
     base = url.rstrip('/')
     if not base.startswith('http'):
         base = 'https://' + base
-    # Remove path para pegar raiz do domínio
     from urllib.parse import urlparse
     parsed = urlparse(base)
     raiz = f'{parsed.scheme}://{parsed.netloc}'
 
-    timeout = aiohttp.ClientTimeout(total=10)
+    timeout = aiohttp.ClientTimeout(total=12)
     todo_html = ''
+    paginas_ok = 0
+
     try:
         async with aiohttp.ClientSession(timeout=timeout, headers=_HEADERS) as sess:
+            # Fase 1: percorre páginas padrão
             for path in _CONTATO_PATHS:
                 try:
                     target = raiz + path
@@ -267,44 +344,71 @@ async def _scrape_site(url: str) -> dict:
                         if resp.status != 200:
                             continue
                         html = await resp.text(errors='replace')
+                        paginas_ok += 1
                         todo_html += ' ' + html
 
-                        # Extrai emails
+                        # Extrai mailto: e tel: do HTML (mais confiável que regex no texto)
+                        mt_emails, mt_tels = _extrair_mailto_tel(html)
+                        for e in mt_emails:
+                            if e not in resultado['emails']:
+                                resultado['emails'].append(e)
+                        for t in mt_tels:
+                            if t not in resultado['telefones']:
+                                resultado['telefones'].append(t)
+
+                        # Extrai emails do texto
                         for e in _extrair_emails(html):
                             if _email_valido(e) and e not in resultado['emails']:
                                 resultado['emails'].append(e)
-                        # Extrai telefones
+                        # Extrai telefones do texto
                         for t in _extrair_telefones_texto(html):
                             if t not in resultado['telefones']:
                                 resultado['telefones'].append(t)
-                        # Extrai CNPJ
+                        # CNPJ
                         if not resultado['cnpj']:
                             resultado['cnpj'] = _extrair_cnpj(html)
 
-                        # Se já tem email + telefone + cnpj, para
-                        if resultado['emails'] and resultado['telefones'] and resultado['cnpj']:
+                        # Se já tem tudo, para de buscar páginas padrão
+                        if resultado['emails'] and resultado['telefones']:
                             break
                 except Exception:
                     continue
 
-            # Se ainda falta email ou telefone, tenta links de contato encontrados no HTML
+            # Fase 2: segue links internos de contato se ainda falta dado
             if not resultado['emails'] or not resultado['telefones']:
-                links_contato = re.findall(
-                    r'href=["\']([^"\']*(?:contato|contact|fale|whatsapp|telefone)[^"\']*)["\']',
+                links = re.findall(
+                    r'href=["\']([^"\']*(?:contato|contact|fale|whatsapp|telefone|equipe|diretoria|time)[^"\']*)["\']',
                     todo_html, re.IGNORECASE
                 )
-                for href in links_contato[:3]:
+                # Também pega links com "email" ou "atendimento"
+                links += re.findall(
+                    r'href=["\']([^"\']*(?:email|atendimento|ouvidoria|sac)[^"\']*)["\']',
+                    todo_html, re.IGNORECASE
+                )
+                urls_vistas = set()
+                for href in links[:6]:
                     try:
+                        if href.startswith('mailto:') or href.startswith('tel:') or href.startswith('#'):
+                            continue
                         if href.startswith('/'):
                             href = raiz + href
                         elif not href.startswith('http'):
                             continue
-                        if href.startswith('mailto:') or href.startswith('tel:'):
+                        if href in urls_vistas:
                             continue
+                        urls_vistas.add(href)
                         async with sess.get(href, ssl=False, allow_redirects=True) as resp:
                             if resp.status != 200:
                                 continue
                             html = await resp.text(errors='replace')
+                            todo_html += ' ' + html
+                            mt_emails, mt_tels = _extrair_mailto_tel(html)
+                            for e in mt_emails:
+                                if e not in resultado['emails']:
+                                    resultado['emails'].append(e)
+                            for t in mt_tels:
+                                if t not in resultado['telefones']:
+                                    resultado['telefones'].append(t)
                             for e in _extrair_emails(html):
                                 if _email_valido(e) and e not in resultado['emails']:
                                     resultado['emails'].append(e)
@@ -315,6 +419,10 @@ async def _scrape_site(url: str) -> dict:
                                 resultado['cnpj'] = _extrair_cnpj(html)
                     except Exception:
                         continue
+
+            # Fase 3: extrai decisores do HTML acumulado
+            resultado['decisores'] = _extrair_decisores(todo_html)
+
     except Exception:
         pass
     return resultado
@@ -426,42 +534,58 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list) -> int:
         if not lead.get('website'):
             continue
 
-        # SEMPRE scrapa o site para buscar telefone, email e CNPJ
+        # SEMPRE scrapa o site para buscar telefone, email, CNPJ e decisores
         url_scrape = r.get('url', lead.get('website', ''))
+        decisores = []
         try:
             contatos = await _scrape_site(url_scrape)
             # Email
             if contatos['emails']:
                 if not lead.get('email'):
                     lead['email'] = contatos['emails'][0]
-                # Segundo email como telefone2? Não — guarda só o primeiro
             # Telefone
             if contatos['telefones']:
                 if not lead.get('telefone'):
                     lead['telefone'] = contatos['telefones'][0]
-                # Segundo telefone
                 if len(contatos['telefones']) > 1 and not lead.get('telefone2'):
                     lead['telefone2'] = contatos['telefones'][1]
                 # WhatsApp (celular)
                 if not lead.get('whatsapp'):
                     for t in contatos['telefones']:
-                        if len(t) == 11 and t[2] == '9':
-                            lead['whatsapp'] = '55' + t
+                        digitos = re.sub(r'\D', '', t)
+                        if len(digitos) == 11 and digitos[2] == '9':
+                            lead['whatsapp'] = '55' + digitos
+                            break
+                        # wa.me com 55 na frente
+                        if len(digitos) == 13 and digitos[:2] == '55' and digitos[4] == '9':
+                            lead['whatsapp'] = digitos
                             break
             # CNPJ
             if contatos['cnpj'] and not lead.get('cnpj'):
                 lead['cnpj'] = contatos['cnpj']
+            # Decisores
+            decisores = contatos.get('decisores', [])
 
             n_tel = len(contatos['telefones'])
             n_email = len(contatos['emails'])
-            cnpj_flag = ' CNPJ' if contatos['cnpj'] else ''
-            if n_tel or n_email:
-                print(f'[{schema}]   📞 {lead["website"]}: {n_tel} tel, {n_email} email{cnpj_flag}', flush=True)
-        except Exception:
-            pass
+            extras = []
+            if contatos['cnpj']:
+                extras.append('CNPJ')
+            if decisores:
+                extras.append(f'{len(decisores)} decisor(es)')
+            extra_str = (' | ' + ', '.join(extras)) if extras else ''
+            print(f'[{schema}]   🔎 {lead["website"]}: {n_tel} tel, {n_email} email{extra_str}', flush=True)
+        except Exception as e:
+            print(f'[{schema}]   ⚠ Erro scrape {lead["website"]}: {e}', flush=True)
 
-        # SÓ salva se tem pelo menos telefone OU email
-        if not lead.get('telefone') and not lead.get('email'):
+        # EXIGE telefone E email — sem os dois não serve
+        if not lead.get('telefone') or not lead.get('email'):
+            falta = []
+            if not lead.get('telefone'):
+                falta.append('tel')
+            if not lead.get('email'):
+                falta.append('email')
+            print(f'[{schema}]   ✗ Descartado (sem {"+".join(falta)}): {lead.get("nome_fantasia", "")}', flush=True)
             continue
 
         empresa_id = salvar_empresa(schema, lead)
@@ -469,17 +593,32 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list) -> int:
             salvos += 1
             nome = lead.get('nome_fantasia') or lead.get('website') or 'Lead'
             score = lead.get('score', 0)
-            partes = []
-            if lead.get('telefone'):
-                partes.append('TEL')
+            partes = ['TEL', 'EMAIL']
             if lead.get('whatsapp'):
                 partes.append('WA')
-            if lead.get('email'):
-                partes.append('EMAIL')
             if lead.get('cnpj'):
                 partes.append('CNPJ')
-            tag = '+'.join(partes) or '?'
-            print(f'[{schema}] ✓ [{tag}] score={score} | {nome}', flush=True)
+            tag = '+'.join(partes)
+            print(f'[{schema}] ✓ [{tag}] score={score} | {nome} | {lead["email"]}', flush=True)
+
+            # Salva decisores como contatos da empresa
+            if decisores and empresa_id:
+                try:
+                    conn = _conn(schema)
+                    c = conn.cursor()
+                    for dec in decisores:
+                        # Verifica se já existe
+                        c.execute("SELECT id FROM contatos WHERE empresa_id=%s AND nome=%s",
+                                  (empresa_id, dec['nome']))
+                        if not c.fetchone():
+                            c.execute("INSERT INTO contatos (empresa_id, nome, cargo, decisor) VALUES (%s,%s,%s,1)",
+                                      (empresa_id, dec['nome'], dec['cargo']))
+                    conn.commit()
+                    conn.close()
+                    for dec in decisores:
+                        print(f'[{schema}]     👤 {dec["nome"]} — {dec["cargo"]}', flush=True)
+                except Exception:
+                    pass
 
     incrementar(schema, 'buscas')
 
