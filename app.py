@@ -763,19 +763,25 @@ def _gerar_termos_ia(empresa_nome: str, descricao: str, website: str) -> dict:
             max_tokens=800,
             messages=[{'role': 'user', 'content': f"""Você é especialista em prospecção B2B no Brasil.
 
-Empresa: {empresa_nome}
+Empresa vendedora: {empresa_nome}
 Site: {website}
-Descrição: {descricao}
+O que ela vende: {descricao}
 
-Retorne um JSON com dois campos:
-1. "termos": array com 15 termos de busca Google para encontrar potenciais clientes B2B que precisam deste produto/serviço.
-   Use variações com estados brasileiros (SP, MG, RJ, PR, RS, GO, MT, SC, BA, PE),
-   palavras do segmento-alvo e "site:.com.br contato" ou "telefone".
-2. "cargos": array com 8 cargos/funções das pessoas decisoras dentro das empresas-alvo que compram este produto.
-   Seja específico ao segmento (ex: "gerente de compras de cooperativa", "diretor agrícola", "responsável por insumos").
+Sua tarefa é identificar QUEM COMPRA este produto/serviço e gerar termos para achar esses compradores.
+NÃO busque fabricantes, distribuidores ou fornecedores do mesmo produto — busque os CLIENTES FINAIS que precisam comprar.
+
+Exemplo: se a empresa vende equipamentos agrícolas, os compradores são cooperativas, cerealistas, fazendas, armazéns — NÃO outros fabricantes de equipamentos.
+
+Retorne JSON com dois campos:
+1. "termos": 15 termos de busca Google para encontrar empresas COMPRADORAS deste produto.
+   - Use o tipo de empresa compradora + estado brasileiro (SP, MG, PR, RS, GO, MT, SC, BA, PE, MS)
+   - Inclua palavras como "contato", "telefone", "site:.com.br"
+   - Exemplos de formato: "cooperativa agricola SP contato", "cerealista MT telefone site:.com.br"
+2. "cargos": 8 cargos das pessoas decisoras DENTRO dessas empresas compradoras que autorizam a compra.
+   - Seja específico ao tipo de empresa compradora
 
 Responda SOMENTE com JSON válido. Exemplo:
-{{"termos": ["termo 1", "termo 2"], "cargos": ["cargo 1", "cargo 2"]}}"""}]
+{{"termos": ["cooperativa agricola SP contato", "armazem graos MT telefone"], "cargos": ["gerente de operações de cooperativa", "diretor de suprimentos"]}}"""}]
         )
         text = msg.content[0].text.strip()
         match = re.search(r'\{.*\}', text, re.DOTALL)
