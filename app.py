@@ -450,6 +450,29 @@ def api_stats(bot):
     return jsonify(get_stats(_get_schema() or bot))
 
 
+@app.route('/api/pipeline')
+@login_required
+def api_pipeline():
+    schema = _get_schema()
+    if not schema:
+        return jsonify({})
+    stages = ['novo', 'contactada', 'respondeu', 'qualificado', 'demo', 'convertido']
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        result = {}
+        for st in stages:
+            c.execute("""SELECT id, nome_fantasia, segmento, cidade, estado,
+                                telefone, whatsapp, email, score, status,
+                                msgs, respostas, ultima_msg, encontrado_em
+                         FROM empresas WHERE status=%s ORDER BY score DESC LIMIT 30""", (st,))
+            result[st] = [dict(r) for r in c.fetchall()]
+        conn.close()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/<bot>/leads')
 @login_required
 def api_leads(bot):
@@ -656,6 +679,65 @@ def api_send_emails(bot):
                           json={'sender': {'name': sender_name, 'email': sender_email},
                                 'to': [{'email': lead['email'], 'name': nome}],
                                 'subject': f'{nome}, conheça {empresa_nome}',
+                                'htmlContent': html},
+                          timeout=10)
+            if r.status_code in (200, 201):
+                enviados += 1
+                conn2 = _conn(schema)
+                c2 = conn2.cursor()
+                c2.execute("UPDATE empresas SET email_enviado = NOW() WHERE id = %s", (lead['id'],))
+                conn2.commit()
+                conn2.close()
+            else:
+                erros += 1
+        except Exception:
+            erros += 1
+    return jsonify({'ok': True, 'enviados': enviados, 'erros': erros})
+
+
+@app.route('/api/<bot>/email/campanha', methods=['POST'])
+@login_required
+def api_email_campanha(bot):
+    import requests as http
+    schema = _get_schema() or bot
+    data = request.get_json(silent=True) or {}
+    assunto = data.get('assunto', '').strip()
+    corpo = data.get('corpo', '').strip()
+    if not assunto or not corpo:
+        return jsonify({'error': 'assunto e corpo são obrigatórios'}), 400
+
+    api_key = os.environ.get('BREVO_API_KEY', '')
+    sender_email = os.environ.get('EMAIL_FROM', '')
+    sender_name = os.environ.get('EMAIL_FROM_NAME', 'Máquina de Vendas')
+    if not api_key:
+        return jsonify({'error': 'BREVO_API_KEY não configurado'}), 400
+    if not sender_email:
+        return jsonify({'error': 'EMAIL_FROM não configurado'}), 400
+
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute("SELECT id, nome_fantasia, email FROM empresas WHERE email IS NOT NULL AND email != '' ORDER BY score DESC LIMIT 500")
+        leads = c.fetchall()
+        conn.close()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    if not leads:
+        return jsonify({'error': 'nenhum lead com email cadastrado'}), 400
+
+    # Converte corpo texto em HTML simples
+    corpo_html = '<br>'.join(corpo.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').split('\n'))
+    enviados = erros = 0
+    for lead in leads:
+        nome = lead['nome_fantasia'] or 'empresa'
+        html = f'<div style="font-family:sans-serif;font-size:15px;line-height:1.6;color:#333">{corpo_html.replace("{{nome}}", nome)}</div>'
+        try:
+            r = http.post('https://api.brevo.com/v3/smtp/email',
+                          headers={'api-key': api_key, 'Content-Type': 'application/json'},
+                          json={'sender': {'name': sender_name, 'email': sender_email},
+                                'to': [{'email': lead['email'], 'name': nome}],
+                                'subject': assunto.replace('{{nome}}', nome),
                                 'htmlContent': html},
                           timeout=10)
             if r.status_code in (200, 201):
