@@ -288,11 +288,14 @@ def get_leads(schema: str, limite: int = 500) -> list:
     try:
         conn = _conn(schema)
         c = conn.cursor()
-        c.execute("""SELECT id, nome_fantasia, whatsapp, telefone, email, score,
-                            status, segmento, demo_status, cidade, estado,
-                            encontrado_em, cnpj, razao_social, website,
-                            linkedin, instagram, fonte, porte, email_enviado
-                     FROM empresas ORDER BY encontrado_em DESC LIMIT %s""", (limite,))
+        c.execute("""SELECT e.id, e.nome_fantasia, e.whatsapp, e.telefone, e.email, e.score,
+                            e.status, e.segmento, e.demo_status, e.cidade, e.estado,
+                            e.encontrado_em, e.cnpj, e.razao_social, e.website,
+                            e.linkedin, e.instagram, e.fonte, e.porte, e.email_enviado,
+                            (SELECT ct.nome || ' - ' || ct.cargo
+                             FROM contatos ct WHERE ct.empresa_id = e.id AND ct.decisor = 1
+                             LIMIT 1) AS _decisor
+                     FROM empresas e ORDER BY e.encontrado_em DESC LIMIT %s""", (limite,))
         rows = [dict(r) for r in c.fetchall()]
         conn.close()
         return rows
@@ -524,10 +527,14 @@ def api_bot_start(bot):
     script = scripts[canal]
     log_path = os.path.join(bot_dir, f'{canal}.log')
     log_file = open(log_path, 'a', encoding='utf-8')
-    proc = subprocess.Popen(
-        [sys.executable, '-u', script, '--schema', schema],
-        cwd=bot_dir, stdout=log_file, stderr=log_file,
-    )
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, '-u', script, '--schema', schema],
+            cwd=bot_dir, stdout=log_file, stderr=subprocess.STDOUT,
+        )
+    except Exception as e:
+        log_file.close()
+        return jsonify({'error': str(e)}), 500
     _procs.setdefault(schema, {})
     _procs[schema][canal] = proc
     return jsonify({'status': 'started', 'pid': proc.pid, 'canal': canal})

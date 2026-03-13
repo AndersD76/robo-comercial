@@ -510,7 +510,7 @@
         <span id="lead-count" style="font-size:11px;color:var(--muted);font-weight:600;"></span>
       </div>
       <div id="tab-wa" class="scroll-box">
-        <table><thead><tr><th style="width:28px"><input type="checkbox" id="sel-all-wa" onchange="toggleSelectAll(this)"></th><th style="width:36px">#</th><th>Empresa</th><th>Telefone</th><th>Email</th><th>Segmento</th><th>Status</th><th>Pts</th><th>Data</th><th style="width:60px"></th></tr></thead>
+        <table><thead><tr><th style="width:28px"><input type="checkbox" id="sel-all-wa" onchange="toggleSelectAll(this)"></th><th style="width:36px">#</th><th>Empresa</th><th>Telefone</th><th>Email</th><th>CNPJ</th><th>Decisor</th><th>Status</th><th>Pts</th><th>Data</th><th style="width:60px"></th></tr></thead>
         <tbody id="wa-tb"></tbody></table>
       </div>
       <div id="tab-log" style="display:none" class="scroll-box">
@@ -763,7 +763,7 @@ function loadWA(){
   fetch(`/api/${BOT}/leads`).then(r=>r.json()).then(d=>{
     _waLeads=d;
     const tb=document.getElementById('wa-tb');
-    if(!d.length){ tb.innerHTML='<tr><td colspan="8"><div class="empty-state"><i class="fa fa-inbox"></i>Nenhum lead ainda</div></td></tr>'; return; }
+    if(!d.length){ tb.innerHTML='<tr><td colspan="11"><div class="empty-state"><i class="fa fa-inbox"></i>Nenhum lead ainda</div></td></tr>'; return; }
     tb.innerHTML=d.map((l,i)=>{
       let dt='—';
       if(l.encontrado_em){try{const d2=new Date(l.encontrado_em);dt=d2.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){}}
@@ -773,7 +773,8 @@ function loadWA(){
       <td><b>${l.nome_fantasia||'—'}</b></td>
       <td style="color:var(--muted);font-size:11px">${l.whatsapp||l.telefone||'—'}</td>
       <td style="color:var(--muted);font-size:11px">${l.email||'—'}</td>
-      <td style="color:var(--muted)">${l.segmento||'—'}</td>
+      <td style="color:var(--muted);font-size:11px">${l.cnpj||'—'}</td>
+      <td style="color:var(--muted);font-size:11px">${l._decisor||'—'}</td>
       <td style="white-space:nowrap">${statusChip(l.status,l.demo_status)}${l.email_enviado?' <span class="chip c-email" title="Email enviado em '+new Date(l.email_enviado).toLocaleDateString('pt-BR')+'">✉</span>':''}</td>
       <td style="color:var(--muted)">${l.score||0}</td>
       <td style="color:var(--muted);font-size:11px;white-space:nowrap">${dt}</td>
@@ -975,11 +976,13 @@ function openLead(l){
   document.getElementById('modal-title').textContent=l.nome_fantasia||'Lead';
   const fmt=v=>v?new Date(v).toLocaleString('pt-BR'):'—';
   document.getElementById('modal-content').innerHTML=`
-    <div class="m-row"><span class="m-lbl">Segmento</span><span class="m-val">${l.segmento||'—'}</span></div>
+    <div class="m-row"><span class="m-lbl">CNPJ</span><span class="m-val">${l.cnpj||'—'}</span></div>
+    <div class="m-row"><span class="m-lbl">Decisor</span><span class="m-val">${l._decisor||'—'}</span></div>
     <div class="m-row"><span class="m-lbl">Localização</span><span class="m-val">${[l.cidade,l.estado].filter(Boolean).join(', ')||'—'}</span></div>
     <div class="m-row"><span class="m-lbl">Telefone</span><span class="m-val">${l.telefone||'—'}</span></div>
     <div class="m-row"><span class="m-lbl">WhatsApp</span><span class="m-val">${l.whatsapp||'—'}</span></div>
     <div class="m-row"><span class="m-lbl">Email</span><span class="m-val">${l.email||'—'}</span></div>
+    <div class="m-row"><span class="m-lbl">Website</span><span class="m-val">${l.website||'—'}</span></div>
     <div class="m-row"><span class="m-lbl">Score</span><span class="m-val">★ ${l.score||0}</span></div>
     <div class="m-row"><span class="m-lbl">Status</span>${statusChip(l.status,l.demo_status)}${l.email_enviado?' <span class="chip c-email">✉ Email enviado '+new Date(l.email_enviado).toLocaleDateString('pt-BR')+'</span>':''}</div>
     <div class="m-row"><span class="m-lbl">Mensagens</span><span class="m-val">${l.msgs||0}</span></div>
