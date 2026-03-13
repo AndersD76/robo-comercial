@@ -289,8 +289,11 @@ async function saveConfig() {
       })
     })
     const d = await r.json()
-    if (d.ok) showToast('✓ Configurações salvas!', true)
-    else showToast('Erro: ' + (d.error || 'falha'), false)
+    if (d.ok) {
+      btn.innerHTML = '<i class="fa fa-check"></i> Salvo! Redirecionando...'
+      setTimeout(() => { window.location.href = '/dashboard' }, 800)
+      return
+    } else showToast('Erro: ' + (d.error || 'falha'), false)
   } catch(e) { showToast('Erro de conexão', false) }
   btn.disabled = false
   btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'
