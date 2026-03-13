@@ -643,6 +643,28 @@ def api_delete_lead(bot, lead_id):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/<bot>/clear-all', methods=['POST'])
+@login_required
+def api_clear_all(bot):
+    """Limpa todos os leads, contatos, interações, buscas, logs e contadores."""
+    schema = _get_schema() or bot
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute('DELETE FROM interacoes')
+        c.execute('DELETE FROM contatos')
+        c.execute('DELETE FROM leads_linkedin')
+        c.execute('DELETE FROM empresas')
+        c.execute('DELETE FROM buscas')
+        c.execute('DELETE FROM logs')
+        c.execute('DELETE FROM acoes_diarias')
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True, 'msg': 'Tudo limpo'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # --- Email em massa ---
 
 @app.route('/api/<bot>/send-emails', methods=['POST'])
