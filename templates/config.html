@@ -153,24 +153,6 @@
     </button>
   </div>
 
-  <!-- LINKEDIN -->
-  <div class="card">
-    <div class="card-title"><i class="fab fa-linkedin"></i> LinkedIn (opcional)</div>
-    <div class="field">
-      <label>Email do LinkedIn</label>
-      <input type="email" id="li_email" value="{{ cfg.linkedin_email or '' }}" placeholder="seu@email.com">
-    </div>
-    <div class="field">
-      <label>Senha do LinkedIn</label>
-      <input type="password" id="li_password" placeholder="Deixe em branco para manter a atual">
-    </div>
-    <div class="field">
-      <label>Cargos-alvo <small>(um por linha)</small></label>
-      <textarea id="li_cargos" rows="4" placeholder="Clique em "Gerar com IA" para sugerir cargos automaticamente">{% if cfg.linkedin_cargos %}{% for c in cfg.linkedin_cargos %}{{ c }}
-{% endfor %}{% endif %}</textarea>
-    </div>
-  </div>
-
   <!-- SALVAR -->
   <button class="btn-save" id="btn-save" onclick="saveConfig()">
     <i class="fa fa-floppy-disk"></i> Salvar configurações
@@ -269,8 +251,6 @@ async function generateTerms() {
 async function saveConfig() {
   // Sync terms from inputs
   document.querySelectorAll('.term-item input[type=text]').forEach((inp, i) => { terms[i] = inp.value })
-  const cargosRaw = document.getElementById('li_cargos').value
-  const li_cargos = cargosRaw.split('\n').map(c=>c.trim()).filter(Boolean)
   const btn = document.getElementById('btn-save')
   btn.disabled = true
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Salvando...'
@@ -282,10 +262,7 @@ async function saveConfig() {
         empresa_nome: document.getElementById('empresa_nome').value,
         website: document.getElementById('website').value,
         descricao: document.getElementById('descricao').value,
-        termos_busca: terms.filter(Boolean),
-        linkedin_email: document.getElementById('li_email').value,
-        linkedin_password: document.getElementById('li_password').value,
-        linkedin_cargos: li_cargos
+        termos_busca: terms.filter(Boolean)
       })
     })
     const d = await r.json()

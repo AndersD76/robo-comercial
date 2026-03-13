@@ -503,8 +503,7 @@ def api_logs(bot):
 def api_bot_status(bot):
     schema = _get_schema() or bot
     return jsonify({
-        'busca':    _proc_running(schema, 'busca'),
-        'linkedin': _proc_running(schema, 'linkedin'),
+        'busca': _proc_running(schema, 'busca'),
     })
 
 
