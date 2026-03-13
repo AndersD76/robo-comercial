@@ -413,6 +413,91 @@
     }
     .row-btn:hover { background:var(--surf2); color:var(--text); }
     .row-btn-del:hover { background:rgba(248,113,113,.15); color:#f87171; border-color:rgba(248,113,113,.3); }
+
+    /* ════ DRAG & DROP ════ */
+    .lcard[draggable="true"] { cursor:grab; }
+    .lcard.dragging { opacity:.4; transform:scale(.95); }
+    .col-body.drag-over { background:rgba(99,102,241,.08); border:2px dashed rgba(99,102,241,.3); border-radius:8px; }
+
+    /* ════ MODAL TABS ════ */
+    .modal-tabs { display:flex; border-bottom:1px solid var(--border); margin-bottom:16px; gap:0; }
+    .modal-tab {
+      padding:10px 18px; font-size:12px; font-weight:600; color:var(--muted);
+      cursor:pointer; border-bottom:2px solid transparent; background:none; border-top:none;
+      border-left:none; border-right:none; font-family:inherit; transition:all .15s;
+      display:flex; align-items:center; gap:5px;
+    }
+    .modal-tab:hover { color:var(--sub); }
+    .modal-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+    .modal-tab-pane { display:none; }
+    .modal-tab-pane.active { display:block; }
+
+    /* ════ TIMELINE ════ */
+    .tl-item {
+      display:flex; gap:12px; padding:10px 0; border-bottom:1px solid rgba(255,255,255,.05);
+      font-size:12px; position:relative;
+    }
+    .tl-item:last-child { border-bottom:none; }
+    .tl-icon {
+      width:28px; height:28px; border-radius:50%; display:flex; align-items:center;
+      justify-content:center; flex-shrink:0; font-size:11px;
+    }
+    .tl-icon.tl-status { background:rgba(99,102,241,.15); color:#818cf8; }
+    .tl-icon.tl-nota   { background:rgba(251,191,36,.15); color:#fbbf24; }
+    .tl-icon.tl-email  { background:rgba(234,88,12,.15); color:#fb923c; }
+    .tl-icon.tl-call   { background:rgba(34,197,94,.15); color:#4ade80; }
+    .tl-icon.tl-tarefa { background:rgba(6,182,212,.15); color:#22d3ee; }
+    .tl-body { flex:1; min-width:0; }
+    .tl-desc { color:var(--text); line-height:1.5; }
+    .tl-time { font-size:10px; color:var(--muted); margin-top:2px; }
+
+    /* ════ TAREFAS ════ */
+    .task-item {
+      display:flex; align-items:center; gap:10px; padding:8px 10px;
+      border:1px solid var(--border); border-radius:8px; margin-bottom:6px;
+      background:rgba(255,255,255,.03); transition:all .15s;
+    }
+    .task-item:hover { background:rgba(255,255,255,.06); }
+    .task-item.done { opacity:.5; }
+    .task-item.done .task-desc { text-decoration:line-through; }
+    .task-check { width:18px; height:18px; border-radius:4px; cursor:pointer; accent-color:#6366f1; }
+    .task-desc { flex:1; font-size:12px; color:var(--text); }
+    .task-due { font-size:10px; color:var(--muted); white-space:nowrap; }
+    .task-due.overdue { color:#f87171; font-weight:600; }
+    .task-type {
+      font-size:9px; font-weight:700; padding:2px 6px; border-radius:4px;
+      text-transform:uppercase; letter-spacing:.5px;
+    }
+    .tt-ligacao  { background:rgba(34,197,94,.15); color:#4ade80; }
+    .tt-email    { background:rgba(234,88,12,.15); color:#fb923c; }
+    .tt-reuniao  { background:rgba(139,92,246,.15); color:#a78bfa; }
+    .tt-followup { background:rgba(251,191,36,.15); color:#fbbf24; }
+    .tt-outro    { background:rgba(148,163,184,.12); color:#94a3b8; }
+
+    /* ════ FILTER BAR ════ */
+    .filter-bar {
+      display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+      padding:8px 0; margin-bottom:4px;
+    }
+    .filter-select {
+      background:var(--surface); border:1px solid var(--border); border-radius:6px;
+      padding:5px 10px; font-size:11px; color:var(--text); font-family:inherit;
+      cursor:pointer;
+    }
+    .filter-select:focus { border-color:rgba(99,102,241,.5); outline:none; }
+    .bulk-btn {
+      font-family:inherit; font-size:11px; font-weight:600; padding:5px 12px;
+      border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:4px;
+      transition:all .15s;
+    }
+
+    /* ════ TAREFAS PENDENTES SIDEBAR ════ */
+    .tasks-banner {
+      background:rgba(251,191,36,.06); border:1px solid rgba(251,191,36,.15);
+      border-radius:12px; padding:14px 18px; margin-bottom:20px;
+      display:none;
+    }
+    .tasks-banner.has-tasks { display:block; }
   </style>
 </head>
 <body>
@@ -500,14 +585,38 @@
         <button class="tab-btn"   onclick="goTab('respostas',this)"><i class="fa fa-reply"></i> Respostas</button>
         <button class="tab-btn"   onclick="goTab('log',this)"><i class="fa fa-list-ul"></i> Logs</button>
       </div>
-      <div style="margin-left:auto;display:flex;gap:6px;" id="lead-actions">
+      <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;" id="lead-actions">
         <button class="btn-cfg" onclick="openAddLead()" title="Adicionar lead manualmente"><i class="fa fa-plus"></i> Lead</button>
+        <button class="btn-cfg" onclick="exportCSV()" title="Exportar leads para CSV" style="background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.25);color:#4ade80;"><i class="fa fa-download"></i> CSV</button>
         <button class="btn-cfg" onclick="enviarEmailSel()" style="background:rgba(234,88,12,.12);border-color:rgba(234,88,12,.25);color:#fb923c;" title="Enviar email para selecionados"><i class="fa fa-envelope"></i> Email</button>
+        <select id="bulk-action" class="filter-select" style="font-size:11px;padding:6px 10px;">
+          <option value="">Ações em massa...</option>
+          <option value="status-novo">→ Novo</option>
+          <option value="status-contactada">→ Contactado</option>
+          <option value="status-qualificado">→ Qualificado</option>
+          <option value="status-convertido">→ Convertido</option>
+          <option value="delete">🗑 Excluir selecionados</option>
+        </select>
+        <button class="btn-cfg" onclick="executeBulk()" style="background:rgba(139,92,246,.12);border-color:rgba(139,92,246,.25);color:#a78bfa;"><i class="fa fa-bolt"></i> Aplicar</button>
       </div>
     </div>
     <div class="tab-pane">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-        <input id="lead-search" type="text" placeholder="Buscar lead..." oninput="filterLeads()" style="flex:1;max-width:300px;padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px;font-family:inherit;">
+      <div class="filter-bar">
+        <input id="lead-search" type="text" placeholder="🔍 Buscar lead, email, CNPJ..." oninput="filterLeads()" style="flex:1;max-width:280px;padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px;font-family:inherit;">
+        <select id="filter-status" class="filter-select" onchange="filterLeads()">
+          <option value="">Todos status</option>
+          <option value="novo">Novo</option>
+          <option value="contactada">Contactado</option>
+          <option value="respondeu">Respondeu</option>
+          <option value="qualificado">Qualificado</option>
+          <option value="convertido">Convertido</option>
+        </select>
+        <select id="filter-source" class="filter-select" onchange="filterLeads()">
+          <option value="">Todas fontes</option>
+          <option value="busca">Robô</option>
+          <option value="manual">Manual</option>
+          <option value="api">API</option>
+        </select>
         <span id="lead-count" style="font-size:11px;color:var(--muted);font-weight:600;"></span>
       </div>
       <div id="tab-wa" class="scroll-box">
@@ -676,6 +785,15 @@
     </div>
   </div>
 
+  <!-- TAREFAS PENDENTES -->
+  <div class="tasks-banner" id="tasks-banner">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <span style="font-size:13px;font-weight:700;color:#fbbf24"><i class="fa fa-bell"></i> Tarefas Pendentes</span>
+      <span id="tasks-count" style="font-size:11px;color:var(--muted)"></span>
+    </div>
+    <div id="tasks-list" style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto"></div>
+  </div>
+
   <div class="sec-title"><i class="fa fa-arrow-right-arrow-left" style="font-size:10px"></i>Pipeline — {{ name }}</div>
   <div class="pipe-wrap">
     <div class="pipe-hd">
@@ -717,12 +835,27 @@
 
 
 <div class="overlay" id="overlay" onclick="closeModal(event)">
-  <div class="modal">
-    <div class="modal-hd">
-      <h3 id="modal-title">Lead</h3>
-      <button class="modal-close" onclick="document.getElementById('overlay').classList.remove('open')"><i class="fa fa-times"></i></button>
+  <div class="modal" style="width:600px;max-width:96vw;padding:0;" onclick="event.stopPropagation()">
+    <div style="padding:20px 24px 0;display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <h3 id="modal-title" style="font-size:17px;font-weight:700;margin-bottom:2px">Lead</h3>
+        <div id="modal-subtitle" style="font-size:11px;color:var(--muted)"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button onclick="editWA(_currentModalLead)" class="row-btn" title="Editar"><i class="fa fa-pen" style="font-size:11px"></i></button>
+        <button class="modal-close" onclick="document.getElementById('overlay').classList.remove('open')"><i class="fa fa-times"></i></button>
+      </div>
     </div>
-    <div id="modal-content"></div>
+    <div class="modal-tabs" style="padding:0 24px;margin-top:12px">
+      <button class="modal-tab active" onclick="switchModalTab('info',this)"><i class="fa fa-info-circle"></i> Info</button>
+      <button class="modal-tab" onclick="switchModalTab('timeline',this)"><i class="fa fa-clock-rotate-left"></i> Timeline</button>
+      <button class="modal-tab" onclick="switchModalTab('tarefas',this)"><i class="fa fa-list-check"></i> Tarefas</button>
+    </div>
+    <div style="padding:20px 24px 24px;max-height:65vh;overflow-y:auto">
+      <div id="modal-tab-info" class="modal-tab-pane active"></div>
+      <div id="modal-tab-timeline" class="modal-tab-pane"></div>
+      <div id="modal-tab-tarefas" class="modal-tab-pane"></div>
+    </div>
   </div>
 </div>
 
@@ -789,14 +922,57 @@ function loadWA(){
 }
 function filterLeads(){
   const q=document.getElementById('lead-search').value.toLowerCase();
+  const statusFilter=document.getElementById('filter-status').value;
+  const sourceFilter=document.getElementById('filter-source').value;
   const rows=document.querySelectorAll('#wa-tb tr');
   let vis=0;
-  rows.forEach(r=>{
-    const show=!q||r.textContent.toLowerCase().includes(q);
-    r.style.display=show?'':'none';
+  _waLeads.forEach((l,i)=>{
+    const row=rows[i];
+    if(!row) return;
+    let show=true;
+    if(q && !(l.nome_fantasia||'').toLowerCase().includes(q) &&
+       !(l.email||'').toLowerCase().includes(q) &&
+       !(l.cnpj||'').toLowerCase().includes(q) &&
+       !(l.telefone||'').toLowerCase().includes(q) &&
+       !(l.cidade||'').toLowerCase().includes(q)) show=false;
+    if(statusFilter && l.status!==statusFilter) show=false;
+    if(sourceFilter && l.fonte!==sourceFilter) show=false;
+    row.style.display=show?'':'none';
     if(show) vis++;
   });
   document.getElementById('lead-count').textContent=vis+'/'+_waLeads.length+' leads';
+}
+
+function exportCSV(){
+  window.open(`/api/${BOT}/leads/export`,'_blank');
+}
+
+function executeBulk(){
+  const action=document.getElementById('bulk-action').value;
+  if(!action) return;
+  const ids=getSelectedIds();
+  if(!ids.length){ alert('Selecione leads com os checkboxes primeiro'); return; }
+  if(action==='delete'){
+    if(!confirm(`Excluir ${ids.length} lead(s) permanentemente?`)) return;
+    fetch(`/api/${BOT}/leads/bulk`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ids,action:'delete'})
+    }).then(r=>r.json()).then(d=>{
+      if(d.ok){ loadWA(); loadPipe(); refreshStats(); }
+      alert(d.msg||d.error||'');
+    });
+  } else if(action.startsWith('status-')){
+    const st=action.replace('status-','');
+    if(!confirm(`Mover ${ids.length} lead(s) para "${st}"?`)) return;
+    fetch(`/api/${BOT}/leads/bulk`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ids,action:'status',status:st})
+    }).then(r=>r.json()).then(d=>{
+      if(d.ok){ loadWA(); loadPipe(); refreshStats(); }
+      alert(d.msg||d.error||'');
+    });
+  }
+  document.getElementById('bulk-action').value='';
 }
 function toggleSelectAll(master){
   document.querySelectorAll('.lead-chk').forEach(c=>c.checked=master.checked);
@@ -843,12 +1019,21 @@ function saveNewLead(){
   const nome=document.getElementById('al-nome').value.trim();
   const wa=document.getElementById('al-wa').value.trim();
   const email=document.getElementById('al-email').value.trim();
-  const seg=document.getElementById('al-seg').value.trim();
+  const tel=document.getElementById('al-tel').value.trim();
+  const cnpj=document.getElementById('al-cnpj').value.trim();
+  const site=document.getElementById('al-site').value.trim();
+  const cidade=document.getElementById('al-cidade').value.trim();
+  const estado=document.getElementById('al-estado').value.trim().toUpperCase();
+  const score=parseInt(document.getElementById('al-score').value)||50;
+  const obs=document.getElementById('al-obs').value.trim();
   const msg=document.getElementById('al-msg');
   if(!nome){ msg.textContent='Nome obrigatório'; msg.style.display='block'; msg.style.color='#f87171'; return; }
   fetch(`/api/${BOT}/add-lead`,{
     method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({nome_fantasia:nome,whatsapp:wa,email:email,segmento:seg||'Manual'})
+    body:JSON.stringify({nome_fantasia:nome,whatsapp:wa||null,email:email||null,
+      telefone:tel||null,cnpj:cnpj||null,website:site||null,
+      cidade:cidade||null,estado:estado||null,score,observacoes:obs||null,
+      segmento:'Manual'})
   }).then(r=>r.json()).then(d=>{
     if(d.ok){
       msg.style.display='block'; msg.style.color='#4ade80';
@@ -876,16 +1061,22 @@ function refreshStats(){
     document.getElementById('kpi-leads').textContent=d.total_leads;
     document.getElementById('kpi-emails').textContent=d.emails_enviados;
     document.getElementById('kpi-resp').textContent=d.responderam;
-    document.getElementById('f1').textContent=d.total_leads;
-    document.getElementById('f2').textContent=d.contactadas;
-    document.getElementById('f3').textContent=d.responderam;
-    document.getElementById('f4').textContent=d.demos;
+    // Conversion funnel with percentages
+    const pct=(n,t)=>t>0?Math.round(n/t*100):0;
+    document.getElementById('f1').innerHTML=d.total_leads+`<small style="font-size:11px;color:var(--muted);display:block">100%</small>`;
+    document.getElementById('f2').innerHTML=d.contactadas+`<small style="font-size:11px;color:var(--muted);display:block">${pct(d.contactadas,d.total_leads)}%</small>`;
+    document.getElementById('f3').innerHTML=d.responderam+`<small style="font-size:11px;color:var(--muted);display:block">${pct(d.responderam,d.contactadas||d.total_leads)}%</small>`;
+    document.getElementById('f4').innerHTML=d.demos+`<small style="font-size:11px;color:var(--muted);display:block">${pct(d.demos,d.responderam||d.total_leads)}%</small>`;
+    // f2-f4 already updated above with percentages
   }).catch(()=>{});
 }
 
 const STAGES=['novo','contactada','respondeu','qualificado','demo','convertido'];
+let _pipeData={};
+
 function loadPipe(){
   fetch(`/api/pipeline?bot=${BOT}`).then(r=>r.json()).then(data=>{
+    _pipeData=data;
     let total=0;
     STAGES.forEach(st=>{
       const col=document.getElementById(`kb-${st}`);
@@ -894,19 +1085,35 @@ function loadPipe(){
       const leads=data[st]||[];
       if(cnt) cnt.textContent=leads.length;
       total+=leads.length;
-      if(!leads.length){ col.innerHTML='<div class="col-empty">—</div>'; return; }
+
+      // Setup drag-and-drop on column
+      col.ondragover=e=>{e.preventDefault();col.classList.add('drag-over');};
+      col.ondragleave=()=>col.classList.remove('drag-over');
+      col.ondrop=e=>{
+        e.preventDefault();
+        col.classList.remove('drag-over');
+        const leadId=parseInt(e.dataTransfer.getData('text/plain'));
+        if(leadId) dropLead(leadId,st);
+      };
+
+      if(!leads.length){ col.innerHTML='<div class="col-empty">Arraste leads aqui</div>'; return; }
       col.innerHTML=leads.map(l=>{
         const fone=l.whatsapp||l.telefone||'';
         const dt=l.encontrado_em?new Date(l.encontrado_em).toLocaleDateString('pt-BR'):'';
-        const emailTag=l.email_enviado?`<span style="color:#fb923c;font-size:10px">✉ email</span>`:'';
+        const emailTag=l.email_enviado?`<span style="color:#fb923c;font-size:10px">✉</span>`:'';
+        const obsPreview=l.observacoes?(l.observacoes.length>35?l.observacoes.substring(0,35)+'…':l.observacoes):'';
         return `
-        <div class="lcard" onclick="openLead(${JSON.stringify(l).replace(/"/g,'&quot;')})">
+        <div class="lcard" draggable="true"
+          ondragstart="event.dataTransfer.setData('text/plain','${l.id}');this.classList.add('dragging')"
+          ondragend="this.classList.remove('dragging')"
+          onclick="openLead(${JSON.stringify(l).replace(/"/g,'&quot;')})">
           <div class="lcard-name"><i class="fa fa-building" style="color:#6366f1;font-size:11px"></i> ${l.nome_fantasia||'—'}</div>
-          <div class="lcard-seg">${l.segmento||'—'}</div>
-          ${fone?`<div style="font-size:10px;color:var(--muted);margin-top:2px">📞 ${fone}</div>`:''}
-          ${l.email?`<div style="font-size:10px;color:var(--muted)">✉ ${l.email}</div>`:''}
+          ${l._decisor?`<div style="font-size:10px;color:#a78bfa;margin-top:2px"><i class="fa fa-user-tie" style="font-size:9px"></i> ${l._decisor}</div>`:''}
+          ${fone?`<div style="font-size:10px;color:var(--muted);margin-top:2px"><i class="fa fa-phone" style="font-size:8px"></i> ${fone}</div>`:''}
+          ${l.email?`<div style="font-size:10px;color:var(--muted)"><i class="fa fa-envelope" style="font-size:8px"></i> ${l.email}</div>`:''}
+          ${obsPreview?`<div style="font-size:9px;color:#fbbf24;margin-top:3px;font-style:italic">${obsPreview}</div>`:''}
           <div class="lcard-foot">
-            <span class="lcard-score">★ ${l.score||0}</span>
+            <span class="lcard-score"><span style="color:#fbbf24">★</span> ${l.score||0}</span>
             <span>${emailTag}</span>
             ${dt?`<span style="font-size:9px;color:var(--muted)">${dt}</span>`:''}
           </div>
@@ -915,6 +1122,15 @@ function loadPipe(){
     const el=document.getElementById('pipe-total');
     if(el) el.textContent=total?`${total} lead${total!==1?'s':''}`:' ';
   }).catch(()=>{});
+}
+
+function dropLead(leadId,newStatus){
+  fetch(`/api/${BOT}/lead/${leadId}`,{
+    method:'PUT',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({status:newStatus})
+  }).then(r=>r.json()).then(d=>{
+    if(d.ok){ loadPipe(); loadWA(); refreshStats(); }
+  });
 }
 
 function botFetch(canal,action){
@@ -973,30 +1189,278 @@ function loadBotStatus(){
   }).catch(()=>{});
 }
 
+let _currentModalLead=null;
+
+function switchModalTab(tab,btn){
+  document.querySelectorAll('.modal-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.modal-tab-pane').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('modal-tab-'+tab).classList.add('active');
+  if(tab==='timeline') loadTimeline(_currentModalLead.id);
+  if(tab==='tarefas') loadTarefas(_currentModalLead.id);
+}
+
 function openLead(l){
+  _currentModalLead=l;
   document.getElementById('modal-title').textContent=l.nome_fantasia||'Lead';
+  document.getElementById('modal-subtitle').innerHTML=
+    [l.segmento,l.cidade,l.estado].filter(Boolean).join(' · ')+
+    (l.fonte?` <span style="background:rgba(99,102,241,.12);color:#818cf8;font-size:9px;padding:1px 6px;border-radius:4px;font-weight:600">${l.fonte}</span>`:'');
+
+  // Reset tabs to Info
+  document.querySelectorAll('.modal-tab').forEach((t,i)=>t.classList.toggle('active',i===0));
+  document.querySelectorAll('.modal-tab-pane').forEach((p,i)=>p.classList.toggle('active',i===0));
+
   const fmt=v=>v?new Date(v).toLocaleString('pt-BR'):'—';
-  document.getElementById('modal-content').innerHTML=`
-    <div class="m-row"><span class="m-lbl">CNPJ</span><span class="m-val">${l.cnpj||'—'}</span></div>
-    <div class="m-row"><span class="m-lbl">Decisor</span><span class="m-val">${l._decisor||'—'}</span></div>
-    <div class="m-row"><span class="m-lbl">Localização</span><span class="m-val">${[l.cidade,l.estado].filter(Boolean).join(', ')||'—'}</span></div>
-    <div class="m-row"><span class="m-lbl">Telefone</span><span class="m-val">${l.telefone||'—'}</span></div>
-    <div class="m-row"><span class="m-lbl">WhatsApp</span><span class="m-val">${l.whatsapp||'—'}</span></div>
-    <div class="m-row"><span class="m-lbl">Email</span><span class="m-val">${l.email||'—'}</span></div>
-    <div class="m-row"><span class="m-lbl">Website</span><span class="m-val">${l.website||'—'}</span></div>
-    <div class="m-row"><span class="m-lbl">Score</span><span class="m-val">★ ${l.score||0}</span></div>
-    <div class="m-row"><span class="m-lbl">Status</span>${statusChip(l.status,l.demo_status)}${l.email_enviado?' <span class="chip c-email">✉ Email enviado '+new Date(l.email_enviado).toLocaleDateString('pt-BR')+'</span>':''}</div>
-    <div class="m-row"><span class="m-lbl">Mensagens</span><span class="m-val">${l.msgs||0}</span></div>
-    <div class="m-row"><span class="m-lbl">Respostas</span><span class="m-val">${l.respostas||0}</span></div>
-    <div class="m-row"><span class="m-lbl">Msg enviada</span><span class="m-val" style="font-size:11px;max-height:60px;overflow:auto">${l.msg_enviada||'—'}</span></div>
-    <div class="m-row"><span class="m-lbl">Última resposta</span><span class="m-val" style="font-size:11px;max-height:60px;overflow:auto">${l.ultima_resposta||'—'}</span></div>
-    <div class="m-row"><span class="m-lbl">Último contato</span><span class="m-val">${fmt(l.ultima_msg)}</span></div>
-    <div class="m-row"><span class="m-lbl">Respondido em</span><span class="m-val">${fmt(l.respondido_em)}</span></div>
-    <div class="m-row"><span class="m-lbl">Encontrado em</span><span class="m-val">${fmt(l.encontrado_em)}</span></div>
+  const statusOpts=['novo','contactada','respondeu','qualificado','demo','convertido'];
+
+  // INFO TAB
+  document.getElementById('modal-tab-info').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;margin-bottom:16px">
+      <div class="m-row"><span class="m-lbl">Telefone</span><span class="m-val">${l.telefone||'—'}</span></div>
+      <div class="m-row"><span class="m-lbl">WhatsApp</span><span class="m-val">${l.whatsapp||'—'}</span></div>
+      <div class="m-row"><span class="m-lbl">Email</span><span class="m-val" style="font-size:11px;word-break:break-all">${l.email||'—'}</span></div>
+      <div class="m-row"><span class="m-lbl">Website</span><span class="m-val" style="font-size:11px">${l.website?`<a href="${l.website.startsWith('http')?l.website:'https://'+l.website}" target="_blank" style="color:#60a5fa">${l.website}</a>`:' —'}</span></div>
+      <div class="m-row"><span class="m-lbl">CNPJ</span><span class="m-val" style="font-size:11px">${l.cnpj||'—'}</span></div>
+      <div class="m-row"><span class="m-lbl">Local</span><span class="m-val">${[l.cidade,l.estado].filter(Boolean).join(', ')||'—'}</span></div>
+      <div class="m-row"><span class="m-lbl">Decisor</span><span class="m-val" style="font-size:11px;color:#a78bfa">${l._decisor||'—'}</span></div>
+      <div class="m-row"><span class="m-lbl">Score</span><span class="m-val"><span style="color:#fbbf24">★</span> ${l.score||0}</span></div>
+    </div>
+
+    <div style="border-top:1px solid var(--border);padding-top:14px;margin-bottom:14px">
+      <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:8px">STATUS DO LEAD</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${statusOpts.map(s=>{
+          const colors={novo:'c-novo',contactada:'c-cont',respondeu:'c-resp',qualificado:'c-qualif',demo:'c-demo',convertido:'c-conv'};
+          const isActive=l.status===s;
+          return `<button onclick="quickStatus(${l.id},'${s}')" class="chip ${colors[s]||'c-novo'}" style="cursor:pointer;font-size:11px;padding:4px 12px;${isActive?'box-shadow:0 0 0 2px var(--accent);font-weight:700':''}">${s}</button>`;
+        }).join('')}
+      </div>
+      ${l.email_enviado?`<div style="font-size:11px;color:#fb923c;margin-top:8px"><i class="fa fa-envelope"></i> Email enviado em ${new Date(l.email_enviado).toLocaleDateString('pt-BR')}</div>`:''}
+    </div>
+
+    <div style="border-top:1px solid var(--border);padding-top:14px">
+      <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px">OBSERVAÇÕES</div>
+      <textarea id="modal-obs" rows="3" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px;font-family:inherit;resize:vertical">${(l.observacoes||'').replace(/</g,'&lt;')}</textarea>
+      <div style="display:flex;gap:8px;margin-top:6px;align-items:center">
+        <button onclick="saveObs(${l.id})" style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:6px 16px;font-size:12px;cursor:pointer;font-family:inherit">Salvar obs</button>
+        <span id="modal-obs-msg" style="font-size:11px;color:#4ade80;display:none">Salvo!</span>
+        <span style="margin-left:auto;font-size:10px;color:var(--muted)">Encontrado em ${fmt(l.encontrado_em)}</span>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">
+      <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:8px">AÇÕES RÁPIDAS</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="addQuickNote(${l.id})" class="btn-cfg" style="font-size:11px"><i class="fa fa-sticky-note"></i> Nota</button>
+        <button onclick="addQuickTask(${l.id})" class="btn-cfg" style="font-size:11px;background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.25);color:#fbbf24"><i class="fa fa-list-check"></i> Tarefa</button>
+        <button onclick="logCall(${l.id})" class="btn-cfg" style="font-size:11px;background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.25);color:#4ade80"><i class="fa fa-phone"></i> Ligação</button>
+        <button onclick="delWA(${l.id})" class="btn-cfg" style="font-size:11px;background:rgba(248,113,113,.12);border-color:rgba(248,113,113,.25);color:#f87171"><i class="fa fa-trash"></i> Excluir</button>
+      </div>
+    </div>
   `;
+
+  // TIMELINE TAB placeholder
+  document.getElementById('modal-tab-timeline').innerHTML='<div style="text-align:center;padding:20px;color:var(--muted)"><i class="fa fa-spinner fa-spin"></i> Carregando...</div>';
+  // TAREFAS TAB placeholder
+  document.getElementById('modal-tab-tarefas').innerHTML='<div style="text-align:center;padding:20px;color:var(--muted)"><i class="fa fa-spinner fa-spin"></i> Carregando...</div>';
+
   document.getElementById('overlay').classList.add('open');
 }
+
+function loadTimeline(leadId){
+  fetch(`/api/${BOT}/lead/${leadId}/atividades`).then(r=>r.json()).then(items=>{
+    const el=document.getElementById('modal-tab-timeline');
+    if(!items.length){
+      el.innerHTML=`
+        <div style="text-align:center;padding:30px;color:var(--muted)">
+          <i class="fa fa-clock-rotate-left" style="font-size:24px;opacity:.2;display:block;margin-bottom:8px"></i>
+          Nenhuma atividade registrada
+        </div>`;
+      // Still show the add note form
+      el.innerHTML+=timelineAddForm(leadId);
+      return;
+    }
+    const iconMap={status_change:'tl-status',nota:'tl-nota',email:'tl-email',ligacao:'tl-call',tarefa:'tl-tarefa'};
+    const faMap={status_change:'fa-arrow-right-arrow-left',nota:'fa-sticky-note',email:'fa-envelope',ligacao:'fa-phone',tarefa:'fa-list-check'};
+    el.innerHTML=timelineAddForm(leadId)+'<div style="margin-top:12px">'+items.map(a=>{
+      const cls=iconMap[a.tipo]||'tl-nota';
+      const fa=faMap[a.tipo]||'fa-circle';
+      const dt=a.criado_em?new Date(a.criado_em).toLocaleString('pt-BR'):'';
+      return `<div class="tl-item">
+        <div class="tl-icon ${cls}"><i class="fa ${fa}"></i></div>
+        <div class="tl-body">
+          <div class="tl-desc">${(a.descricao||'').replace(/</g,'&lt;')}</div>
+          <div class="tl-time">${dt}</div>
+        </div>
+      </div>`;
+    }).join('')+'</div>';
+  }).catch(()=>{
+    document.getElementById('modal-tab-timeline').innerHTML='<div style="color:#f87171;font-size:12px">Erro ao carregar timeline</div>';
+  });
+}
+
+function timelineAddForm(leadId){
+  return `<div style="display:flex;gap:8px;align-items:flex-end">
+    <select id="tl-tipo" class="filter-select" style="min-width:100px">
+      <option value="nota">📝 Nota</option>
+      <option value="ligacao">📞 Ligação</option>
+      <option value="email">✉ Email</option>
+    </select>
+    <input id="tl-desc" placeholder="O que foi feito..." style="flex:1;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px;font-family:inherit">
+    <button onclick="addActivity(${leadId})" style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap"><i class="fa fa-plus"></i> Add</button>
+  </div>`;
+}
+
+function addActivity(leadId){
+  const tipo=document.getElementById('tl-tipo').value;
+  const desc=document.getElementById('tl-desc').value.trim();
+  if(!desc) return;
+  fetch(`/api/${BOT}/lead/${leadId}/atividade`,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({tipo,descricao:desc})
+  }).then(r=>r.json()).then(d=>{
+    if(d.ok){ document.getElementById('tl-desc').value=''; loadTimeline(leadId); }
+  });
+}
+
+function addQuickNote(leadId){
+  const note=prompt('Nota rápida:');
+  if(!note) return;
+  fetch(`/api/${BOT}/lead/${leadId}/atividade`,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({tipo:'nota',descricao:note})
+  }).then(r=>r.json()).then(d=>{
+    if(d.ok){ loadTimeline(leadId); switchModalTab('timeline',document.querySelectorAll('.modal-tab')[1]); }
+  });
+}
+
+function logCall(leadId){
+  const note=prompt('Resumo da ligação:');
+  if(!note) return;
+  fetch(`/api/${BOT}/lead/${leadId}/atividade`,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({tipo:'ligacao',descricao:note})
+  }).then(r=>r.json()).then(d=>{
+    if(d.ok){ loadTimeline(leadId); switchModalTab('timeline',document.querySelectorAll('.modal-tab')[1]); }
+  });
+}
+
+function loadTarefas(leadId){
+  fetch(`/api/${BOT}/lead/${leadId}/tarefas`).then(r=>r.json()).then(tasks=>{
+    const el=document.getElementById('modal-tab-tarefas');
+    const addForm=`<div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:16px">
+      <select id="tk-tipo" class="filter-select" style="min-width:90px">
+        <option value="ligacao">📞 Ligação</option>
+        <option value="email">✉ Email</option>
+        <option value="reuniao">🤝 Reunião</option>
+        <option value="followup">🔄 Follow-up</option>
+        <option value="outro">📌 Outro</option>
+      </select>
+      <input id="tk-desc" placeholder="Descrição da tarefa..." style="flex:1;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px;font-family:inherit">
+      <input id="tk-date" type="date" style="padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:11px;font-family:inherit">
+      <button onclick="addTask(${leadId})" style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap"><i class="fa fa-plus"></i></button>
+    </div>`;
+
+    if(!tasks.length){
+      el.innerHTML=addForm+`<div style="text-align:center;padding:20px;color:var(--muted)"><i class="fa fa-list-check" style="font-size:24px;opacity:.2;display:block;margin-bottom:8px"></i>Nenhuma tarefa</div>`;
+      return;
+    }
+    const typeColors={ligacao:'tt-ligacao',email:'tt-email',reuniao:'tt-reuniao',followup:'tt-followup',outro:'tt-outro'};
+    el.innerHTML=addForm+tasks.map(t=>{
+      const due=t.data_vencimento?new Date(t.data_vencimento):null;
+      const isOverdue=due&&!t.concluida&&due<new Date();
+      const dueStr=due?due.toLocaleDateString('pt-BR'):'';
+      return `<div class="task-item${t.concluida?' done':''}">
+        <input type="checkbox" class="task-check" ${t.concluida?'checked':''}
+          onchange="toggleTask(${t.id},this.checked,${leadId})">
+        <span class="task-type ${typeColors[t.tipo]||'tt-outro'}">${t.tipo||'outro'}</span>
+        <span class="task-desc">${(t.descricao||'').replace(/</g,'&lt;')}</span>
+        ${dueStr?`<span class="task-due${isOverdue?' overdue':''}">${isOverdue?'⚠ ':''}${dueStr}</span>`:''}
+        <button onclick="deleteTask(${t.id},${leadId})" class="row-btn row-btn-del" style="width:22px;height:22px"><i class="fa fa-times" style="font-size:9px"></i></button>
+      </div>`;
+    }).join('');
+  }).catch(()=>{
+    document.getElementById('modal-tab-tarefas').innerHTML='<div style="color:#f87171;font-size:12px">Erro ao carregar tarefas</div>';
+  });
+}
+
+function addTask(leadId){
+  const tipo=document.getElementById('tk-tipo').value;
+  const desc=document.getElementById('tk-desc').value.trim();
+  const date=document.getElementById('tk-date').value;
+  if(!desc) return;
+  fetch(`/api/${BOT}/lead/${leadId}/tarefa`,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({tipo,descricao:desc,data_vencimento:date||null})
+  }).then(r=>r.json()).then(d=>{
+    if(d.ok){ document.getElementById('tk-desc').value=''; loadTarefas(leadId); loadPendingTasks(); }
+  });
+}
+
+function addQuickTask(leadId){
+  switchModalTab('tarefas',document.querySelectorAll('.modal-tab')[2]);
+}
+
+function toggleTask(taskId,done,leadId){
+  fetch(`/api/${BOT}/tarefa/${taskId}`,{
+    method:'PUT',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({concluida:done})
+  }).then(r=>r.json()).then(d=>{ if(d.ok){ loadTarefas(leadId); loadPendingTasks(); } });
+}
+
+function deleteTask(taskId,leadId){
+  fetch(`/api/${BOT}/tarefa/${taskId}`,{method:'DELETE'}).then(r=>r.json()).then(d=>{
+    if(d.ok){ loadTarefas(leadId); loadPendingTasks(); }
+  });
+}
+
+function quickStatus(id,status){
+  fetch('/api/'+BOT+'/lead/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})})
+    .then(r=>r.json()).then(d=>{
+      if(d.ok){
+        loadWA();loadPipe();refreshStats();
+        // Update the modal in-place
+        if(_currentModalLead){
+          _currentModalLead.status=status;
+          openLead(_currentModalLead);
+        }
+      }
+    });
+}
+function saveObs(id){
+  const obs=document.getElementById('modal-obs').value;
+  fetch('/api/'+BOT+'/lead/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({observacoes:obs})})
+    .then(r=>r.json()).then(d=>{
+      if(d.ok){const m=document.getElementById('modal-obs-msg');m.style.display='inline';setTimeout(()=>m.style.display='none',2000);loadWA();loadPipe();}
+    });
+}
 function closeModal(e){ if(e.target===document.getElementById('overlay')) document.getElementById('overlay').classList.remove('open'); }
+
+// ── Pending Tasks Banner ──
+function loadPendingTasks(){
+  fetch(`/api/${BOT}/tarefas/pendentes`).then(r=>r.json()).then(tasks=>{
+    const banner=document.getElementById('tasks-banner');
+    const list=document.getElementById('tasks-list');
+    const cnt=document.getElementById('tasks-count');
+    if(!tasks.length){ banner.classList.remove('has-tasks'); return; }
+    banner.classList.add('has-tasks');
+    cnt.textContent=tasks.length+' pendente'+(tasks.length!==1?'s':'');
+    const typeColors={ligacao:'tt-ligacao',email:'tt-email',reuniao:'tt-reuniao',followup:'tt-followup',outro:'tt-outro'};
+    list.innerHTML=tasks.map(t=>{
+      const due=t.data_vencimento?new Date(t.data_vencimento):null;
+      const isOverdue=due&&due<new Date();
+      const dueStr=due?due.toLocaleDateString('pt-BR'):'';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px">
+        <input type="checkbox" class="task-check" onchange="toggleTask(${t.id},this.checked,${t.empresa_id})">
+        <span class="task-type ${typeColors[t.tipo]||'tt-outro'}">${t.tipo}</span>
+        <span style="color:var(--text);flex:1">${t.descricao}</span>
+        <span style="color:var(--muted);font-size:11px">${t.nome_fantasia||''}</span>
+        ${dueStr?`<span class="task-due${isOverdue?' overdue':''}">${dueStr}</span>`:''}
+      </div>`;
+    }).join('');
+  }).catch(()=>{});
+}
 
 // ── QR Code ──────────────────────────────────────────────────────────────────
 let _qrTimer=null, _qrSeen=false;
@@ -1112,6 +1576,7 @@ function toggleConsole(){
 
 loadWA();
 loadPipe();
+loadPendingTasks();
 
 // On page load: show last log + start console if bot running
 pollConsole();
@@ -1128,6 +1593,7 @@ fetch(`/api/${BOT}/status`).then(r=>r.json()).then(d=>{
 setInterval(refreshStats,30000);
 setInterval(loadPipe,60000);
 setInterval(loadBotStatus,10000);
+setInterval(loadPendingTasks,120000);
 
 
 // == CRUD: Edit / Delete ==
@@ -1150,15 +1616,16 @@ function editWA(l){
   document.getElementById('edit-title').textContent='Editar: '+(l.nome_fantasia||'Lead');
   document.getElementById('edit-body').innerHTML=
     _ef('Nome / Empresa','ed-nome',l.nome_fantasia)+
-    _ef('WhatsApp','ed-wa',l.whatsapp)+
+    _ef('CNPJ','ed-cnpj',l.cnpj)+
     _ef('Telefone','ed-tel',l.telefone)+
+    _ef('WhatsApp','ed-wa',l.whatsapp)+
     _ef('Email','ed-email',l.email,'email')+
-    _ef('Segmento','ed-seg',l.segmento)+
+    _ef('Website','ed-site',l.website)+
     _ef('Status','ed-status',l.status,null,st)+
-    _ef('Score','ed-score',l.score,'number')+
     _ef('Cidade','ed-cidade',l.cidade)+
     _ef('Estado','ed-estado',l.estado)+
-    _ef('Website','ed-site',l.website)+
+    _ef('Score','ed-score',l.score,'number')+
+    '<div class="li-cfg-field"><label>Observações</label><textarea id="ed-obs" rows="3" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px;font-family:inherit;resize:vertical">'+(l.observacoes||'').replace(/</g,'&lt;')+'</textarea></div>'+
     '<div id="ed-msg" style="display:none;font-size:12px;padding:6px 10px;border-radius:6px;margin-top:4px"></div>';
   document.getElementById('edit-save-btn').onclick=function(){saveWA(l.id)};
   document.getElementById('edit-overlay').classList.add('open');
@@ -1166,15 +1633,16 @@ function editWA(l){
 function saveWA(id){
   var body={
     nome_fantasia:document.getElementById('ed-nome').value.trim(),
+    cnpj:document.getElementById('ed-cnpj').value.trim()||null,
     whatsapp:document.getElementById('ed-wa').value.trim()||null,
     telefone:document.getElementById('ed-tel').value.trim()||null,
     email:document.getElementById('ed-email').value.trim()||null,
-    segmento:document.getElementById('ed-seg').value.trim()||null,
     status:document.getElementById('ed-status').value,
     score:parseInt(document.getElementById('ed-score').value)||0,
     cidade:document.getElementById('ed-cidade').value.trim()||null,
     estado:document.getElementById('ed-estado').value.trim()||null,
-    website:document.getElementById('ed-site').value.trim()||null
+    website:document.getElementById('ed-site').value.trim()||null,
+    observacoes:document.getElementById('ed-obs').value.trim()||null
   };
   var msg=document.getElementById('ed-msg');
   fetch('/api/'+BOT+'/lead/'+id,{
@@ -1387,16 +1855,28 @@ async function enviarMalaDireta(btn) {
 
 <!-- ADD LEAD MODAL -->
 <div class="li-cfg-overlay" id="add-lead-overlay" onclick="closeAddLead(event)">
-  <div class="li-cfg-card" style="width:400px">
+  <div class="li-cfg-card" style="width:480px;max-height:90vh;overflow-y:auto">
     <div class="li-cfg-hd">
-      <i class="fa fa-user-plus" style="color:#60a5fa"></i> Adicionar Lead
+      <i class="fa fa-user-plus" style="color:#60a5fa"></i> Adicionar Lead Manual
       <button onclick="closeAddLead()"><i class="fa fa-times"></i></button>
     </div>
     <div class="li-cfg-body">
-      <div class="li-cfg-field"><label>Nome / Empresa *</label><input id="al-nome" placeholder="Ex: Daniel Anders"></div>
-      <div class="li-cfg-field"><label>WhatsApp (com DDD)</label><input id="al-wa" placeholder="Ex: 5554999648368"></div>
-      <div class="li-cfg-field"><label>Email</label><input id="al-email" placeholder="Ex: contato@empresa.com"></div>
-      <div class="li-cfg-field"><label>Segmento</label><input id="al-seg" placeholder="Ex: Metalurgia"></div>
+      <div class="li-cfg-field"><label>Nome / Empresa *</label><input id="al-nome" placeholder="Ex: Cooperativa Agrícola XYZ"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="li-cfg-field"><label>Telefone</label><input id="al-tel" placeholder="Ex: (54) 3312-1234"></div>
+        <div class="li-cfg-field"><label>WhatsApp (com DDD)</label><input id="al-wa" placeholder="Ex: 5554999648368"></div>
+      </div>
+      <div class="li-cfg-field"><label>Email</label><input id="al-email" type="email" placeholder="Ex: contato@empresa.com"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="li-cfg-field"><label>CNPJ</label><input id="al-cnpj" placeholder="Ex: 12.345.678/0001-90"></div>
+        <div class="li-cfg-field"><label>Website</label><input id="al-site" placeholder="Ex: empresa.com.br"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 80px;gap:12px">
+        <div class="li-cfg-field"><label>Cidade</label><input id="al-cidade" placeholder="Ex: Maringá"></div>
+        <div class="li-cfg-field"><label>Estado</label><input id="al-estado" placeholder="Ex: PR" maxlength="2"></div>
+        <div class="li-cfg-field"><label>Score</label><input id="al-score" type="number" value="50" min="0" max="100"></div>
+      </div>
+      <div class="li-cfg-field"><label>Observações</label><textarea id="al-obs" rows="2" placeholder="Anotações sobre o lead..." style="width:100%;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);font-family:inherit;resize:vertical"></textarea></div>
       <div id="al-msg" style="display:none;font-size:12px;padding:6px 10px;border-radius:6px;background:rgba(74,222,128,.1);"></div>
     </div>
     <div class="li-cfg-footer">

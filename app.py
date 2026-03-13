@@ -125,8 +125,18 @@ def _init_user_schema(schema: str):
         website TEXT, linkedin TEXT, instagram TEXT, fonte TEXT,
         score INTEGER DEFAULT 0, encontrado_em TIMESTAMP DEFAULT NOW(),
         status TEXT DEFAULT 'novo', demo_agendado TIMESTAMP,
-        demo_status TEXT, email_enviado TIMESTAMP
+        demo_status TEXT, email_enviado TIMESTAMP,
+        observacoes TEXT
     )""")
+    # Migrations
+    for stmt in [
+        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS observacoes TEXT",
+    ]:
+        try:
+            c.execute(stmt)
+        except Exception:
+            pass
+    conn.commit()
     c.execute("""CREATE TABLE IF NOT EXISTS contatos (
         id BIGSERIAL PRIMARY KEY, empresa_id BIGINT REFERENCES empresas(id),
         nome TEXT, cargo TEXT, telefone TEXT, whatsapp TEXT,
@@ -157,6 +167,24 @@ def _init_user_schema(schema: str):
     c.execute("""CREATE TABLE IF NOT EXISTS logs (
         id BIGSERIAL PRIMARY KEY, timestamp TIMESTAMP DEFAULT NOW(),
         tipo TEXT, mensagem TEXT, detalhes TEXT
+    )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS atividades (
+        id BIGSERIAL PRIMARY KEY,
+        empresa_id BIGINT REFERENCES empresas(id) ON DELETE CASCADE,
+        tipo TEXT,
+        descricao TEXT,
+        dados JSONB,
+        criado_em TIMESTAMP DEFAULT NOW()
+    )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS tarefas (
+        id BIGSERIAL PRIMARY KEY,
+        empresa_id BIGINT REFERENCES empresas(id) ON DELETE CASCADE,
+        tipo TEXT,
+        descricao TEXT,
+        data_vencimento TIMESTAMP,
+        concluida BOOLEAN DEFAULT FALSE,
+        concluida_em TIMESTAMP,
+        criado_em TIMESTAMP DEFAULT NOW()
     )""")
     c.execute("""CREATE TABLE IF NOT EXISTS execucao (
         id INTEGER PRIMARY KEY, status TEXT DEFAULT 'parado',
@@ -292,6 +320,7 @@ def get_leads(schema: str, limite: int = 500) -> list:
                             e.status, e.segmento, e.demo_status, e.cidade, e.estado,
                             e.encontrado_em, e.cnpj, e.razao_social, e.website,
                             e.linkedin, e.instagram, e.fonte, e.porte, e.email_enviado,
+                            e.observacoes,
                             (SELECT ct.nome || ' - ' || ct.cargo
                              FROM contatos ct WHERE ct.empresa_id = e.id AND ct.decisor = 1
                              LIMIT 1) AS _decisor
@@ -476,10 +505,14 @@ def api_pipeline():
         c = conn.cursor()
         result = {}
         for st in stages:
-            c.execute("""SELECT id, nome_fantasia, segmento, cidade, estado,
-                                telefone, whatsapp, email, score, status,
-                                email_enviado, encontrado_em
-                         FROM empresas WHERE status=%s ORDER BY score DESC LIMIT 30""", (st,))
+            c.execute("""SELECT e.id, e.nome_fantasia, e.segmento, e.cidade, e.estado,
+                                e.telefone, e.whatsapp, e.email, e.score, e.status,
+                                e.email_enviado, e.encontrado_em, e.cnpj, e.observacoes,
+                                e.website,
+                                (SELECT ct.nome || ' - ' || ct.cargo
+                                 FROM contatos ct WHERE ct.empresa_id = e.id AND ct.decisor = 1
+                                 LIMIT 1) AS _decisor
+                         FROM empresas e WHERE e.status=%s ORDER BY e.score DESC LIMIT 30""", (st,))
             result[st] = [dict(r) for r in c.fetchall()]
         conn.close()
         return jsonify(result)
@@ -591,10 +624,14 @@ def api_add_lead(bot):
                 conn.close()
                 return jsonify({'ok': True, 'id': ex['id'], 'msg': 'ja existe'})
         c.execute("""INSERT INTO empresas
-            (nome_fantasia, whatsapp, email, telefone, segmento, fonte, score, status)
-            VALUES (%s,%s,%s,%s,%s,'manual',%s,'novo') RETURNING id""",
+            (nome_fantasia, whatsapp, email, telefone, segmento, fonte, score, status,
+             cnpj, observacoes, website, cidade, estado)
+            VALUES (%s,%s,%s,%s,%s,'manual',%s,'novo',%s,%s,%s,%s,%s) RETURNING id""",
                   (nome, wa, data.get('email') or None,
-                   data.get('telefone'), data.get('segmento', ''), data.get('score', 50)))
+                   data.get('telefone'), data.get('segmento', ''), data.get('score', 50),
+                   data.get('cnpj') or None, data.get('observacoes') or None,
+                   data.get('website') or None, data.get('cidade') or None,
+                   data.get('estado') or None))
         new_id = c.fetchone()['id']
         conn.commit()
         conn.close()
@@ -610,13 +647,29 @@ def api_update_lead(bot, lead_id):
     data = request.get_json(silent=True) or {}
     allowed = {'nome_fantasia', 'whatsapp', 'telefone', 'email', 'segmento',
                'status', 'score', 'cidade', 'estado', 'website', 'linkedin',
-               'instagram', 'porte', 'demo_status'}
+               'instagram', 'porte', 'demo_status', 'cnpj', 'observacoes'}
     fields = {k: v for k, v in data.items() if k in allowed}
     if not fields:
         return jsonify({'error': 'nenhum campo valido'}), 400
     try:
         conn = _conn(schema)
         c = conn.cursor()
+        # Auto-log status change as atividade
+        if 'status' in fields:
+            c.execute('SELECT status FROM empresas WHERE id = %s', (lead_id,))
+            old = c.fetchone()
+            old_st = old['status'] if old else '?'
+            new_st = fields['status']
+            if old_st != new_st:
+                c.execute("""INSERT INTO atividades (empresa_id, tipo, descricao, dados)
+                             VALUES (%s, 'status_change', %s, %s)""",
+                          (lead_id, f'{old_st} → {new_st}',
+                           json.dumps({'de': old_st, 'para': new_st})))
+        # Auto-log observacoes as note
+        if 'observacoes' in fields and fields['observacoes']:
+            c.execute("""INSERT INTO atividades (empresa_id, tipo, descricao)
+                         VALUES (%s, 'nota', %s)""",
+                      (lead_id, fields['observacoes']))
         sets = ', '.join(f'{k} = %s' for k in fields)
         c.execute(f'UPDATE empresas SET {sets} WHERE id = %s', list(fields.values()) + [lead_id])
         conn.commit()
@@ -651,6 +704,8 @@ def api_clear_all(bot):
     try:
         conn = _conn(schema)
         c = conn.cursor()
+        c.execute('DELETE FROM atividades')
+        c.execute('DELETE FROM tarefas')
         c.execute('DELETE FROM interacoes')
         c.execute('DELETE FROM contatos')
         c.execute('DELETE FROM leads_linkedin')
@@ -665,20 +720,277 @@ def api_clear_all(bot):
         return jsonify({'error': str(e)}), 500
 
 
+# --- Atividades (Timeline) ---
+
+@app.route('/api/<bot>/lead/<int:lead_id>/atividades')
+@login_required
+def api_lead_atividades(bot, lead_id):
+    schema = _get_schema() or bot
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute("""SELECT id, tipo, descricao, dados, criado_em
+                     FROM atividades WHERE empresa_id = %s
+                     ORDER BY criado_em DESC LIMIT 50""", (lead_id,))
+        rows = [dict(r) for r in c.fetchall()]
+        conn.close()
+        return jsonify(rows)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<bot>/lead/<int:lead_id>/atividade', methods=['POST'])
+@login_required
+def api_add_atividade(bot, lead_id):
+    schema = _get_schema() or bot
+    data = request.get_json(silent=True) or {}
+    tipo = data.get('tipo', 'nota')
+    descricao = (data.get('descricao') or '').strip()
+    if not descricao:
+        return jsonify({'error': 'descricao obrigatória'}), 400
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute("""INSERT INTO atividades (empresa_id, tipo, descricao, dados)
+                     VALUES (%s, %s, %s, %s) RETURNING id""",
+                  (lead_id, tipo, descricao, json.dumps(data.get('dados') or {})))
+        aid = c.fetchone()['id']
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True, 'id': aid})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# --- Tarefas ---
+
+@app.route('/api/<bot>/lead/<int:lead_id>/tarefas')
+@login_required
+def api_lead_tarefas(bot, lead_id):
+    schema = _get_schema() or bot
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute("""SELECT id, tipo, descricao, data_vencimento, concluida, criado_em
+                     FROM tarefas WHERE empresa_id = %s
+                     ORDER BY concluida ASC, data_vencimento ASC NULLS LAST""", (lead_id,))
+        rows = [dict(r) for r in c.fetchall()]
+        conn.close()
+        return jsonify(rows)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<bot>/lead/<int:lead_id>/tarefa', methods=['POST'])
+@login_required
+def api_add_tarefa(bot, lead_id):
+    schema = _get_schema() or bot
+    data = request.get_json(silent=True) or {}
+    descricao = (data.get('descricao') or '').strip()
+    if not descricao:
+        return jsonify({'error': 'descricao obrigatória'}), 400
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute("""INSERT INTO tarefas (empresa_id, tipo, descricao, data_vencimento)
+                     VALUES (%s, %s, %s, %s) RETURNING id""",
+                  (lead_id, data.get('tipo', 'outro'), descricao,
+                   data.get('data_vencimento') or None))
+        tid = c.fetchone()['id']
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True, 'id': tid})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<bot>/tarefa/<int:tarefa_id>', methods=['PUT'])
+@login_required
+def api_update_tarefa(bot, tarefa_id):
+    schema = _get_schema() or bot
+    data = request.get_json(silent=True) or {}
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        if 'concluida' in data:
+            c.execute("""UPDATE tarefas SET concluida = %s,
+                         concluida_em = CASE WHEN %s THEN NOW() ELSE NULL END
+                         WHERE id = %s""",
+                      (data['concluida'], data['concluida'], tarefa_id))
+        if 'descricao' in data:
+            c.execute('UPDATE tarefas SET descricao = %s WHERE id = %s',
+                      (data['descricao'], tarefa_id))
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<bot>/tarefa/<int:tarefa_id>', methods=['DELETE'])
+@login_required
+def api_delete_tarefa(bot, tarefa_id):
+    schema = _get_schema() or bot
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute('DELETE FROM tarefas WHERE id = %s', (tarefa_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<bot>/tarefas/pendentes')
+@login_required
+def api_tarefas_pendentes(bot):
+    schema = _get_schema() or bot
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute("""SELECT t.id, t.tipo, t.descricao, t.data_vencimento, t.criado_em,
+                            e.nome_fantasia, e.id AS empresa_id
+                     FROM tarefas t JOIN empresas e ON t.empresa_id = e.id
+                     WHERE t.concluida = FALSE
+                     ORDER BY t.data_vencimento ASC NULLS LAST LIMIT 50""")
+        rows = [dict(r) for r in c.fetchall()]
+        conn.close()
+        return jsonify(rows)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# --- CSV Export ---
+
+@app.route('/api/<bot>/leads/export')
+@login_required
+def api_export_leads(bot):
+    import io
+    import csv
+    schema = _get_schema() or bot
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute("""SELECT e.nome_fantasia, e.cnpj, e.telefone, e.whatsapp, e.email,
+                            e.website, e.cidade, e.estado, e.segmento, e.score, e.status,
+                            e.observacoes, e.encontrado_em, e.email_enviado,
+                            (SELECT ct.nome || ' - ' || ct.cargo
+                             FROM contatos ct WHERE ct.empresa_id = e.id AND ct.decisor = 1
+                             LIMIT 1) AS decisor
+                     FROM empresas e ORDER BY e.encontrado_em DESC""")
+        rows = c.fetchall()
+        conn.close()
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Empresa', 'CNPJ', 'Telefone', 'WhatsApp', 'Email',
+                         'Website', 'Cidade', 'Estado', 'Segmento', 'Score', 'Status',
+                         'Observações', 'Encontrado em', 'Email enviado', 'Decisor'])
+        for r in rows:
+            writer.writerow([r.get('nome_fantasia', ''), r.get('cnpj', ''),
+                             r.get('telefone', ''), r.get('whatsapp', ''),
+                             r.get('email', ''), r.get('website', ''),
+                             r.get('cidade', ''), r.get('estado', ''),
+                             r.get('segmento', ''), r.get('score', ''),
+                             r.get('status', ''), r.get('observacoes', ''),
+                             str(r.get('encontrado_em') or ''),
+                             str(r.get('email_enviado') or ''),
+                             r.get('decisor', '')])
+        from flask import Response
+        return Response(output.getvalue(),
+                        mimetype='text/csv',
+                        headers={'Content-Disposition': 'attachment;filename=leads.csv'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# --- Bulk Actions ---
+
+@app.route('/api/<bot>/leads/bulk', methods=['POST'])
+@login_required
+def api_bulk_action(bot):
+    schema = _get_schema() or bot
+    data = request.get_json(silent=True) or {}
+    ids = data.get('ids', [])
+    action = data.get('action', '')
+    if not ids:
+        return jsonify({'error': 'nenhum lead selecionado'}), 400
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        ph = ','.join(['%s'] * len(ids))
+        if action == 'delete':
+            c.execute(f'DELETE FROM atividades WHERE empresa_id IN ({ph})', ids)
+            c.execute(f'DELETE FROM tarefas WHERE empresa_id IN ({ph})', ids)
+            c.execute(f'DELETE FROM interacoes WHERE empresa_id IN ({ph})', ids)
+            c.execute(f'DELETE FROM contatos WHERE empresa_id IN ({ph})', ids)
+            c.execute(f'DELETE FROM empresas WHERE id IN ({ph})', ids)
+            conn.commit()
+            conn.close()
+            return jsonify({'ok': True, 'msg': f'{len(ids)} leads excluídos'})
+        elif action == 'status' and data.get('status'):
+            new_st = data['status']
+            for lid in ids:
+                c.execute('SELECT status FROM empresas WHERE id = %s', (lid,))
+                old = c.fetchone()
+                if old and old['status'] != new_st:
+                    c.execute("""INSERT INTO atividades (empresa_id, tipo, descricao, dados)
+                                 VALUES (%s, 'status_change', %s, %s)""",
+                              (lid, f'{old["status"]} → {new_st}',
+                               json.dumps({'de': old['status'], 'para': new_st})))
+            c.execute(f'UPDATE empresas SET status = %s WHERE id IN ({ph})',
+                      [new_st] + ids)
+            conn.commit()
+            conn.close()
+            return jsonify({'ok': True, 'msg': f'{len(ids)} leads → {new_st}'})
+        else:
+            conn.close()
+            return jsonify({'error': 'action inválida'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # --- Email em massa ---
+
+def _send_email(api_key, sender_email, sender_name, to_email, to_name, subject, html):
+    """Envia email via Resend (preferido) ou Brevo (fallback)."""
+    import requests as http
+    resend_key = os.environ.get('RESEND_API_KEY', '')
+    if resend_key:
+        r = http.post('https://api.resend.com/emails',
+                      headers={'Authorization': f'Bearer {resend_key}',
+                               'Content-Type': 'application/json'},
+                      json={'from': f'{sender_name} <{sender_email}>',
+                            'to': [to_email],
+                            'subject': subject,
+                            'html': html},
+                      timeout=15)
+        return r.status_code in (200, 201)
+    # Fallback: Brevo
+    brevo_key = os.environ.get('BREVO_API_KEY', '')
+    if brevo_key:
+        r = http.post('https://api.brevo.com/v3/smtp/email',
+                      headers={'api-key': brevo_key, 'Content-Type': 'application/json'},
+                      json={'sender': {'name': sender_name, 'email': sender_email},
+                            'to': [{'email': to_email, 'name': to_name}],
+                            'subject': subject,
+                            'htmlContent': html},
+                      timeout=15)
+        return r.status_code in (200, 201)
+    return False
+
 
 @app.route('/api/<bot>/send-emails', methods=['POST'])
 @login_required
 def api_send_emails(bot):
-    import requests as http
     schema = _get_schema() or bot
     data = request.get_json(silent=True) or {}
     lead_ids = data.get('ids', [])
     if not lead_ids:
         return jsonify({'error': 'nenhum lead selecionado'}), 400
-    api_key = os.environ.get('BREVO_API_KEY', '')
+    api_key = os.environ.get('RESEND_API_KEY', '') or os.environ.get('BREVO_API_KEY', '')
     if not api_key:
-        return jsonify({'error': 'BREVO_API_KEY nao configurado'}), 400
+        return jsonify({'error': 'RESEND_API_KEY ou BREVO_API_KEY não configurado'}), 400
     sender_email = os.environ.get('EMAIL_FROM', '')
     sender_name = os.environ.get('EMAIL_FROM_NAME', 'Máquina de Vendas')
     if not sender_email:
@@ -713,18 +1025,16 @@ def api_send_emails(bot):
                         .replace('{{DEMO_CAL_LINK}}', demo_link)
                         .replace('{{EMPRESA}}', empresa_nome))
         try:
-            r = http.post('https://api.brevo.com/v3/smtp/email',
-                          headers={'api-key': api_key, 'Content-Type': 'application/json'},
-                          json={'sender': {'name': sender_name, 'email': sender_email},
-                                'to': [{'email': lead['email'], 'name': nome}],
-                                'subject': f'{nome}, conheça {empresa_nome}',
-                                'htmlContent': html},
-                          timeout=10)
-            if r.status_code in (200, 201):
+            ok = _send_email(api_key, sender_email, sender_name,
+                             lead['email'], nome,
+                             f'{nome}, conheça {empresa_nome}', html)
+            if ok:
                 enviados += 1
                 conn2 = _conn(schema)
                 c2 = conn2.cursor()
                 c2.execute("UPDATE empresas SET email_enviado = NOW() WHERE id = %s", (lead['id'],))
+                c2.execute("""INSERT INTO atividades (empresa_id, tipo, descricao)
+                             VALUES (%s, 'email', 'Email enviado')""", (lead['id'],))
                 conn2.commit()
                 conn2.close()
             else:
@@ -737,7 +1047,6 @@ def api_send_emails(bot):
 @app.route('/api/<bot>/email/campanha', methods=['POST'])
 @login_required
 def api_email_campanha(bot):
-    import requests as http
     schema = _get_schema() or bot
     data = request.get_json(silent=True) or {}
     assunto = data.get('assunto', '').strip()
@@ -748,11 +1057,12 @@ def api_email_campanha(bot):
     if not corpo and not html_template:
         return jsonify({'error': 'corpo ou template HTML é obrigatório'}), 400
 
-    api_key = os.environ.get('BREVO_API_KEY', '')
+    api_key = (os.environ.get('RESEND_API_KEY', '')
+               or os.environ.get('BREVO_API_KEY', ''))
     sender_email = os.environ.get('EMAIL_FROM', '')
     sender_name = os.environ.get('EMAIL_FROM_NAME', 'Máquina de Vendas')
     if not api_key:
-        return jsonify({'error': 'BREVO_API_KEY não configurado'}), 400
+        return jsonify({'error': 'RESEND_API_KEY ou BREVO_API_KEY não configurado'}), 400
     if not sender_email:
         return jsonify({'error': 'EMAIL_FROM não configurado'}), 400
 
@@ -795,18 +1105,21 @@ def api_email_campanha(bot):
             subj = subj.replace(k, v)
 
         try:
-            r = http.post('https://api.brevo.com/v3/smtp/email',
-                          headers={'api-key': api_key, 'Content-Type': 'application/json'},
-                          json={'sender': {'name': sender_name, 'email': sender_email},
-                                'to': [{'email': lead['email'], 'name': nome}],
-                                'subject': subj,
-                                'htmlContent': html},
-                          timeout=10)
-            if r.status_code in (200, 201):
+            ok = _send_email(
+                api_key, sender_email, sender_name,
+                lead['email'], nome, subj, html)
+            if ok:
                 enviados += 1
                 conn2 = _conn(schema)
                 c2 = conn2.cursor()
-                c2.execute("UPDATE empresas SET email_enviado = NOW() WHERE id = %s", (lead['id'],))
+                c2.execute(
+                    "UPDATE empresas SET email_enviado = NOW() "
+                    "WHERE id = %s", (lead['id'],))
+                c2.execute(
+                    "INSERT INTO atividades "
+                    "(empresa_id, tipo, descricao) "
+                    "VALUES (%s, 'email', %s)",
+                    (lead['id'], f'Campanha: {subj}'))
                 conn2.commit()
                 conn2.close()
             else:
