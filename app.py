@@ -241,7 +241,7 @@ def token_required(f):
 def get_stats(schema: str) -> dict:
     z = {'total_leads': 0, 'contactadas': 0, 'responderam': 0,
          'demos': 0, 'buscas_hoje': 0, 'emails_enviados': 0,
-         'linkedin_total': 0}
+         'linkedin_total': 0, 'msgs_hoje': 0, 'qualificados': 0}
     if not DATABASE_URL or not schema:
         return z
     try:
@@ -249,17 +249,28 @@ def get_stats(schema: str) -> dict:
         c = conn.cursor()
         c.execute('SELECT COUNT(*) AS n FROM empresas')
         z['total_leads'] = c.fetchone()['n']
-        c.execute("SELECT COUNT(*) AS n FROM empresas WHERE status = 'contactada'")
+        c.execute("SELECT COUNT(*) AS n FROM empresas "
+                  "WHERE status IN ('contactada','respondeu','qualificado','convertido')")
         z['contactadas'] = c.fetchone()['n']
-        c.execute("SELECT COUNT(*) AS n FROM empresas WHERE status = 'respondeu'")
+        c.execute("SELECT COUNT(*) AS n FROM empresas "
+                  "WHERE status IN ('respondeu','qualificado','convertido')")
         z['responderam'] = c.fetchone()['n']
-        c.execute("SELECT COUNT(*) AS n FROM empresas WHERE demo_status = 'confirmado'")
+        c.execute("SELECT COUNT(*) AS n FROM empresas "
+                  "WHERE status = 'qualificado' OR demo_status = 'confirmado'")
         z['demos'] = c.fetchone()['n']
-        c.execute("SELECT quantidade FROM acoes_diarias WHERE data = CURRENT_DATE AND tipo = 'buscas'")
+        c.execute("SELECT COUNT(*) AS n FROM empresas "
+                  "WHERE status = 'qualificado'")
+        z['qualificados'] = c.fetchone()['n']
+        c.execute("SELECT quantidade FROM acoes_diarias "
+                  "WHERE data = CURRENT_DATE AND tipo = 'buscas'")
         r = c.fetchone()
         z['buscas_hoje'] = r['quantidade'] if r else 0
-        c.execute("SELECT COUNT(*) AS n FROM empresas WHERE email_enviado IS NOT NULL")
+        c.execute("SELECT COUNT(*) AS n FROM empresas "
+                  "WHERE email_enviado IS NOT NULL")
         z['emails_enviados'] = c.fetchone()['n']
+        c.execute("SELECT COUNT(*) AS n FROM empresas "
+                  "WHERE email_enviado::date = CURRENT_DATE")
+        z['msgs_hoje'] = c.fetchone()['n']
         try:
             c.execute('SELECT COUNT(*) AS n FROM leads_linkedin')
             z['linkedin_total'] = c.fetchone()['n']
