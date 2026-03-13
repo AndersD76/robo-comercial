@@ -468,7 +468,7 @@
 
     </div>
 
-    <div class="kpi-row" style="grid-template-columns:repeat(4,1fr)">
+    <div class="kpi-row">
       <div class="kpi-box">
         <div class="kpi-n" id="kpi-leads">{{ stats.total_leads }}</div>
         <div class="kpi-l"><i class="fa fa-users"></i>&nbsp;Leads</div>
@@ -480,10 +480,6 @@
       <div class="kpi-box">
         <div class="kpi-n" id="kpi-resp">{{ stats.responderam }}</div>
         <div class="kpi-l"><i class="fa fa-reply"></i>&nbsp;Respostas</div>
-      </div>
-      <div class="kpi-box">
-        <div class="kpi-n" id="kpi-demos">{{ stats.demos }}</div>
-        <div class="kpi-l"><i class="fa fa-handshake"></i>&nbsp;Qualificados</div>
       </div>
     </div>
 
@@ -878,7 +874,6 @@ function refreshStats(){
     document.getElementById('kpi-leads').textContent=d.total_leads;
     document.getElementById('kpi-emails').textContent=d.emails_enviados;
     document.getElementById('kpi-resp').textContent=d.responderam;
-    document.getElementById('kpi-demos').textContent=d.demos;
     document.getElementById('f1').textContent=d.total_leads;
     document.getElementById('f2').textContent=d.contactadas;
     document.getElementById('f3').textContent=d.responderam;

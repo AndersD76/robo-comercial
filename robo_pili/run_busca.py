@@ -41,8 +41,28 @@ def _conn(schema: str):
     return conn
 
 
+def _ensure_bot_config(schema: str):
+    """Cria tabela bot_config se não existir."""
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute("""CREATE TABLE IF NOT EXISTS bot_config (
+            id SERIAL PRIMARY KEY,
+            empresa_nome TEXT, website TEXT, descricao TEXT,
+            termos_busca JSONB DEFAULT '[]',
+            linkedin_email TEXT, linkedin_password TEXT,
+            linkedin_cargos JSONB DEFAULT '[]',
+            atualizado_em TIMESTAMP DEFAULT NOW()
+        )""")
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
 def get_termos(schema: str) -> list:
     """Lê termos de busca da tabela bot_config. Fallback para config.py."""
+    _ensure_bot_config(schema)
     try:
         conn = _conn(schema)
         c = conn.cursor()
@@ -278,7 +298,7 @@ async def main_loop(schema: str):
 
     buscador = Buscador()
     try:
-        await buscador.init()
+        await buscador.iniciar()
     except Exception as e:
         print(f'[{schema}] Erro ao iniciar navegador: {e}', flush=True)
         print(f'[{schema}] Tentando modo HTTP...', flush=True)
