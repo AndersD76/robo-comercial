@@ -1,16 +1,19 @@
 # -*- coding: utf-8 -*-
 """
-LinkedIn Bot — Pili Equipamentos
+LinkedIn Bot — Máquina de Vendas (SaaS)
 Estratégia:
-  1. Busca responsáveis por operações em cerealistas/cooperativas/silos
+  1. Busca decisores no LinkedIn baseado nos cargos-alvo configurados
   2. Envia pedido de conexão com nota personalizada (IA)
-  3. Após aceite, envia DM com pitch de tombadores/coletores + link demo
-  4. Exporta contatos para pipeline WhatsApp
+  3. Após aceite, envia DM com pitch personalizado
+  4. Exporta contatos para pipeline de prospecção
 """
 
 import asyncio
 import random
 from datetime import datetime, timezone, timedelta
+
+import psycopg2
+import psycopg2.extras
 
 from config import (
     ANTHROPIC_API_KEY, DEMO_CAL_LINK,
@@ -43,11 +46,12 @@ LINKEDIN_URL = 'https://www.linkedin.com'
 
 class LinkedInBot:
     """
-    Automação LinkedIn para Pili Equipamentos.
-    Foca em responsáveis por operações em cerealistas, cooperativas e silos.
+    Automação LinkedIn — SaaS multi-tenant.
+    Prospecta decisores no LinkedIn baseado na config do usuário.
     """
 
-    def __init__(self):
+    def __init__(self, schema: str = None):
+        self.schema = schema
         self.browser = None
         self.context = None
         self.page = None
@@ -59,6 +63,26 @@ class LinkedInBot:
         self._ciclo = 0
         self.ai = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) \
             if HAS_AI and ANTHROPIC_API_KEY else None
+
+        # Quando schema é fornecido, usa conexão multi-tenant
+        if schema:
+            self._schema_conn = self._make_schema_conn
+        else:
+            self._schema_conn = None
+
+    def _make_schema_conn(self):
+        """Cria conexão PostgreSQL com search_path do schema do tenant."""
+        import os
+        url = os.environ.get('DATABASE_URL', '')
+        if url.startswith('psql://'):
+            url = 'postgresql://' + url[7:]
+        elif url.startswith('postgres://'):
+            url = 'postgresql://' + url[11:]
+        conn = psycopg2.connect(url, cursor_factory=psycopg2.extras.RealDictCursor)
+        with conn.cursor() as c:
+            c.execute('SET search_path TO %s, public', (self.schema,))
+        conn.commit()
+        return conn
 
     # =========================================================================
     # SESSÃO
@@ -140,7 +164,7 @@ class LinkedInBot:
         self.page = self.context.pages[0] if self.context.pages \
             else await self.context.new_page()
         modo = 'visível (Xvfb)' if not usar_headless else 'headless'
-        self._log(f"LinkedIn bot Pili iniciado ({modo})")
+        self._log(f"LinkedIn bot iniciado ({modo})")
 
     async def fechar(self):
         if self.context:
@@ -627,17 +651,37 @@ class LinkedInBot:
                     'sucesso'
                 )
                 if HAS_DB:
-                    salvar_lead_linkedin(perfil, 'conexao_enviada')
+                    self._salvar_lead(perfil, 'conexao_enviada')
                 await asyncio.sleep(random.uniform(3, 7))
                 return True
         except Exception as e:
             self._log(f"Erro ao conectar com {nome}: {e}", 'erro')
         return False
 
+    def _get_empresa_info(self) -> dict:
+        """Lê dados da empresa do bot_config para personalizar mensagens."""
+        if not self._schema_conn:
+            return {}
+        try:
+            conn = self._schema_conn()
+            c = conn.cursor()
+            c.execute("SELECT empresa_nome, descricao FROM bot_config LIMIT 1")
+            row = c.fetchone()
+            conn.close()
+            if row:
+                return {'nome': row.get('empresa_nome', ''), 'descricao': row.get('descricao', '')}
+        except Exception:
+            pass
+        return {}
+
     async def _gerar_nota_conexao(self, perfil: dict) -> str:
         nome = perfil.get('nome', '').split()[0]
         empresa = perfil.get('empresa', 'sua empresa')
         cargo = perfil.get('cargo', '')
+
+        info = self._get_empresa_info()
+        minha_empresa = info.get('nome', 'nossa empresa')
+        descricao = info.get('descricao', '')
 
         if self.ai:
             try:
@@ -646,9 +690,8 @@ class LinkedInBot:
                     max_tokens=80,
                     system=(
                         "Escreva uma nota CURTA (max 200 chars) de pedido "
-                        "de conexao no LinkedIn para responsável por "
-                        "operações em cerealista/cooperativa. Mencione Pili "
-                        "Equipamentos (tombadores e coletores de graos). "
+                        "de conexao no LinkedIn. Você representa "
+                        f"{minha_empresa}. {descricao}. "
                         "Retorne APENAS a nota, sem aspas."
                     ),
                     messages=[{
@@ -665,8 +708,8 @@ class LinkedInBot:
 
         return (
             f"Oi {nome}, vi que você atua em {cargo} na {empresa}. "
-            "Trabalho com tombadores e coletores de graos — ajudo "
-            "cerealistas a reduzir perdas no recebimento. Vamos conectar?"
+            f"Sou da {minha_empresa} e gostaria de conectar. "
+            "Vamos trocar experiências?"
         )[:295]
 
     # =========================================================================
@@ -821,13 +864,31 @@ class LinkedInBot:
 
     def _gerar_dm_inicial(self, nome: str) -> str:
         primeiro = nome.split()[0]
+        info = self._get_empresa_info()
+        minha_empresa = info.get('nome', 'nossa empresa')
+        descricao = info.get('descricao', '')
+
+        if self.ai:
+            try:
+                r = self.ai.messages.create(
+                    model='claude-haiku-4-5-20251001',
+                    max_tokens=120,
+                    system=(
+                        f"Escreva uma DM CURTA e profissional no LinkedIn. "
+                        f"Você representa {minha_empresa}. {descricao}. "
+                        f"Link para demo/contato: {DEMO_CAL_LINK}\n"
+                        "Retorne APENAS a mensagem, sem aspas."
+                    ),
+                    messages=[{'role': 'user', 'content': f'Escreva DM inicial para {primeiro} que acabou de aceitar conexão.'}],
+                )
+                return r.content[0].text.strip()
+            except Exception:
+                pass
+
         return (
-            f"Oi {primeiro}, obrigado por conectar! 🌾\n\n"
-            "Trabalho com a Pili Equipamentos — tombadores e coletores de "
-            "graos para cerealistas e cooperativas.\n\n"
-            "Nossos equipamentos reduzem perdas no recebimento em mais de 30%"
-            " e o ROI acontece em menos de 1 safra.\n\n"
-            f"Posso te mandar mais detalhes? Ou agenda uma demo rapida:\n"
+            f"Oi {primeiro}, obrigado por conectar!\n\n"
+            f"Sou da {minha_empresa}. {descricao}\n\n"
+            f"Posso te mandar mais detalhes?\n"
             f"📅 {DEMO_CAL_LINK}"
         )
 
@@ -1079,12 +1140,15 @@ class LinkedInBot:
     async def _gerar_resposta_inbox(
         self, nome: str, historico: list[dict]
     ) -> str:
-        """Gera resposta via Claude Haiku com foco em demo Pili."""
+        """Gera resposta via Claude Haiku para inbox."""
         primeiro = nome.split()[0]
         hist_txt = '\n'.join([
             f"{'Eu' if m['de_nos'] else nome}: {m['texto']}"
             for m in historico[-6:]
         ])
+        info = self._get_empresa_info()
+        minha_empresa = info.get('nome', 'nossa empresa')
+        descricao = info.get('descricao', '')
 
         if self.ai:
             try:
@@ -1092,15 +1156,13 @@ class LinkedInBot:
                     model='claude-haiku-4-5-20251001',
                     max_tokens=150,
                     system=(
-                        "Você é Marcos, vendedor da Pili Equipamentos — "
-                        "tombadores e coletores de grãos para cerealistas "
-                        "e cooperativas. Benefícios: reduz perdas no "
-                        "recebimento em 30%+ e ROI em menos de 1 safra. "
-                        f"Link para demo: {DEMO_CAL_LINK}\n"
-                        "OBJETIVO: Agendar uma demo/visita.\n"
+                        f"Você é vendedor da {minha_empresa}. "
+                        f"{descricao}. "
+                        f"Link para demo/contato: {DEMO_CAL_LINK}\n"
+                        "OBJETIVO: Agendar uma demo/reunião.\n"
                         "REGRAS: resposta curta (2-3 frases), natural e "
                         "focada em resultado. Interesse → peça pra agendar. "
-                        "Objeção preço → fale do ROI < 1 safra. "
+                        "Objeção preço → fale do ROI. "
                         "Desinteresse claro → agradeça e encerre. "
                         "Retorne APENAS a mensagem, sem aspas."
                     ),
@@ -1118,16 +1180,19 @@ class LinkedInBot:
 
         return (
             f"Oi {primeiro}! Fico feliz com o retorno. "
-            "Que tal uma demo rápida para ver os equipamentos ao vivo? "
-            f"ROI em menos de 1 safra. Agende aqui: {DEMO_CAL_LINK}"
+            "Que tal agendarmos uma conversa rápida? "
+            f"Agende aqui: {DEMO_CAL_LINK}"
         )
 
     def _atualizar_resposta_db(self, nome: str, ultima_msg: str):
         """Registra no banco que o lead respondeu."""
-        if not HAS_DB:
-            return
         try:
-            conn = get_connection()
+            if self._schema_conn:
+                conn = self._schema_conn()
+            elif HAS_DB:
+                conn = get_connection()
+            else:
+                return
             c = conn.cursor()
             c.execute(
                 """UPDATE leads_linkedin
@@ -1153,7 +1218,7 @@ class LinkedInBot:
             return
 
         self._log(
-            f"LinkedIn bot Pili ativo — "
+            f"LinkedIn bot ativo — "
             f"max {LINKEDIN_MAX_CONEXOES_DIA} conexões/dia, "
             f"{LINKEDIN_MAX_MENSAGENS_DIA} DMs/dia",
             'sucesso'
@@ -1255,13 +1320,63 @@ class LinkedInBot:
             return False
         return HORARIO_INICIO <= now.hour < 22
 
+    def _salvar_lead(self, perfil: dict, status: str = 'encontrado'):
+        """Salva lead LinkedIn — usa schema do tenant se disponível."""
+        url = perfil.get('url_perfil', '')
+        if not url:
+            return None
+        if self._schema_conn:
+            try:
+                conn = self._schema_conn()
+                c = conn.cursor()
+                c.execute("""
+                    INSERT INTO leads_linkedin
+                        (nome, cargo, empresa, url_perfil, termo_busca, status)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (url_perfil) DO UPDATE SET status = EXCLUDED.status
+                    RETURNING id
+                """, (
+                    perfil.get('nome'), perfil.get('cargo'),
+                    perfil.get('empresa'), url,
+                    perfil.get('termo_busca'), status
+                ))
+                row = c.fetchone()
+                if status == 'conexao_enviada':
+                    c.execute(
+                        "UPDATE leads_linkedin SET conexao_em = CURRENT_TIMESTAMP "
+                        "WHERE url_perfil = %s", (url,))
+                elif status == 'dm_enviada':
+                    c.execute(
+                        "UPDATE leads_linkedin SET dm_enviada_em = CURRENT_TIMESTAMP "
+                        "WHERE url_perfil = %s", (url,))
+                conn.commit()
+                conn.close()
+                return row['id'] if row else None
+            except Exception as e:
+                self._log(f"Erro ao salvar lead LinkedIn: {e}", 'erro')
+                return None
+        elif HAS_DB:
+            return salvar_lead_linkedin(perfil, status)
+        return None
+
     def _log(self, msg: str, tipo: str = 'info'):
+        tag = self.schema or 'LI'
         ts = datetime.now(_BRT).strftime('%H:%M:%S')
         icone = {
             'info': 'ℹ', 'sucesso': '✓', 'aviso': '⚠', 'erro': '✗'
         }.get(tipo, 'ℹ')
-        print(f"[LI/Pili {ts}] {icone} {msg}", flush=True)
-        if HAS_DB:
+        print(f"[{tag} {ts}] {icone} {msg}", flush=True)
+        if self._schema_conn:
+            try:
+                conn = self._schema_conn()
+                c = conn.cursor()
+                c.execute("INSERT INTO logs (tipo, mensagem) VALUES (%s, %s)",
+                          (tipo, f"[LinkedIn] {msg}"))
+                conn.commit()
+                conn.close()
+            except Exception:
+                pass
+        elif HAS_DB:
             try:
                 registrar_log(tipo, f"[LinkedIn] {msg}")
             except Exception:

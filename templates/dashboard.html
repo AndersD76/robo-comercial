@@ -924,20 +924,25 @@ function botFetch(canal,action){
 }
 function botStartAll(btn){
   if(btn){btn.disabled=true; btn.innerHTML='<i class="fa fa-spinner fa-spin"></i> Iniciando...';}
-  fetch(`/api/${BOT}/start`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({canal:'busca'})})
-    .then(r=>r.json()).then(()=>{
-      loadBotStatus();
-      startConsolePolling();
-    }).catch(()=>{if(btn){btn.disabled=false; btn.innerHTML='<i class="fa fa-play"></i> Iniciar Robô';}});
+  // Inicia busca web
+  const p1=fetch(`/api/${BOT}/start`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({canal:'busca'})}).then(r=>r.json());
+  // Inicia LinkedIn (se configurado — ignora erro se não tiver creds)
+  const p2=fetch(`/api/${BOT}/start`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({canal:'linkedin'})}).then(r=>r.json()).catch(()=>{});
+  Promise.all([p1,p2]).then(()=>{
+    loadBotStatus();
+    startConsolePolling();
+  }).catch(()=>{if(btn){btn.disabled=false; btn.innerHTML='<i class="fa fa-play"></i> Iniciar Robô';}});
 }
 function botStopAll(btn){
   if(btn){btn.disabled=true;}
-  fetch(`/api/${BOT}/stop`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({canal:'busca'})})
-    .then(r=>r.json()).then(()=>{
-      if(btn){btn.disabled=false;}
-      loadBotStatus();
-      stopConsolePolling();
-    }).catch(()=>{if(btn)btn.disabled=false;});
+  // Para ambos os canais
+  const p1=fetch(`/api/${BOT}/stop`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({canal:'busca'})}).then(r=>r.json());
+  const p2=fetch(`/api/${BOT}/stop`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({canal:'linkedin'})}).then(r=>r.json()).catch(()=>{});
+  Promise.all([p1,p2]).then(()=>{
+    if(btn){btn.disabled=false;}
+    loadBotStatus();
+    stopConsolePolling();
+  }).catch(()=>{if(btn)btn.disabled=false;});
 }
 function loadBotStatus(){
   fetch(`/api/${BOT}/status`).then(r=>r.json()).then(d=>{
@@ -1064,8 +1069,15 @@ function renderTo(el,lines){
 }
 
 function pollConsole(){
-  fetch(`/api/${BOT}/console?canal=busca&n=200`)
-    .then(r=>r.json()).then(d=>{ renderTo(document.getElementById('console-out'),d.lines||[]); }).catch(()=>{});
+  const el=document.getElementById('console-out');
+  // Busca logs de busca + linkedin e mescla
+  Promise.all([
+    fetch(`/api/${BOT}/console?canal=busca&n=150`).then(r=>r.json()).catch(()=>({lines:[]})),
+    fetch(`/api/${BOT}/console?canal=linkedin&n=50`).then(r=>r.json()).catch(()=>({lines:[]}))
+  ]).then(([b,l])=>{
+    const lines=(b.lines||[]).concat(l.lines||[]);
+    renderTo(el,lines);
+  });
 }
 
 function startConsolePolling(){

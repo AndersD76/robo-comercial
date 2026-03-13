@@ -94,13 +94,21 @@ async def main_loop(schema: str):
     _cfg.LINKEDIN_CARGOS_ALVO = cfg['cargos']
     _cfg.LINKEDIN_TERMOS_BUSCA = [f'{c} site:linkedin.com/in' for c in cfg['cargos'][:5]]
 
+    bot = None
     try:
         bot = LinkedInBot(schema=schema)
-        await bot.run()
+        await bot.iniciar()
+        await bot.executar()
     except Exception as e:
         print(f'[LinkedIn] Erro fatal: {e}', flush=True)
         log_db(schema, 'erro', f'LinkedIn: {e}')
     finally:
+        # Fecha navegador
+        if bot:
+            try:
+                await bot.fechar()
+            except Exception:
+                pass
         # Remove credenciais temporárias
         try:
             os.remove(creds_path)
