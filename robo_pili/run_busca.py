@@ -176,6 +176,22 @@ def _extrair_emails(texto):
     return re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', texto)
 
 
+def _extrair_telefones_texto(texto):
+    """Extrai telefones brasileiros de um texto (snippet, título)."""
+    if not texto:
+        return []
+    # Padrões: (XX) XXXXX-XXXX, (XX) XXXX-XXXX, XX XXXXX-XXXX, etc.
+    padrao = r'\(?\d{2}\)?\s*\d{4,5}[-.\s]?\d{4}'
+    encontrados = re.findall(padrao, texto)
+    # Limpa e retorna só dígitos
+    resultado = []
+    for t in encontrados:
+        digitos = re.sub(r'\D', '', t)
+        if 10 <= len(digitos) <= 11:
+            resultado.append(digitos)
+    return resultado
+
+
 def _resultado_para_empresa(r):
     """Converte resultado do buscador para formato de empresa."""
     titulo = r.get('titulo', '')
@@ -199,13 +215,17 @@ def _resultado_para_empresa(r):
     emails = _extrair_emails(texto_completo)
     email = emails[0] if emails else None
 
+    # Extrair telefones do snippet também (buscador nem sempre pega)
+    if not telefones:
+        telefones = _extrair_telefones_texto(texto_completo)
+
     # Telefone principal
     telefone = telefones[0] if telefones else None
 
     # WhatsApp: telefones com 9 dígitos no número local
     whatsapp = None
     for t in telefones:
-        digitos = t if isinstance(t, str) else str(t)
+        digitos = re.sub(r'\D', '', str(t))
         # Celular tem 11 dígitos (DDD + 9xxxx-xxxx)
         if len(digitos) == 11 and digitos[2] == '9':
             whatsapp = '55' + digitos
@@ -230,9 +250,16 @@ def _resultado_para_empresa(r):
             estado = uf
             break
 
+    # Usa domínio como website (não URL completa) para evitar duplicatas da mesma empresa
+    site = dominio if dominio else url
+    if site:
+        site = re.sub(r'^https?://', '', site).rstrip('/')
+        # Remove www.
+        site = re.sub(r'^www\.', '', site)
+
     return {
         'nome_fantasia': nome,
-        'website': url,
+        'website': site,
         'telefone': telefone,
         'whatsapp': whatsapp,
         'email': email,
@@ -264,15 +291,23 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list) -> int:
     salvos = 0
     for r in resultados:
         lead = _resultado_para_empresa(r)
-        if not lead.get('telefone') and not lead.get('whatsapp') and not lead.get('email'):
+        # Salva se tem qualquer contato OU pelo menos um website/nome
+        if not lead.get('telefone') and not lead.get('whatsapp') and not lead.get('email') and not lead.get('website'):
             continue
         empresa_id = salvar_empresa(schema, lead)
         if empresa_id:
             salvos += 1
             nome = lead.get('nome_fantasia') or lead.get('website') or 'Lead'
             score = lead.get('score', 0)
-            tel_tipo = 'WA' if lead.get('whatsapp') else 'TEL' if lead.get('telefone') else 'EMAIL'
-            print(f'[{schema}] ✓ [{tel_tipo}] score={score} | {nome}', flush=True)
+            if lead.get('whatsapp'):
+                tag = 'WA'
+            elif lead.get('telefone'):
+                tag = 'TEL'
+            elif lead.get('email'):
+                tag = 'EMAIL'
+            else:
+                tag = 'WEB'
+            print(f'[{schema}] ✓ [{tag}] score={score} | {nome}', flush=True)
 
     incrementar(schema, 'buscas')
 
@@ -320,10 +355,7 @@ async def main_loop(schema: str):
             print(f'[{schema}] Erro no ciclo: {e}', flush=True)
             log_db(schema, 'erro', str(e))
 
-        # Intervalo entre ciclos: 15-30s
-        wait = random.randint(15, 30)
-        print(f'[{schema}] Próximo ciclo em {wait}s...', flush=True)
-        await asyncio.sleep(wait)
+        # Sem espera entre ciclos — direto pro próximo
 
 
 if __name__ == '__main__':
