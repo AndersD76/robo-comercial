@@ -440,6 +440,26 @@ def cadastro():
     return render_template('register.html', error=error)
 
 
+@app.route('/admin/users')
+def admin_users():
+    secret = request.args.get('key', '')
+    admin_key = os.environ.get('ADMIN_KEY', 'trocar123')
+    if secret != admin_key:
+        return jsonify({'error': 'unauthorized'}), 401
+    try:
+        conn = _conn()
+        c = conn.cursor()
+        c.execute('SELECT id, email, empresa_nome, plano, ativo, criado_em FROM users ORDER BY id')
+        users = c.fetchall()
+        conn.close()
+        for u in users:
+            if u.get('criado_em'):
+                u['criado_em'] = str(u['criado_em'])
+        return jsonify(users)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/logout')
 def logout():
     session.clear()
