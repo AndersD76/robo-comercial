@@ -423,6 +423,12 @@ def login():
             conn.close()
             if user and user['password_hash'] == _hash_pw(pw):
                 session['user_id'] = user['id']
+                # Rodar migrations no schema do usuário
+                if user.get('schema_name'):
+                    try:
+                        _init_user_schema(user['schema_name'])
+                    except Exception:
+                        pass
                 return redirect(url_for('dashboard'))
             error = 'Email ou senha incorretos'
         except Exception as e:
