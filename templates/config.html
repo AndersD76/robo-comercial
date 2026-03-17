@@ -181,7 +181,10 @@
     </div>
     <div class="field">
       <label>Template HTML do email <small>— Variáveis: {{nome}}, {{email}}, {{segmento}}, {{cidade}}</small></label>
-      <div style="display:flex;gap:8px;margin-bottom:8px">
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+        <button class="btn-gen" id="btn-gen-email" onclick="generateEmail()">
+          <i class="fa fa-wand-magic-sparkles"></i> Gerar com IA
+        </button>
         <label style="background:rgba(99,102,241,.12);border:1px solid var(--border);color:#818cf8;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;margin:0">
           <i class="fa fa-upload"></i> Carregar HTML
           <input type="file" id="cfg-html-file" accept=".html,.htm" style="display:none" onchange="loadCfgHtml(this)">
@@ -307,6 +310,38 @@ async function generateMsg() {
     if (d.ok && d.mensagem) {
       document.getElementById('msg_inicial').value = d.mensagem
       showToast('✓ Mensagem gerada! Revise antes de salvar.', true)
+    } else {
+      showToast('Erro: ' + (d.error || 'falha'), false)
+    }
+  } catch(e) { showToast('Erro de conexão', false) }
+  btn.disabled = false
+  btn.innerHTML = '<i class="fa fa-wand-magic-sparkles"></i> Gerar com IA'
+}
+
+async function generateEmail() {
+  const desc = document.getElementById('descricao').value.trim()
+  if (!desc) { showToast('Preencha a descrição da empresa primeiro', false); return }
+  const btn = document.getElementById('btn-gen-email')
+  btn.disabled = true
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Gerando...'
+  try {
+    const r = await fetch(`/api/${BOT}/config/generate-email`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        empresa_nome: document.getElementById('empresa_nome').value,
+        descricao: desc
+      })
+    })
+    const d = await r.json()
+    if (d.ok && d.html) {
+      document.getElementById('email_html_template').value = d.html
+      if (d.assunto && !document.getElementById('email_assunto_padrao').value.trim()) {
+        document.getElementById('email_assunto_padrao').value = d.assunto
+      }
+      // Auto-preview
+      previewCfgHtml()
+      showToast('✓ Template gerado! Revise antes de salvar.', true)
     } else {
       showToast('Erro: ' + (d.error || 'falha'), false)
     }

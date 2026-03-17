@@ -1609,6 +1609,58 @@ Responda SOMENTE com a mensagem, sem explicações."""}]
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/<bot>/config/generate-email', methods=['POST'])
+@login_required
+def api_generate_email(bot):
+    data = request.get_json(silent=True) or {}
+    empresa = data.get('empresa_nome', '')
+    descricao = data.get('descricao', '')
+    if not descricao:
+        return jsonify({'error': 'Preencha a descrição da empresa'}), 400
+
+    api_key = os.environ.get('ANTHROPIC_API_KEY', '')
+    if not api_key:
+        return jsonify({'error': 'ANTHROPIC_API_KEY não configurado'}), 400
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=2000,
+            messages=[{'role': 'user', 'content': f"""Você é designer de emails e copywriter B2B.
+
+Empresa vendedora: {empresa}
+O que ela vende: {descricao}
+
+Crie um template HTML de email profissional para prospecção B2B.
+
+Regras:
+- HTML completo, inline CSS (compatível com clientes de email)
+- Max-width 600px, centrado, fundo branco
+- Design limpo e profissional com cores sutis
+- Seções: header com nome da empresa, saudação, proposta de valor (2-3 bullets), call-to-action (botão), footer
+- Use {{{{nome}}}} para o nome da empresa prospectada
+- Use {{{{email}}}} para o email do lead
+- Use {{{{segmento}}}} para o segmento do lead
+- Use {{{{cidade}}}} para a cidade do lead
+- O botão CTA deve apontar para # (o link será substituído depois)
+- Tom profissional, direto, sem ser genérico
+- NÃO use imagens externas
+
+Responda SOMENTE com o HTML, sem explicações ou markdown."""}]
+        )
+        html = msg.content[0].text.strip()
+        # Remove possíveis markdown code fences
+        if html.startswith('```'):
+            html = html.split('\n', 1)[1]
+        if html.endswith('```'):
+            html = html.rsplit('```', 1)[0]
+        return jsonify({'ok': True, 'html': html.strip(),
+                        'assunto': f'{empresa} — uma solução para {{{{nome}}}}'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # =============================================================================
 # HEALTH
 # =============================================================================
