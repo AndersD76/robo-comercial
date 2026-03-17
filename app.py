@@ -21,6 +21,8 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'mv-saas-2025-change-in-prod')
 
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
+if not DATABASE_URL:
+    print('[FATAL] DATABASE_URL não configurado — defina a variável de ambiente')
 if DATABASE_URL.startswith('psql://'):
     DATABASE_URL = 'postgresql://' + DATABASE_URL[7:]
 elif DATABASE_URL.startswith('postgres://'):
@@ -131,11 +133,26 @@ def _init_user_schema(schema: str):
     # Migrations
     for stmt in [
         "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS observacoes TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS msg_inicial TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_assunto_padrao TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_html_template TEXT",
+        """CREATE TABLE IF NOT EXISTS agenda (
+            id BIGSERIAL PRIMARY KEY,
+            empresa_id BIGINT REFERENCES empresas(id) ON DELETE SET NULL,
+            titulo TEXT NOT NULL,
+            descricao TEXT,
+            data_inicio TIMESTAMP NOT NULL,
+            data_fim TIMESTAMP,
+            tipo TEXT DEFAULT 'reuniao',
+            local TEXT,
+            concluido BOOLEAN DEFAULT FALSE,
+            criado_em TIMESTAMP DEFAULT NOW()
+        )""",
     ]:
         try:
             c.execute(stmt)
         except Exception:
-            pass
+            conn.rollback()
     conn.commit()
     c.execute("""CREATE TABLE IF NOT EXISTS contatos (
         id BIGSERIAL PRIMARY KEY, empresa_id BIGINT REFERENCES empresas(id),
@@ -196,7 +213,22 @@ def _init_user_schema(schema: str):
         termos_busca JSONB DEFAULT '[]',
         linkedin_email TEXT, linkedin_password TEXT,
         linkedin_cargos JSONB DEFAULT '[]',
+        msg_inicial TEXT,
+        email_assunto_padrao TEXT,
+        email_html_template TEXT,
         atualizado_em TIMESTAMP DEFAULT NOW()
+    )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS agenda (
+        id BIGSERIAL PRIMARY KEY,
+        empresa_id BIGINT REFERENCES empresas(id) ON DELETE SET NULL,
+        titulo TEXT NOT NULL,
+        descricao TEXT,
+        data_inicio TIMESTAMP NOT NULL,
+        data_fim TIMESTAMP,
+        tipo TEXT DEFAULT 'reuniao',
+        local TEXT,
+        concluido BOOLEAN DEFAULT FALSE,
+        criado_em TIMESTAMP DEFAULT NOW()
     )""")
     c.execute("INSERT INTO execucao (id) VALUES (1) ON CONFLICT DO NOTHING")
     conn.commit()
@@ -302,8 +334,8 @@ def get_stats(schema: str) -> dict:
         try:
             c.execute('SELECT COUNT(*) AS n FROM leads_linkedin')
             z['linkedin_total'] = c.fetchone()['n']
-        except Exception:
-            pass
+        except Exception as e:
+            print(f'[stats/{schema}] linkedin_total: {e}')
         conn.close()
     except Exception as e:
         print(f'[stats/{schema}] {e}')
@@ -343,7 +375,8 @@ def get_logs(schema: str, limite: int = 60) -> list:
         rows = [dict(r) for r in c.fetchall()]
         conn.close()
         return rows
-    except Exception:
+    except Exception as e:
+        print(f'[logs/{schema}] {e}')
         return []
 
 
@@ -355,7 +388,8 @@ def get_bot_config(schema: str) -> dict:
         row = c.fetchone()
         conn.close()
         return dict(row) if row else {}
-    except Exception:
+    except Exception as e:
+        print(f'[bot_config/{schema}] {e}')
         return {}
 
 
@@ -1050,16 +1084,19 @@ def api_send_emails(bot):
                              f'{nome}, conheça {empresa_nome}', html)
             if ok:
                 enviados += 1
-                conn2 = _conn(schema)
-                c2 = conn2.cursor()
-                c2.execute("UPDATE empresas SET email_enviado = NOW() WHERE id = %s", (lead['id'],))
-                c2.execute("""INSERT INTO atividades (empresa_id, tipo, descricao)
-                             VALUES (%s, 'email', 'Email enviado')""", (lead['id'],))
-                conn2.commit()
-                conn2.close()
+                try:
+                    conn2 = _conn(schema)
+                    c2 = conn2.cursor()
+                    c2.execute("UPDATE empresas SET email_enviado = NOW() WHERE id = %s", (lead['id'],))
+                    c2.execute("""INSERT INTO atividades (empresa_id, tipo, descricao)
+                                 VALUES (%s, 'email', 'Email enviado')""", (lead['id'],))
+                    conn2.commit()
+                finally:
+                    conn2.close()
             else:
                 erros += 1
-        except Exception:
+        except Exception as e:
+            print(f'[send-emails] erro lead {lead["id"]}: {e}')
             erros += 1
     return jsonify({'ok': True, 'enviados': enviados, 'erros': erros})
 
@@ -1130,21 +1167,24 @@ def api_email_campanha(bot):
                 lead['email'], nome, subj, html)
             if ok:
                 enviados += 1
-                conn2 = _conn(schema)
-                c2 = conn2.cursor()
-                c2.execute(
-                    "UPDATE empresas SET email_enviado = NOW() "
-                    "WHERE id = %s", (lead['id'],))
-                c2.execute(
-                    "INSERT INTO atividades "
-                    "(empresa_id, tipo, descricao) "
-                    "VALUES (%s, 'email', %s)",
-                    (lead['id'], f'Campanha: {subj}'))
-                conn2.commit()
-                conn2.close()
+                try:
+                    conn2 = _conn(schema)
+                    c2 = conn2.cursor()
+                    c2.execute(
+                        "UPDATE empresas SET email_enviado = NOW() "
+                        "WHERE id = %s", (lead['id'],))
+                    c2.execute(
+                        "INSERT INTO atividades "
+                        "(empresa_id, tipo, descricao) "
+                        "VALUES (%s, 'email', %s)",
+                        (lead['id'], f'Campanha: {subj}'))
+                    conn2.commit()
+                finally:
+                    conn2.close()
             else:
                 erros += 1
-        except Exception:
+        except Exception as e:
+            print(f'[campanha] erro lead {lead["id"]}: {e}')
             erros += 1
     return jsonify({'ok': True, 'enviados': enviados, 'erros': erros})
 
@@ -1173,6 +1213,9 @@ def api_save_config(bot):
     li_email = data.get('linkedin_email', '')
     li_password = data.get('linkedin_password', '')
     li_cargos = data.get('linkedin_cargos') or []
+    msg_inicial = data.get('msg_inicial', '')
+    email_assunto = data.get('email_assunto_padrao', '')
+    email_html = data.get('email_html_template', '')
 
     if not termos and descricao:
         ia = _gerar_termos_ia(empresa_nome, descricao, website)
@@ -1186,28 +1229,36 @@ def api_save_config(bot):
         c.execute('SELECT id FROM bot_config LIMIT 1')
         exists = c.fetchone()
         if exists:
-            c.execute("""UPDATE bot_config SET empresa_nome=%s, website=%s, descricao=%s,
+            sql = """UPDATE bot_config SET empresa_nome=%s, website=%s, descricao=%s,
                          termos_busca=%s, linkedin_email=%s, linkedin_cargos=%s,
-                         atualizado_em=NOW()
-                         """ + (", linkedin_password=%s" if li_password else ""),
-                      ([empresa_nome, website, descricao, json.dumps(termos),
-                        li_email or None, json.dumps(li_cargos)] +
-                       ([li_password] if li_password else [])))
+                         msg_inicial=%s, email_assunto_padrao=%s, email_html_template=%s,
+                         atualizado_em=NOW()"""
+            params = [empresa_nome, website, descricao, json.dumps(termos),
+                      li_email or None, json.dumps(li_cargos),
+                      msg_inicial or None, email_assunto or None, email_html or None]
+            if li_password:
+                sql += ", linkedin_password=%s"
+                params.append(li_password)
+            c.execute(sql, params)
         else:
             c.execute("""INSERT INTO bot_config
                 (empresa_nome, website, descricao, termos_busca, linkedin_email,
-                 linkedin_password, linkedin_cargos)
-                VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+                 linkedin_password, linkedin_cargos, msg_inicial,
+                 email_assunto_padrao, email_html_template)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                       (empresa_nome, website, descricao, json.dumps(termos),
-                       li_email or None, li_password or None, json.dumps(li_cargos)))
+                       li_email or None, li_password or None, json.dumps(li_cargos),
+                       msg_inicial or None, email_assunto or None, email_html or None))
         uid = session.get('user_id')
         if uid:
-            conn2 = _conn()
-            c2 = conn2.cursor()
-            c2.execute('UPDATE users SET empresa_nome=%s, website=%s, descricao=%s WHERE id=%s',
-                       (empresa_nome, website, descricao, uid))
-            conn2.commit()
-            conn2.close()
+            try:
+                conn2 = _conn()
+                c2 = conn2.cursor()
+                c2.execute('UPDATE users SET empresa_nome=%s, website=%s, descricao=%s WHERE id=%s',
+                           (empresa_nome, website, descricao, uid))
+                conn2.commit()
+            finally:
+                conn2.close()
         conn.commit()
         conn.close()
         return jsonify({'ok': True, 'termos': termos})
@@ -1414,12 +1465,157 @@ def public_update_lead(lead_id):
 
 
 # =============================================================================
+# AGENDA (Calendário interno)
+# =============================================================================
+
+@app.route('/api/<bot>/agenda')
+@login_required
+def api_agenda(bot):
+    schema = _get_schema() or bot
+    mes = request.args.get('mes')  # formato YYYY-MM
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        if mes:
+            c.execute("""SELECT a.*, e.nome_fantasia
+                         FROM agenda a LEFT JOIN empresas e ON a.empresa_id = e.id
+                         WHERE TO_CHAR(a.data_inicio, 'YYYY-MM') = %s
+                         ORDER BY a.data_inicio ASC""", (mes,))
+        else:
+            c.execute("""SELECT a.*, e.nome_fantasia
+                         FROM agenda a LEFT JOIN empresas e ON a.empresa_id = e.id
+                         WHERE a.data_inicio >= NOW() - INTERVAL '7 days'
+                         ORDER BY a.data_inicio ASC LIMIT 100""")
+        rows = [dict(r) for r in c.fetchall()]
+        conn.close()
+        return jsonify(rows)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<bot>/agenda', methods=['POST'])
+@login_required
+def api_add_evento(bot):
+    schema = _get_schema() or bot
+    data = request.get_json(silent=True) or {}
+    titulo = (data.get('titulo') or '').strip()
+    data_inicio = data.get('data_inicio')
+    if not titulo or not data_inicio:
+        return jsonify({'error': 'titulo e data_inicio obrigatórios'}), 400
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute("""INSERT INTO agenda (empresa_id, titulo, descricao, data_inicio, data_fim, tipo, local)
+                     VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                  (data.get('empresa_id') or None, titulo,
+                   data.get('descricao') or None, data_inicio,
+                   data.get('data_fim') or None,
+                   data.get('tipo', 'reuniao'),
+                   data.get('local') or None))
+        eid = c.fetchone()['id']
+        # Log atividade se vinculado a empresa
+        if data.get('empresa_id'):
+            c.execute("""INSERT INTO atividades (empresa_id, tipo, descricao)
+                         VALUES (%s, 'reuniao', %s)""",
+                      (data['empresa_id'], f'Agendado: {titulo} em {data_inicio}'))
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True, 'id': eid})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<bot>/agenda/<int:evento_id>', methods=['PUT'])
+@login_required
+def api_update_evento(bot, evento_id):
+    schema = _get_schema() or bot
+    data = request.get_json(silent=True) or {}
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        if 'concluido' in data:
+            c.execute('UPDATE agenda SET concluido = %s WHERE id = %s',
+                      (data['concluido'], evento_id))
+        allowed = {'titulo', 'descricao', 'data_inicio', 'data_fim', 'tipo', 'local', 'empresa_id'}
+        fields = {k: v for k, v in data.items() if k in allowed and v is not None}
+        if fields:
+            sets = ', '.join(f'{k} = %s' for k in fields)
+            c.execute(f'UPDATE agenda SET {sets} WHERE id = %s',
+                      list(fields.values()) + [evento_id])
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<bot>/agenda/<int:evento_id>', methods=['DELETE'])
+@login_required
+def api_delete_evento(bot, evento_id):
+    schema = _get_schema() or bot
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute('DELETE FROM agenda WHERE id = %s', (evento_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# =============================================================================
+# GERAR MENSAGEM INICIAL COM IA
+# =============================================================================
+
+@app.route('/api/<bot>/config/generate-msg', methods=['POST'])
+@login_required
+def api_generate_msg(bot):
+    data = request.get_json(silent=True) or {}
+    empresa = data.get('empresa_nome', '')
+    descricao = data.get('descricao', '')
+    if not descricao:
+        return jsonify({'error': 'Preencha a descrição da empresa'}), 400
+
+    api_key = os.environ.get('ANTHROPIC_API_KEY', '')
+    if not api_key:
+        return jsonify({'error': 'ANTHROPIC_API_KEY não configurado'}), 400
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=600,
+            messages=[{'role': 'user', 'content': f"""Você é copywriter especialista em prospecção B2B via WhatsApp.
+
+Empresa vendedora: {empresa}
+O que ela vende: {descricao}
+
+Crie UMA mensagem de primeiro contato via WhatsApp para prospectar clientes.
+
+Regras:
+- Máximo 6 linhas (WhatsApp precisa ser curto)
+- Tom profissional mas acessível, sem ser invasivo
+- Mencione o benefício principal do produto/serviço
+- Inclua call-to-action claro
+- Use {{{{nome}}}} para o nome da empresa prospectada
+- Use {{{{cal_link}}}} para o link de agendamento
+- Pode usar 1-2 emojis, sem exagero
+
+Responda SOMENTE com a mensagem, sem explicações."""}]
+        )
+        return jsonify({'ok': True, 'mensagem': msg.content[0].text.strip()})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# =============================================================================
 # HEALTH
 # =============================================================================
 
 @app.route('/health')
 def health():
-    return jsonify({'status': 'ok', 'version': '2.0'})
+    return jsonify({'status': 'ok', 'version': '2.1'})
 
 
 # =============================================================================

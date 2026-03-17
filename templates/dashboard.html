@@ -484,12 +484,39 @@
       padding:5px 10px; font-size:11px; color:var(--text); font-family:inherit;
       cursor:pointer;
     }
+    .filter-select option {
+      background:#1c2333; color:#f0f6fc;
+    }
     .filter-select:focus { border-color:rgba(99,102,241,.5); outline:none; }
     .bulk-btn {
       font-family:inherit; font-size:11px; font-weight:600; padding:5px 12px;
       border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:4px;
       transition:all .15s;
     }
+
+    /* ════ AGENDA / CALENDÁRIO ════ */
+    .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+    .cal-hd { font-size:10px; font-weight:700; color:var(--muted); text-align:center; padding:6px 0; text-transform:uppercase; }
+    .cal-day { min-height:60px; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:4px 6px; font-size:11px; cursor:pointer; transition:.15s; position:relative; }
+    .cal-day:hover { border-color:rgba(59,130,246,.4); background:rgba(59,130,246,.04); }
+    .cal-day.today { border-color:rgba(59,130,246,.5); background:rgba(59,130,246,.08); }
+    .cal-day.other-month { opacity:.35; }
+    .cal-day-num { font-weight:700; color:var(--text); margin-bottom:2px; }
+    .cal-day.today .cal-day-num { color:#3b82f6; }
+    .cal-evt { font-size:9px; padding:1px 4px; border-radius:3px; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .cal-evt.tipo-reuniao { background:rgba(59,130,246,.2); color:#60a5fa; }
+    .cal-evt.tipo-demo { background:rgba(34,197,94,.2); color:#4ade80; }
+    .cal-evt.tipo-ligacao { background:rgba(251,191,36,.2); color:#fbbf24; }
+    .cal-evt.tipo-followup { background:rgba(139,92,246,.2); color:#a78bfa; }
+    .cal-evt.tipo-outro { background:rgba(255,255,255,.1); color:var(--muted); }
+    .agenda-item { display:flex; align-items:flex-start; gap:12px; padding:12px 14px; background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-bottom:6px; transition:.15s; }
+    .agenda-item:hover { border-color:rgba(59,130,246,.3); }
+    .agenda-time { font-size:12px; font-weight:700; color:#3b82f6; min-width:50px; white-space:nowrap; }
+    .agenda-body { flex:1; }
+    .agenda-title { font-size:13px; font-weight:600; }
+    .agenda-meta { font-size:11px; color:var(--muted); margin-top:2px; }
+    .agenda-item.concluido { opacity:.5; }
+    .agenda-item.concluido .agenda-title { text-decoration:line-through; }
 
     /* ════ TAREFAS PENDENTES SIDEBAR ════ */
     .tasks-banner {
@@ -583,6 +610,7 @@
         <button class="tab-btn"   onclick="goTab('email',this)"><i class="fa fa-envelope"></i> Mala Direta</button>
         <button class="tab-btn"   onclick="goTab('whatsapp',this)"><i class="fab fa-whatsapp"></i> WhatsApp</button>
         <button class="tab-btn"   onclick="goTab('respostas',this)"><i class="fa fa-reply"></i> Respostas</button>
+        <button class="tab-btn"   onclick="goTab('agenda',this)"><i class="fa fa-calendar-days"></i> Agenda</button>
         <button class="tab-btn"   onclick="goTab('log',this)"><i class="fa fa-list-ul"></i> Logs</button>
       </div>
       <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;" id="lead-actions">
@@ -782,6 +810,37 @@
           </div>
         </div>
       </div>
+
+      <!-- ABA AGENDA -->
+      <div id="tab-agenda" style="display:none;padding:20px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+          <div style="width:48px;height:48px;border-radius:12px;background:rgba(59,130,246,.12);display:flex;align-items:center;justify-content:center">
+            <i class="fa fa-calendar-days" style="font-size:20px;color:#3b82f6"></i>
+          </div>
+          <div style="flex:1">
+            <div style="font-size:16px;font-weight:700">Agenda</div>
+            <div style="font-size:12px;color:var(--muted)">Reuniões, demos e compromissos com seus leads</div>
+          </div>
+          <button onclick="openAddEvento()" style="background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px">
+            <i class="fa fa-plus"></i> Novo Evento
+          </button>
+        </div>
+
+        <!-- Navegação do mês -->
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <button onclick="agendaMesAnterior()" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 10px;cursor:pointer;font-family:inherit"><i class="fa fa-chevron-left"></i></button>
+          <span id="agenda-mes-label" style="font-size:15px;font-weight:700;min-width:160px;text-align:center"></span>
+          <button onclick="agendaMesProximo()" style="background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 10px;cursor:pointer;font-family:inherit"><i class="fa fa-chevron-right"></i></button>
+          <button onclick="agendaHoje()" style="background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.25);color:#3b82f6;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">Hoje</button>
+        </div>
+
+        <!-- Calendário Grid -->
+        <div id="agenda-calendar" style="margin-bottom:20px"></div>
+
+        <!-- Lista de eventos do mês -->
+        <div id="agenda-list" style="max-height:400px;overflow-y:auto"></div>
+      </div>
+
     </div>
   </div>
 
@@ -866,13 +925,14 @@ function tick(){ document.getElementById('clock').textContent=new Date().toLocal
 tick(); setInterval(tick,10000);
 
 function goTab(panel,btn){
-  ['wa','log','email','whatsapp','respostas'].forEach(t=>{ const el=document.getElementById(`tab-${t}`); if(el) el.style.display=t===panel?'':'none'; });
+  ['wa','log','email','whatsapp','respostas','agenda'].forEach(t=>{ const el=document.getElementById(`tab-${t}`); if(el) el.style.display=t===panel?'':'none'; });
   btn.closest('div').querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   if(panel==='wa')  loadWA();
   if(panel==='log') loadLog();
   if(panel==='respostas') loadRespostas();
   if(panel==='whatsapp') loadWaStats();
+  if(panel==='agenda') loadAgenda();
 }
 
 
@@ -1192,6 +1252,7 @@ function loadBotStatus(){
 let _currentModalLead=null;
 
 function switchModalTab(tab,btn){
+  if(!_currentModalLead) return;
   document.querySelectorAll('.modal-tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.modal-tab-pane').forEach(p=>p.classList.remove('active'));
   btn.classList.add('active');
@@ -1811,6 +1872,198 @@ function previewHtml() {
     .replace(/\{\{segmento\}\}/g, 'Agronegócio')
     .replace(/\{\{cidade\}\}/g, 'São Paulo')
   preview.style.display = ''
+}
+
+// ── Agenda / Calendário ───────────────────────────────────────────────────
+let _agendaDate = new Date();
+let _agendaEventos = [];
+const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const DIAS_SEM = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+
+function agendaMesAnterior(){ _agendaDate.setMonth(_agendaDate.getMonth()-1); loadAgenda(); }
+function agendaMesProximo(){ _agendaDate.setMonth(_agendaDate.getMonth()+1); loadAgenda(); }
+function agendaHoje(){ _agendaDate=new Date(); loadAgenda(); }
+
+function loadAgenda(){
+  const y=_agendaDate.getFullYear(), m=_agendaDate.getMonth();
+  const mes=`${y}-${String(m+1).padStart(2,'0')}`;
+  document.getElementById('agenda-mes-label').textContent=`${MESES[m]} ${y}`;
+
+  fetch(`/api/${BOT}/agenda?mes=${mes}`).then(r=>r.json()).then(eventos=>{
+    _agendaEventos=eventos;
+    renderCalendar(y, m, eventos);
+    renderAgendaList(eventos);
+  }).catch(()=>{});
+}
+
+function renderCalendar(year, month, eventos){
+  const el=document.getElementById('agenda-calendar');
+  const firstDay=new Date(year, month, 1).getDay();
+  const daysInMonth=new Date(year, month+1, 0).getDate();
+  const daysInPrev=new Date(year, month, 0).getDate();
+  const today=new Date();
+  const isThisMonth=today.getFullYear()===year && today.getMonth()===month;
+
+  // Agrupa eventos por dia
+  const evtByDay={};
+  eventos.forEach(e=>{
+    const d=new Date(e.data_inicio).getDate();
+    if(!evtByDay[d]) evtByDay[d]=[];
+    evtByDay[d].push(e);
+  });
+
+  let html='<div class="cal-grid">';
+  DIAS_SEM.forEach(d=>{ html+=`<div class="cal-hd">${d}</div>`; });
+
+  // Dias do mês anterior
+  for(let i=firstDay-1;i>=0;i--){
+    html+=`<div class="cal-day other-month"><div class="cal-day-num">${daysInPrev-i}</div></div>`;
+  }
+  // Dias do mês
+  for(let d=1;d<=daysInMonth;d++){
+    const isToday=isThisMonth && d===today.getDate();
+    const dayEvts=evtByDay[d]||[];
+    html+=`<div class="cal-day${isToday?' today':''}" onclick="agendaClickDay(${year},${month},${d})">`;
+    html+=`<div class="cal-day-num">${d}</div>`;
+    dayEvts.slice(0,2).forEach(e=>{
+      html+=`<div class="cal-evt tipo-${e.tipo||'outro'}">${e.titulo}</div>`;
+    });
+    if(dayEvts.length>2) html+=`<div style="font-size:9px;color:var(--muted)">+${dayEvts.length-2} mais</div>`;
+    html+='</div>';
+  }
+  // Preenche até completar a grid
+  const totalCells=firstDay+daysInMonth;
+  const remaining=totalCells%7===0?0:7-totalCells%7;
+  for(let i=1;i<=remaining;i++){
+    html+=`<div class="cal-day other-month"><div class="cal-day-num">${i}</div></div>`;
+  }
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+function renderAgendaList(eventos){
+  const el=document.getElementById('agenda-list');
+  if(!eventos.length){
+    el.innerHTML='<div style="text-align:center;padding:30px;color:var(--muted)"><i class="fa fa-calendar" style="font-size:24px;opacity:.2;display:block;margin-bottom:8px"></i>Nenhum evento neste mês</div>';
+    return;
+  }
+  const tipoIcon={reuniao:'fa-handshake',demo:'fa-desktop',ligacao:'fa-phone',followup:'fa-rotate',outro:'fa-calendar'};
+  const tipoColor={reuniao:'#3b82f6',demo:'#22c55e',ligacao:'#fbbf24',followup:'#a78bfa',outro:'var(--muted)'};
+  el.innerHTML=eventos.map(e=>{
+    const dt=new Date(e.data_inicio);
+    const hora=dt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    const dia=dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+    const icon=tipoIcon[e.tipo]||'fa-calendar';
+    const color=tipoColor[e.tipo]||'var(--muted)';
+    return `<div class="agenda-item${e.concluido?' concluido':''}">
+      <div class="agenda-time">${dia}<br>${hora}</div>
+      <div style="width:32px;height:32px;border-radius:8px;background:${color}22;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <i class="fa ${icon}" style="font-size:13px;color:${color}"></i>
+      </div>
+      <div class="agenda-body">
+        <div class="agenda-title">${e.titulo}</div>
+        <div class="agenda-meta">
+          ${e.nome_fantasia?'<i class="fa fa-building" style="font-size:9px"></i> '+e.nome_fantasia+' · ':''}
+          ${e.local||''}${e.descricao?' — '+e.descricao:''}
+        </div>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        <button onclick="toggleEvento(${e.id},${!e.concluido})" class="row-btn" title="${e.concluido?'Reabrir':'Concluir'}" style="width:24px;height:24px">
+          <i class="fa fa-${e.concluido?'rotate-left':'check'}" style="font-size:10px;color:${e.concluido?'var(--muted)':'#22c55e'}"></i>
+        </button>
+        <button onclick="deleteEvento(${e.id})" class="row-btn row-btn-del" title="Excluir" style="width:24px;height:24px">
+          <i class="fa fa-trash" style="font-size:10px"></i>
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function agendaClickDay(y,m,d){
+  const dateStr=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  // Preenche a data no formulário de novo evento
+  openAddEvento(dateStr);
+}
+
+function toggleEvento(id,done){
+  fetch(`/api/${BOT}/agenda/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({concluido:done})}).then(r=>r.json()).then(d=>{if(d.ok)loadAgenda();});
+}
+function deleteEvento(id){
+  if(!confirm('Excluir este evento?')) return;
+  fetch(`/api/${BOT}/agenda/${id}`,{method:'DELETE'}).then(r=>r.json()).then(d=>{if(d.ok)loadAgenda();});
+}
+
+function openAddEvento(dateStr){
+  const hoje=dateStr||new Date().toISOString().slice(0,10);
+  const leadOpts=_waLeads.map(l=>`<option value="${l.id}">${l.nome_fantasia||'Lead #'+l.id}</option>`).join('');
+  const html=`<div style="padding:24px">
+    <h3 style="font-size:17px;font-weight:700;margin-bottom:16px"><i class="fa fa-calendar-plus" style="color:#3b82f6"></i> Novo Evento</h3>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div><label style="font-size:12px;font-weight:600;color:var(--muted2);display:block;margin-bottom:4px">Título *</label>
+        <input id="evt-titulo" placeholder="Ex: Demo para Cooperativa XYZ" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;font-family:inherit"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label style="font-size:12px;font-weight:600;color:var(--muted2);display:block;margin-bottom:4px">Data/Hora *</label>
+          <input id="evt-inicio" type="datetime-local" value="${hoje}T10:00" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;font-family:inherit"></div>
+        <div><label style="font-size:12px;font-weight:600;color:var(--muted2);display:block;margin-bottom:4px">Fim</label>
+          <input id="evt-fim" type="datetime-local" value="${hoje}T10:30" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;font-family:inherit"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label style="font-size:12px;font-weight:600;color:var(--muted2);display:block;margin-bottom:4px">Tipo</label>
+          <select id="evt-tipo" class="filter-select" style="width:100%;padding:9px 12px;font-size:13px">
+            <option value="reuniao">🤝 Reunião</option>
+            <option value="demo">💻 Demo</option>
+            <option value="ligacao">📞 Ligação</option>
+            <option value="followup">🔄 Follow-up</option>
+            <option value="outro">📌 Outro</option>
+          </select></div>
+        <div><label style="font-size:12px;font-weight:600;color:var(--muted2);display:block;margin-bottom:4px">Lead (opcional)</label>
+          <select id="evt-lead" class="filter-select" style="width:100%;padding:9px 12px;font-size:13px">
+            <option value="">Nenhum</option>${leadOpts}
+          </select></div>
+      </div>
+      <div><label style="font-size:12px;font-weight:600;color:var(--muted2);display:block;margin-bottom:4px">Local</label>
+        <input id="evt-local" placeholder="Ex: Google Meet, Escritório..." style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;font-family:inherit"></div>
+      <div><label style="font-size:12px;font-weight:600;color:var(--muted2);display:block;margin-bottom:4px">Descrição</label>
+        <textarea id="evt-desc" rows="2" placeholder="Notas sobre o evento..." style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;font-family:inherit;resize:vertical"></textarea></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button onclick="document.getElementById('overlay').classList.remove('open')" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer;font-family:inherit">Cancelar</button>
+        <button onclick="salvarEvento()" style="background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit"><i class="fa fa-check"></i> Salvar</button>
+      </div>
+      <div id="evt-msg" style="display:none;font-size:12px;color:#f87171"></div>
+    </div>
+  </div>`;
+  const modal=document.querySelector('#overlay .modal');
+  modal.innerHTML=html;
+  document.getElementById('overlay').classList.add('open');
+}
+
+function salvarEvento(){
+  const titulo=document.getElementById('evt-titulo').value.trim();
+  const inicio=document.getElementById('evt-inicio').value;
+  if(!titulo||!inicio){ document.getElementById('evt-msg').style.display='block'; document.getElementById('evt-msg').textContent='Título e data são obrigatórios'; return; }
+  const payload={
+    titulo,
+    data_inicio:inicio,
+    data_fim:document.getElementById('evt-fim').value||null,
+    tipo:document.getElementById('evt-tipo').value,
+    empresa_id:parseInt(document.getElementById('evt-lead').value)||null,
+    local:document.getElementById('evt-local').value.trim()||null,
+    descricao:document.getElementById('evt-desc').value.trim()||null
+  };
+  fetch(`/api/${BOT}/agenda`,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)}).then(r=>r.json()).then(d=>{
+    if(d.ok){
+      document.getElementById('overlay').classList.remove('open');
+      loadAgenda();
+    } else {
+      document.getElementById('evt-msg').style.display='block';
+      document.getElementById('evt-msg').textContent='Erro: '+(d.error||'falha');
+    }
+  }).catch(()=>{
+    document.getElementById('evt-msg').style.display='block';
+    document.getElementById('evt-msg').textContent='Erro de conexão';
+  });
 }
 
 async function enviarMalaDireta(btn) {

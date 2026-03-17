@@ -153,6 +153,49 @@
     </button>
   </div>
 
+  <!-- MENSAGEM INICIAL WHATSAPP -->
+  <div class="card">
+    <div class="card-title"><i class="fab fa-whatsapp"></i> Mensagem Inicial (WhatsApp)</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
+      Esta mensagem será enviada no primeiro contato com cada lead. A IA gera uma sugestão baseada no seu negócio — edite antes de salvar.
+    </p>
+    <div class="terms-header" style="margin-bottom:10px">
+      <span style="font-size:12px;color:var(--muted)">Variáveis: <code style="color:#22c55e">{{nome}}</code> = empresa, <code style="color:#22c55e">{{cal_link}}</code> = link de agendamento</span>
+      <button class="btn-gen" id="btn-gen-msg" onclick="generateMsg()">
+        <i class="fa fa-wand-magic-sparkles"></i> Gerar com IA
+      </button>
+    </div>
+    <textarea id="msg_inicial" rows="6" placeholder="Olá! Sou da equipe {{nome_empresa}}.&#10;&#10;Vi que a {{nome}} pode se interessar...&#10;&#10;Posso agendar uma conversa? {{cal_link}}">{{ cfg.msg_inicial or '' }}</textarea>
+  </div>
+
+  <!-- TEMPLATE EMAIL -->
+  <div class="card">
+    <div class="card-title"><i class="fa fa-envelope"></i> Template de Email (Mala Direta)</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
+      Configure o assunto e corpo HTML padrão para campanhas de email. Use variáveis para personalizar.
+    </p>
+    <div class="field">
+      <label>Assunto padrão do email</label>
+      <input type="text" id="email_assunto_padrao" value="{{ cfg.email_assunto_padrao or '' }}" placeholder="Ex: {{nome}}, conheça nossa solução para seu negócio">
+      <small style="color:var(--muted);font-size:11px">Use <code style="color:#818cf8">{{nome}}</code> para o nome da empresa</small>
+    </div>
+    <div class="field">
+      <label>Template HTML do email <small>— Variáveis: {{nome}}, {{email}}, {{segmento}}, {{cidade}}</small></label>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <label style="background:rgba(99,102,241,.12);border:1px solid var(--border);color:#818cf8;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;margin:0">
+          <i class="fa fa-upload"></i> Carregar HTML
+          <input type="file" id="cfg-html-file" accept=".html,.htm" style="display:none" onchange="loadCfgHtml(this)">
+        </label>
+        <button onclick="previewCfgHtml()" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);color:var(--muted2);padding:7px 14px;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit">
+          <i class="fa fa-eye"></i> Pré-visualizar
+        </button>
+        <span id="cfg-html-filename" style="font-size:12px;color:var(--muted);align-self:center"></span>
+      </div>
+      <textarea id="email_html_template" rows="12" placeholder="<html>&#10;<body>&#10;  <div style='font-family:sans-serif;max-width:600px;margin:0 auto'>&#10;    <h2>Olá {{nome}}!</h2>&#10;    <p>Sua mensagem aqui...</p>&#10;  </div>&#10;</body>&#10;</html>" style="font-family:'Courier New',monospace;font-size:12px">{{ cfg.email_html_template or '' }}</textarea>
+      <div id="cfg-html-preview" style="display:none;margin-top:10px;background:#fff;border-radius:8px;padding:16px;max-height:400px;overflow:auto"></div>
+    </div>
+  </div>
+
   <!-- SALVAR -->
   <button class="btn-save" id="btn-save" onclick="saveConfig()">
     <i class="fa fa-floppy-disk"></i> Salvar configurações
@@ -245,6 +288,53 @@ async function generateTerms() {
   btn.innerHTML = '<i class="fa fa-wand-magic-sparkles"></i> Gerar com IA'
 }
 
+async function generateMsg() {
+  const desc = document.getElementById('descricao').value.trim()
+  if (!desc) { showToast('Preencha a descrição da empresa primeiro', false); return }
+  const btn = document.getElementById('btn-gen-msg')
+  btn.disabled = true
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Gerando...'
+  try {
+    const r = await fetch(`/api/${BOT}/config/generate-msg`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        empresa_nome: document.getElementById('empresa_nome').value,
+        descricao: desc
+      })
+    })
+    const d = await r.json()
+    if (d.ok && d.mensagem) {
+      document.getElementById('msg_inicial').value = d.mensagem
+      showToast('✓ Mensagem gerada! Revise antes de salvar.', true)
+    } else {
+      showToast('Erro: ' + (d.error || 'falha'), false)
+    }
+  } catch(e) { showToast('Erro de conexão', false) }
+  btn.disabled = false
+  btn.innerHTML = '<i class="fa fa-wand-magic-sparkles"></i> Gerar com IA'
+}
+
+function loadCfgHtml(input) {
+  const file = input.files[0]
+  if (!file) return
+  document.getElementById('cfg-html-filename').textContent = file.name
+  const reader = new FileReader()
+  reader.onload = function(e) { document.getElementById('email_html_template').value = e.target.result }
+  reader.readAsText(file)
+}
+
+function previewCfgHtml() {
+  const html = document.getElementById('email_html_template').value
+  const preview = document.getElementById('cfg-html-preview')
+  if (!html.trim()) { preview.style.display='none'; return }
+  preview.innerHTML = html.replace(/\{\{nome\}\}/g, 'Empresa Exemplo')
+    .replace(/\{\{email\}\}/g, 'contato@exemplo.com')
+    .replace(/\{\{segmento\}\}/g, 'Agronegócio')
+    .replace(/\{\{cidade\}\}/g, 'São Paulo')
+  preview.style.display = ''
+}
+
 async function saveConfig() {
   // Sync terms from inputs
   document.querySelectorAll('.term-item input[type=text]').forEach((inp, i) => { terms[i] = inp.value })
@@ -259,7 +349,10 @@ async function saveConfig() {
         empresa_nome: document.getElementById('empresa_nome').value,
         website: document.getElementById('website').value,
         descricao: document.getElementById('descricao').value,
-        termos_busca: terms.filter(Boolean)
+        termos_busca: terms.filter(Boolean),
+        msg_inicial: document.getElementById('msg_inicial').value,
+        email_assunto_padrao: document.getElementById('email_assunto_padrao').value,
+        email_html_template: document.getElementById('email_html_template').value
       })
     })
     const d = await r.json()
