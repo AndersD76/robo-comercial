@@ -1239,6 +1239,8 @@ def api_save_config(bot):
             if li_password:
                 sql += ", linkedin_password=%s"
                 params.append(li_password)
+            sql += " WHERE id=%s"
+            params.append(exists['id'])
             c.execute(sql, params)
         else:
             c.execute("""INSERT INTO bot_config
@@ -1615,15 +1617,73 @@ def api_generate_email(bot):
     data = request.get_json(silent=True) or {}
     empresa = data.get('empresa_nome', '')
     descricao = data.get('descricao', '')
+    website = data.get('website', '').strip()
     if not descricao:
         return jsonify({'error': 'Preencha a descrição da empresa'}), 400
 
     api_key = os.environ.get('ANTHROPIC_API_KEY', '')
     if not api_key:
         return jsonify({'error': 'ANTHROPIC_API_KEY não configurado'}), 400
+
+    # --- Visitar site da empresa para extrair identidade visual ---
+    site_html = ''
+    if website:
+        try:
+            import requests as req
+            from bs4 import BeautifulSoup
+            url = website if website.startswith('http') else f'https://{website}'
+            resp = req.get(url, timeout=10,
+                           headers={'User-Agent': 'Mozilla/5.0'})
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            # Remover scripts e imagens para reduzir tamanho
+            for tag in soup.find_all(['script', 'noscript', 'svg',
+                                      'iframe', 'video', 'audio']):
+                tag.decompose()
+            for img in soup.find_all('img'):
+                img.decompose()
+            # Pegar o HTML limpo (cabeça com styles + body)
+            site_html = str(soup)[:8000]
+        except Exception:
+            site_html = ''
+
     try:
         import anthropic
         client = anthropic.Anthropic(api_key=api_key)
+
+        # Se temos o HTML do site, primeiro pedir análise da identidade visual
+        analise_site = ''
+        if site_html:
+            analise = client.messages.create(
+                model='claude-haiku-4-5-20251001',
+                max_tokens=500,
+                messages=[{'role': 'user', 'content': f"""Analise o HTML deste site e extraia a identidade visual da empresa.
+
+HTML DO SITE:
+{site_html}
+
+Retorne APENAS um resumo conciso com:
+1. Cores principais (hex exatos encontrados no CSS/HTML)
+2. Cores secundárias/de destaque
+3. Fontes usadas
+4. Tom/estilo visual (moderno, corporativo, minimalista, etc)
+5. Slogan ou frase de efeito se houver
+6. Tipo de negócio/contexto da empresa
+
+Seja direto e objetivo."""}]
+            )
+            analise_site = analise.content[0].text.strip()
+
+        contexto = ''
+        if analise_site:
+            contexto = f"""
+IDENTIDADE VISUAL DA EMPRESA (extraída do site {website}):
+{analise_site}
+
+IMPORTANTE: Replique EXATAMENTE as cores, fontes e estilo visual da empresa no email.
+O email deve parecer que foi feito pelo mesmo designer do site.
+"""
+
         msg = client.messages.create(
             model='claude-haiku-4-5-20251001',
             max_tokens=2000,
@@ -1631,13 +1691,13 @@ def api_generate_email(bot):
 
 Empresa vendedora: {empresa}
 O que ela vende: {descricao}
-
+{contexto}
 Crie um template HTML de email profissional para prospecção B2B.
 
 Regras:
 - HTML completo, inline CSS (compatível com clientes de email)
 - Max-width 600px, centrado, fundo branco
-- Design limpo e profissional com cores sutis
+- Use EXATAMENTE as cores da identidade visual da empresa vendedora
 - Seções: header com nome da empresa, saudação, proposta de valor (2-3 bullets), call-to-action (botão), footer
 - Use {{{{nome}}}} para o nome da empresa prospectada
 - Use {{{{email}}}} para o email do lead
@@ -1646,6 +1706,7 @@ Regras:
 - O botão CTA deve apontar para # (o link será substituído depois)
 - Tom profissional, direto, sem ser genérico
 - NÃO use imagens externas
+- O conteúdo deve refletir o contexto real da empresa, não ser genérico
 
 Responda SOMENTE com o HTML, sem explicações ou markdown."""}]
         )

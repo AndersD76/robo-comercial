@@ -330,7 +330,8 @@ async function generateEmail() {
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         empresa_nome: document.getElementById('empresa_nome').value,
-        descricao: desc
+        descricao: desc,
+        website: document.getElementById('website').value
       })
     })
     const d = await r.json()
@@ -362,12 +363,34 @@ function loadCfgHtml(input) {
 function previewCfgHtml() {
   const html = document.getElementById('email_html_template').value
   const preview = document.getElementById('cfg-html-preview')
-  if (!html.trim()) { preview.style.display='none'; return }
-  preview.innerHTML = html.replace(/\{\{nome\}\}/g, 'Empresa Exemplo')
+  if (!html.trim()) { showToast('Preencha ou gere o template HTML primeiro', false); return }
+  // Toggle: se já está visível, esconde
+  if (preview.style.display !== 'none' && preview.innerHTML) {
+    preview.style.display = 'none'
+    return
+  }
+  const rendered = html.replace(/\{\{nome\}\}/g, 'Empresa Exemplo')
     .replace(/\{\{email\}\}/g, 'contato@exemplo.com')
     .replace(/\{\{segmento\}\}/g, 'Agronegócio')
     .replace(/\{\{cidade\}\}/g, 'São Paulo')
-  preview.style.display = ''
+  // Usar iframe para isolamento de estilos
+  preview.innerHTML = ''
+  const iframe = document.createElement('iframe')
+  iframe.style.cssText = 'width:100%;border:none;min-height:500px;border-radius:8px'
+  preview.appendChild(iframe)
+  preview.style.display = 'block'
+  const doc = iframe.contentDocument || iframe.contentWindow.document
+  doc.open()
+  doc.write(rendered)
+  doc.close()
+  // Ajustar altura do iframe ao conteúdo
+  iframe.onload = function() {
+    try { iframe.style.height = doc.body.scrollHeight + 20 + 'px' } catch(e) {}
+  }
+  setTimeout(() => {
+    try { iframe.style.height = doc.body.scrollHeight + 20 + 'px' } catch(e) {}
+  }, 200)
+  preview.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 async function saveConfig() {
