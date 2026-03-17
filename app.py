@@ -1223,19 +1223,22 @@ def api_save_config(bot):
         if not li_cargos:
             li_cargos = ia['cargos']
 
+    conn = None
     try:
         conn = _conn(schema)
         c = conn.cursor()
         c.execute('SELECT id FROM bot_config LIMIT 1')
         exists = c.fetchone()
         if exists:
-            sql = """UPDATE bot_config SET empresa_nome=%s, website=%s, descricao=%s,
-                         termos_busca=%s, linkedin_email=%s, linkedin_cargos=%s,
-                         msg_inicial=%s, email_assunto_padrao=%s, email_html_template=%s,
+            sql = """UPDATE bot_config SET empresa_nome=%s, website=%s,
+                         descricao=%s, termos_busca=%s, linkedin_email=%s,
+                         linkedin_cargos=%s, msg_inicial=%s,
+                         email_assunto_padrao=%s, email_html_template=%s,
                          atualizado_em=NOW()"""
             params = [empresa_nome, website, descricao, json.dumps(termos),
                       li_email or None, json.dumps(li_cargos),
-                      msg_inicial or None, email_assunto or None, email_html or None]
+                      msg_inicial or None, email_assunto or None,
+                      email_html or None]
             if li_password:
                 sql += ", linkedin_password=%s"
                 params.append(li_password)
@@ -1244,28 +1247,43 @@ def api_save_config(bot):
             c.execute(sql, params)
         else:
             c.execute("""INSERT INTO bot_config
-                (empresa_nome, website, descricao, termos_busca, linkedin_email,
-                 linkedin_password, linkedin_cargos, msg_inicial,
-                 email_assunto_padrao, email_html_template)
+                (empresa_nome, website, descricao, termos_busca,
+                 linkedin_email, linkedin_password, linkedin_cargos,
+                 msg_inicial, email_assunto_padrao, email_html_template)
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                      (empresa_nome, website, descricao, json.dumps(termos),
-                       li_email or None, li_password or None, json.dumps(li_cargos),
-                       msg_inicial or None, email_assunto or None, email_html or None))
+                      (empresa_nome, website, descricao,
+                       json.dumps(termos), li_email or None,
+                       li_password or None, json.dumps(li_cargos),
+                       msg_inicial or None, email_assunto or None,
+                       email_html or None))
+        conn.commit()
+
+        # Atualizar users (separado para não bloquear o save principal)
         uid = session.get('user_id')
         if uid:
             try:
                 conn2 = _conn()
                 c2 = conn2.cursor()
-                c2.execute('UPDATE users SET empresa_nome=%s, website=%s, descricao=%s WHERE id=%s',
-                           (empresa_nome, website, descricao, uid))
+                c2.execute(
+                    'UPDATE users SET empresa_nome=%s, website=%s '
+                    'WHERE id=%s',
+                    (empresa_nome, website, uid))
                 conn2.commit()
-            finally:
                 conn2.close()
-        conn.commit()
-        conn.close()
+            except Exception:
+                pass
+
         return jsonify({'ok': True, 'termos': termos})
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.route('/api/<bot>/config/generate-terms', methods=['POST'])
