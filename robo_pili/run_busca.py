@@ -93,6 +93,44 @@ def _ensure_bot_config(schema: str):
         pass
 
 
+def get_descricao_empresa(schema: str) -> str:
+    """Lê a descrição da empresa do bot_config."""
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute("SELECT descricao FROM bot_config ORDER BY id DESC LIMIT 1")
+        row = c.fetchone()
+        conn.close()
+        if row and row.get('descricao'):
+            return row['descricao']
+    except Exception:
+        pass
+    return ''
+
+
+def _gerar_palavras_concorrente(descricao: str) -> list:
+    """Extrai palavras-chave do negócio para identificar concorrentes."""
+    if not descricao:
+        return []
+    desc = descricao.lower()
+    # Palavras genéricas do que a empresa FAZ/VENDE
+    # Se o título ou snippet do resultado contém essas palavras como
+    # oferta de serviço, provavelmente é concorrente
+    palavras = []
+    # Detecta padrões comuns de oferta de serviço
+    indicadores = [
+        'monitoramento', 'software', 'sistema', 'plataforma',
+        'solução', 'ferramenta', 'aplicativo', 'app',
+        'suporte de ti', 'suporte ti', 'terceirização de ti',
+        'consultoria de ti', 'infraestrutura de ti',
+        'desenvolvimento de software', 'SaaS',
+    ]
+    for ind in indicadores:
+        if ind in desc:
+            palavras.append(ind)
+    return palavras
+
+
 def get_termos(schema: str) -> list:
     """Lê termos de busca da tabela bot_config. Fallback para config.py."""
     _ensure_bot_config(schema)
@@ -585,6 +623,18 @@ def _resultado_para_empresa(r):
     }
 
 
+_TITULO_CONCORRENTE = [
+    'suporte de ti', 'suporte ti', 'terceirização de ti',
+    'terceirizacao de ti', 'empresa de ti', 'consultoria ti',
+    'consultoria de ti', 'infraestrutura de ti',
+    'serviços de ti', 'servicos de ti',
+    'desenvolvimento de software', 'fábrica de software',
+    'software house', 'agência digital', 'agencia digital',
+    'marketing digital', 'criação de sites', 'web design',
+    'seo ', 'google ads', 'tráfego pago',
+]
+
+
 async def ciclo_busca(schema: str, buscador: Buscador, termos: list) -> int:
     """Um ciclo de busca. Retorna qtd de leads salvos."""
     MAX_DIA = 120
@@ -623,6 +673,21 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list) -> int:
                     break
         if is_blacklisted:
             print(f'[{schema}]   ✗ Skip (blog/portal): {dominio}',
+                  flush=True)
+            continue
+
+        # Filtra concorrentes (empresas que VENDEM o mesmo tipo de serviço)
+        titulo_lower = r.get('titulo', '').lower()
+        snippet_lower = r.get('snippet', '').lower()
+        texto_result = titulo_lower + ' ' + snippet_lower
+        is_concorrente = False
+        for pat in _TITULO_CONCORRENTE:
+            if pat in texto_result:
+                is_concorrente = True
+                break
+        if is_concorrente:
+            print(f'[{schema}]   ✗ Skip (concorrente): '
+                  f'{lead.get("nome_fantasia", dominio)}',
                   flush=True)
             continue
 

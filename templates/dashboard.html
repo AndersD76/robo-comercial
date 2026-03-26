@@ -169,14 +169,14 @@
     tbody tr:last-child td { border-bottom:none; }
     tbody tr:hover { background:rgba(255,255,255,.04); }
 
-    .chip { display:inline-flex; align-items:center; gap:3px; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:600; }
-    .c-novo  { background:rgba(148,163,184,.12); color:#94a3b8; }
-    .c-cont  { background:rgba(59,130,246,.15);  color:#60a5fa; }
-    .c-resp  { background:rgba(139,92,246,.15);  color:#a78bfa; }
-    .c-email { background:rgba(234,88,12,.15); color:#fb923c; padding:2px 5px; font-size:10px; cursor:default; }
-    .c-qualif{ background:rgba(6,182,212,.15);   color:#22d3ee; }
-    .c-demo  { background:rgba(251,191,36,.15);  color:#fbbf24; }
-    .c-conv  { background:rgba(34,197,94,.15);   color:#4ade80; }
+    .chip { display:inline-flex; align-items:center; gap:3px; padding:3px 9px; border-radius:4px; font-size:11px; font-weight:600; border:none; box-shadow:none; }
+    .c-novo  { background:#94a3b8; color:#1a1a2e; }
+    .c-cont  { background:#60a5fa; color:#1a1a2e; }
+    .c-resp  { background:#a78bfa; color:#1a1a2e; }
+    .c-email { background:#fb923c; color:#1a1a2e; padding:2px 5px; font-size:10px; cursor:default; }
+    .c-qualif{ background:#22d3ee; color:#1a1a2e; }
+    .c-demo  { background:#fbbf24; color:#1a1a2e; }
+    .c-conv  { background:#4ade80; color:#1a1a2e; }
 
     .empty-state { text-align:center; padding:28px 16px; color:var(--muted); font-size:12px; }
     .empty-state i { font-size:28px; display:block; margin-bottom:8px; opacity:.15; }
@@ -965,10 +965,10 @@ function loadWA(){
       <td><input type="checkbox" class="lead-chk" value="${l.id}" data-email="${l.email||''}"></td>
       <td style="color:var(--muted);font-size:11px">${i+1}</td>
       <td><b>${l.nome_fantasia||'—'}</b></td>
-      <td style="color:var(--muted);font-size:11px">${l.whatsapp||l.telefone||'—'}</td>
-      <td style="color:var(--muted);font-size:11px">${l.email||'—'}</td>
-      <td style="color:var(--muted);font-size:11px">${l.cnpj||'—'}</td>
-      <td style="color:var(--muted);font-size:11px">${l._decisor||'—'}</td>
+      <td style="color:var(--muted);font-size:11px">${l.whatsapp||l.telefone||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
+      <td style="color:var(--muted);font-size:11px">${l.email||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
+      <td style="color:var(--muted);font-size:11px">${l.cnpj||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
+      <td style="color:var(--muted);font-size:11px">${l._decisor||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
       <td style="white-space:nowrap">${statusChip(l.status,l.demo_status)}${l.email_enviado?' <span class="chip c-email" title="Email enviado em '+new Date(l.email_enviado).toLocaleDateString('pt-BR')+'">✉</span>':''}</td>
       <td style="color:var(--muted)">${l.score||0}</td>
       <td style="color:var(--muted);font-size:11px;white-space:nowrap">${dt}</td>
@@ -978,7 +978,7 @@ function loadWA(){
       </td>
     </tr>`;}).join('');
     document.getElementById('lead-count').textContent=d.length+' leads';
-  }).catch(()=>{});
+  }).catch(e=>{console.error('loadWA error:',e)});
 }
 function filterLeads(){
   const q=document.getElementById('lead-search').value.toLowerCase();
@@ -1278,13 +1278,13 @@ function openLead(l){
   // INFO TAB
   document.getElementById('modal-tab-info').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;margin-bottom:16px">
-      <div class="m-row"><span class="m-lbl">Telefone</span><span class="m-val">${l.telefone||'—'}</span></div>
-      <div class="m-row"><span class="m-lbl">WhatsApp</span><span class="m-val">${l.whatsapp||'—'}</span></div>
-      <div class="m-row"><span class="m-lbl">Email</span><span class="m-val" style="font-size:11px;word-break:break-all">${l.email||'—'}</span></div>
-      <div class="m-row"><span class="m-lbl">Website</span><span class="m-val" style="font-size:11px">${l.website?`<a href="${l.website.startsWith('http')?l.website:'https://'+l.website}" target="_blank" style="color:#60a5fa">${l.website}</a>`:' —'}</span></div>
-      <div class="m-row"><span class="m-lbl">CNPJ</span><span class="m-val" style="font-size:11px">${l.cnpj||'—'}</span></div>
-      <div class="m-row"><span class="m-lbl">Local</span><span class="m-val">${[l.cidade,l.estado].filter(Boolean).join(', ')||'—'}</span></div>
-      <div class="m-row"><span class="m-lbl">Decisor</span><span class="m-val" style="font-size:11px;color:#a78bfa">${l._decisor||'—'}</span></div>
+      <div class="m-row"><span class="m-lbl">Telefone</span><span class="m-val">${l.telefone||'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
+      <div class="m-row"><span class="m-lbl">WhatsApp</span><span class="m-val">${l.whatsapp||'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
+      <div class="m-row"><span class="m-lbl">Email</span><span class="m-val" style="font-size:11px;word-break:break-all">${l.email||'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
+      <div class="m-row"><span class="m-lbl">Website</span><span class="m-val" style="font-size:11px">${l.website?`<a href="${l.website.startsWith('http')?l.website:'https://'+l.website}" target="_blank" style="color:#60a5fa">${l.website}</a>`:'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
+      <div class="m-row"><span class="m-lbl">CNPJ</span><span class="m-val" style="font-size:11px">${l.cnpj||'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
+      <div class="m-row"><span class="m-lbl">Local</span><span class="m-val">${[l.cidade,l.estado].filter(Boolean).join(', ')||'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
+      <div class="m-row"><span class="m-lbl">Decisor</span><span class="m-val" style="font-size:11px;color:#a78bfa">${l._decisor||'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
       <div class="m-row"><span class="m-lbl">Score</span><span class="m-val"><span style="color:#fbbf24">★</span> ${l.score||0}</span></div>
     </div>
 
@@ -1294,7 +1294,7 @@ function openLead(l){
         ${statusOpts.map(s=>{
           const colors={novo:'c-novo',contactada:'c-cont',respondeu:'c-resp',qualificado:'c-qualif',demo:'c-demo',convertido:'c-conv'};
           const isActive=l.status===s;
-          return `<button onclick="quickStatus(${l.id},'${s}')" class="chip ${colors[s]||'c-novo'}" style="cursor:pointer;font-size:11px;padding:4px 12px;${isActive?'box-shadow:0 0 0 2px var(--accent);font-weight:700':''}">${s}</button>`;
+          return `<button onclick="quickStatus(${l.id},'${s}')" class="chip ${colors[s]||'c-novo'}" style="cursor:pointer;font-size:11px;padding:4px 12px;${isActive?'outline:2px solid #fff;font-weight:700':''}">${s}</button>`;
         }).join('')}
       </div>
       ${l.email_enviado?`<div style="font-size:11px;color:#fb923c;margin-top:8px"><i class="fa fa-envelope"></i> Email enviado em ${new Date(l.email_enviado).toLocaleDateString('pt-BR')}</div>`:''}
