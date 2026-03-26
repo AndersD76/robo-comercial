@@ -398,7 +398,7 @@ def get_bot_config(schema: str) -> dict:
         c.execute('SELECT * FROM bot_config ORDER BY id DESC LIMIT 1')
         row = c.fetchone()
         conn.close()
-        return dict(row) if row else {}
+        return _serialize_row(dict(row)) if row else {}
     except Exception as e:
         print(f'[bot_config/{schema}] {e}')
         return {}
