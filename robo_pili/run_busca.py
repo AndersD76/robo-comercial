@@ -109,26 +109,38 @@ def get_descricao_empresa(schema: str) -> str:
 
 
 def _gerar_palavras_concorrente(descricao: str) -> list:
-    """Extrai palavras-chave do negócio para identificar concorrentes."""
+    """Extrai palavras-chave do produto/serviço para filtrar concorrentes.
+
+    Baseado na descrição da empresa do user, identifica frases que
+    indicariam que um resultado é concorrente (oferece o mesmo serviço).
+    """
     if not descricao:
         return []
     desc = descricao.lower()
-    # Palavras genéricas do que a empresa FAZ/VENDE
-    # Se o título ou snippet do resultado contém essas palavras como
-    # oferta de serviço, provavelmente é concorrente
     palavras = []
-    # Detecta padrões comuns de oferta de serviço
-    indicadores = [
-        'monitoramento', 'software', 'sistema', 'plataforma',
-        'solução', 'ferramenta', 'aplicativo', 'app',
-        'suporte de ti', 'suporte ti', 'terceirização de ti',
-        'consultoria de ti', 'infraestrutura de ti',
-        'desenvolvimento de software', 'SaaS',
-    ]
-    for ind in indicadores:
-        if ind in desc:
-            palavras.append(ind)
-    return palavras
+
+    # Extrai substantivos relevantes da descrição (2+ palavras juntas)
+    # Ex: "software de monitoramento" -> ["software de monitoramento",
+    #      "monitoramento de funcionários"]
+    tokens = desc.split()
+    for i in range(len(tokens)):
+        for n in (3, 2):  # trigramas e bigramas
+            if i + n <= len(tokens):
+                frase = ' '.join(tokens[i:i + n])
+                # Ignora frases muito genéricas
+                skip = ['de que', 'e de', 'com o', 'para o',
+                        'que é', 'no que', 'em que', 'a sua']
+                if frase not in skip and len(frase) > 6:
+                    palavras.append(frase)
+
+    # Remove duplicatas mantendo ordem
+    vistos = set()
+    unicas = []
+    for p in palavras:
+        if p not in vistos:
+            vistos.add(p)
+            unicas.append(p)
+    return unicas[:20]  # limita para não ficar lento
 
 
 def get_termos(schema: str) -> list:
@@ -623,19 +635,8 @@ def _resultado_para_empresa(r):
     }
 
 
-_TITULO_CONCORRENTE = [
-    'suporte de ti', 'suporte ti', 'terceirização de ti',
-    'terceirizacao de ti', 'empresa de ti', 'consultoria ti',
-    'consultoria de ti', 'infraestrutura de ti',
-    'serviços de ti', 'servicos de ti',
-    'desenvolvimento de software', 'fábrica de software',
-    'software house', 'agência digital', 'agencia digital',
-    'marketing digital', 'criação de sites', 'web design',
-    'seo ', 'google ads', 'tráfego pago',
-]
-
-
-async def ciclo_busca(schema: str, buscador: Buscador, termos: list) -> int:
+async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
+                      palavras_concorrente: list = None) -> int:
     """Um ciclo de busca. Retorna qtd de leads salvos."""
     MAX_DIA = 120
     if get_contagem_diaria(schema, 'buscas') >= MAX_DIA:
@@ -676,20 +677,20 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list) -> int:
                   flush=True)
             continue
 
-        # Filtra concorrentes (empresas que VENDEM o mesmo tipo de serviço)
-        titulo_lower = r.get('titulo', '').lower()
-        snippet_lower = r.get('snippet', '').lower()
-        texto_result = titulo_lower + ' ' + snippet_lower
-        is_concorrente = False
-        for pat in _TITULO_CONCORRENTE:
-            if pat in texto_result:
-                is_concorrente = True
-                break
-        if is_concorrente:
-            print(f'[{schema}]   ✗ Skip (concorrente): '
-                  f'{lead.get("nome_fantasia", dominio)}',
-                  flush=True)
-            continue
+        # Filtra concorrentes (empresas que VENDEM o mesmo serviço)
+        # Baseado na descrição do produto do user
+        if palavras_concorrente:
+            titulo_lower = r.get('titulo', '').lower()
+            snippet_lower = r.get('snippet', '').lower()
+            texto_result = titulo_lower + ' ' + snippet_lower
+            matches = sum(1 for p in palavras_concorrente
+                          if p in texto_result)
+            # Se 3+ palavras-chave do produto batem, é concorrente
+            if matches >= 3:
+                print(f'[{schema}]   ✗ Skip (concorrente): '
+                      f'{lead.get("nome_fantasia", dominio)}',
+                      flush=True)
+                continue
 
         # SEMPRE scrapa o site para buscar telefone, email, CNPJ e decisores
         url_scrape = r.get('url', lead.get('website', ''))
@@ -809,6 +810,12 @@ async def main_loop(schema: str):
         print(f'[{schema}] Erro ao iniciar navegador: {e}', flush=True)
         print(f'[{schema}] Tentando modo HTTP...', flush=True)
 
+    # Carrega descrição do produto para filtrar concorrentes
+    descricao = get_descricao_empresa(schema)
+    palavras_conc = _gerar_palavras_concorrente(descricao)
+    if palavras_conc:
+        print(f'[{schema}] Filtro concorrentes: {len(palavras_conc)} palavras-chave do produto', flush=True)
+
     ciclo = 0
     while True:
         ciclo += 1
@@ -821,7 +828,7 @@ async def main_loop(schema: str):
         print(f'\n[{schema}] ━━━ Ciclo #{ciclo} | buscas hoje: {get_contagem_diaria(schema, "buscas")} ━━━', flush=True)
 
         try:
-            await ciclo_busca(schema, buscador, termos)
+            await ciclo_busca(schema, buscador, termos, palavras_conc)
         except Exception as e:
             print(f'[{schema}] Erro no ciclo: {e}', flush=True)
             log_db(schema, 'erro', str(e))
