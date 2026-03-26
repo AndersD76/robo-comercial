@@ -111,36 +111,50 @@ def get_descricao_empresa(schema: str) -> str:
 def _gerar_palavras_concorrente(descricao: str) -> list:
     """Extrai palavras-chave do produto/serviço para filtrar concorrentes.
 
-    Baseado na descrição da empresa do user, identifica frases que
-    indicariam que um resultado é concorrente (oferece o mesmo serviço).
+    Retorna palavras substantivas que identificam o que a empresa VENDE.
+    Se um resultado de busca contém várias dessas, provavelmente é concorrente.
     """
     if not descricao:
         return []
     desc = descricao.lower()
-    palavras = []
+    # Remove pontuação
+    desc = re.sub(r'[.,;:!?()"\']', ' ', desc)
 
-    # Extrai substantivos relevantes da descrição (2+ palavras juntas)
-    # Ex: "software de monitoramento" -> ["software de monitoramento",
-    #      "monitoramento de funcionários"]
+    # Stop words — palavras que não significam nada sozinhas
+    stop = {
+        'de', 'do', 'da', 'dos', 'das', 'em', 'no', 'na', 'nos', 'nas',
+        'um', 'uma', 'uns', 'umas', 'o', 'a', 'os', 'as', 'e', 'ou',
+        'que', 'para', 'por', 'com', 'como', 'se', 'mais', 'muito',
+        'seu', 'sua', 'seus', 'suas', 'ele', 'ela', 'nós', 'nos',
+        'é', 'são', 'ser', 'ter', 'está', 'foi', 'ao', 'à', 'às',
+        'pelo', 'pela', 'isso', 'isto', 'esse', 'essa', 'este', 'esta',
+        'todo', 'toda', 'cada', 'entre', 'sobre', 'após', 'até',
+    }
+
     tokens = desc.split()
-    for i in range(len(tokens)):
-        for n in (3, 2):  # trigramas e bigramas
-            if i + n <= len(tokens):
-                frase = ' '.join(tokens[i:i + n])
-                # Ignora frases muito genéricas
-                skip = ['de que', 'e de', 'com o', 'para o',
-                        'que é', 'no que', 'em que', 'a sua']
-                if frase not in skip and len(frase) > 6:
-                    palavras.append(frase)
+    # Palavras significativas (substantivos, verbos importantes)
+    significativas = [t for t in tokens
+                      if t not in stop and len(t) > 3]
 
-    # Remove duplicatas mantendo ordem
+    resultado = []
+    # Palavras soltas significativas
+    for t in significativas:
+        resultado.append(t)
+
+    # Bigramas significativos (duas palavras sem stop words no meio)
+    for i in range(len(tokens) - 1):
+        a, b = tokens[i], tokens[i + 1]
+        if a not in stop and b not in stop and len(a) > 2 and len(b) > 2:
+            resultado.append(f'{a} {b}')
+
+    # Remove duplicatas
     vistos = set()
     unicas = []
-    for p in palavras:
+    for p in resultado:
         if p not in vistos:
             vistos.add(p)
             unicas.append(p)
-    return unicas[:20]  # limita para não ficar lento
+    return unicas
 
 
 def get_termos(schema: str) -> list:
