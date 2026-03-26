@@ -652,11 +652,7 @@ def _resultado_para_empresa(r):
 async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
                       palavras_concorrente: list = None) -> int:
     """Um ciclo de busca. Retorna qtd de leads salvos."""
-    MAX_DIA = 120
-    if get_contagem_diaria(schema, 'buscas') >= MAX_DIA:
-        print(f'[{schema}] Limite diário atingido ({MAX_DIA}). Aguardando 1h...', flush=True)
-        await asyncio.sleep(3600)  # espera 1 hora antes de checar de novo
-        return 0
+    # Sem limite diário — roda direto
 
     termo = random.choice(termos)
     print(f'[{schema}] 🔍 Buscando: "{termo}"', flush=True)
@@ -848,8 +844,7 @@ async def main_loop(schema: str):
             print(f'[{schema}] Erro no ciclo: {e}', flush=True)
             log_db(schema, 'erro', str(e))
 
-        # Pequena pausa entre ciclos para não sobrecarregar
-        await asyncio.sleep(5)
+        # Sem pausa — próximo ciclo imediato
 
 
 if __name__ == '__main__':
