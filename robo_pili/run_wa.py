@@ -555,7 +555,7 @@ async def ciclo_envio(
             registrar_interacao(
                 lead['id'], None, 'whatsapp', 'inicial', mensagem
             )
-            atualizar_status_empresa(lead['id'], 'contactada')
+            atualizar_status_empresa(lead['id'], 'contactada', canal='whatsapp')
             # registrar_interacao já chama incrementar_contagem
             enviadas += 1
             await bot.delay_entre_mensagens()

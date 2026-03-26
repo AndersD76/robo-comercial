@@ -235,10 +235,21 @@ def salvar_empresa(dados):
         conn.close()
 
 
-def atualizar_status_empresa(empresa_id, status):
+def atualizar_status_empresa(empresa_id, status, canal=None):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("UPDATE empresas SET status = %s WHERE id = %s", (status, empresa_id))
+    if canal == 'whatsapp':
+        c.execute(
+            "UPDATE empresas SET status = %s, wa_enviado = NOW() "
+            "WHERE id = %s", (status, empresa_id))
+    elif canal == 'email':
+        c.execute(
+            "UPDATE empresas SET status = %s, email_enviado = NOW() "
+            "WHERE id = %s", (status, empresa_id))
+    else:
+        c.execute(
+            "UPDATE empresas SET status = %s WHERE id = %s",
+            (status, empresa_id))
     conn.commit()
     conn.close()
 

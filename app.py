@@ -147,6 +147,7 @@ def _init_user_schema(schema: str):
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_remetente TEXT",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_remetente_nome TEXT",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS resend_api_key TEXT",
+        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS wa_enviado TIMESTAMP",
         """CREATE TABLE IF NOT EXISTS agenda (
             id BIGSERIAL PRIMARY KEY,
             empresa_id BIGINT REFERENCES empresas(id) ON DELETE SET NULL,
@@ -362,8 +363,8 @@ def get_leads(schema: str, limite: int = 500) -> list:
         c.execute("""SELECT e.id, e.nome_fantasia, e.whatsapp, e.telefone, e.email, e.score,
                             e.status, e.segmento, e.demo_status, e.cidade, e.estado,
                             e.encontrado_em, e.cnpj, e.razao_social, e.website,
-                            e.linkedin, e.instagram, e.fonte, e.porte, e.email_enviado,
-                            e.observacoes,
+                            e.linkedin, e.instagram, e.fonte, e.porte,
+                            e.email_enviado, e.wa_enviado, e.observacoes,
                             (SELECT ct.nome || ' - ' || ct.cargo
                              FROM contatos ct WHERE ct.empresa_id = e.id AND ct.decisor = 1
                              LIMIT 1) AS _decisor
@@ -578,7 +579,8 @@ def api_pipeline():
         for st in stages:
             c.execute("""SELECT e.id, e.nome_fantasia, e.segmento, e.cidade, e.estado,
                                 e.telefone, e.whatsapp, e.email, e.score, e.status,
-                                e.email_enviado, e.encontrado_em, e.cnpj, e.observacoes,
+                                e.email_enviado, e.wa_enviado,
+                                e.encontrado_em, e.cnpj, e.observacoes,
                                 e.website,
                                 (SELECT ct.nome || ' - ' || ct.cargo
                                  FROM contatos ct WHERE ct.empresa_id = e.id AND ct.decisor = 1
@@ -1123,9 +1125,15 @@ def api_send_emails(bot):
                 try:
                     conn2 = _conn(schema)
                     c2 = conn2.cursor()
-                    c2.execute("UPDATE empresas SET email_enviado = NOW() WHERE id = %s", (lead['id'],))
-                    c2.execute("""INSERT INTO atividades (empresa_id, tipo, descricao)
-                                 VALUES (%s, 'email', 'Email enviado')""", (lead['id'],))
+                    c2.execute("""UPDATE empresas
+                        SET email_enviado = NOW(),
+                            status = CASE WHEN status = 'novo'
+                                THEN 'contactada' ELSE status END
+                        WHERE id = %s""", (lead['id'],))
+                    c2.execute("""INSERT INTO atividades
+                        (empresa_id, tipo, descricao)
+                        VALUES (%s, 'email', 'Email enviado')""",
+                        (lead['id'],))
                     conn2.commit()
                 finally:
                     conn2.close()
@@ -1207,8 +1215,10 @@ def api_email_campanha(bot):
                     conn2 = _conn(schema)
                     c2 = conn2.cursor()
                     c2.execute(
-                        "UPDATE empresas SET email_enviado = NOW() "
-                        "WHERE id = %s", (lead['id'],))
+                        "UPDATE empresas SET email_enviado = NOW(),"
+                        " status = CASE WHEN status = 'novo'"
+                        " THEN 'contactada' ELSE status END"
+                        " WHERE id = %s", (lead['id'],))
                     c2.execute(
                         "INSERT INTO atividades "
                         "(empresa_id, tipo, descricao) "

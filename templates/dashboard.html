@@ -952,7 +952,7 @@ function loadWA(){
       <td style="color:var(--muted);font-size:11px">${l.email||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
       <td style="color:var(--muted);font-size:11px">${l.cnpj||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
       <td style="color:var(--muted);font-size:11px">${l._decisor||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
-      <td style="white-space:nowrap">${statusChip(l.status,l.demo_status)}${l.email_enviado?' <span class="chip c-email" title="Email enviado em '+new Date(l.email_enviado).toLocaleDateString('pt-BR')+'">✉</span>':''}</td>
+      <td style="white-space:nowrap">${statusChip(l.status,l.demo_status)}${l.email_enviado?' <span class="chip c-email" title="Email enviado"><i class="fa fa-envelope" style="font-size:9px"></i></span>':''}${l.wa_enviado?' <span class="chip" style="background:#22c55e;color:#1a1a2e;padding:2px 5px;font-size:10px" title="WhatsApp enviado"><i class="fab fa-whatsapp" style="font-size:9px"></i></span>':''}</td>
       <td style="color:var(--muted)">${l.score||0}</td>
       <td style="color:var(--muted);font-size:11px;white-space:nowrap">${dt}</td>
       <td style="white-space:nowrap">
@@ -1143,21 +1143,23 @@ function loadPipe(){
       col.innerHTML=leads.map(l=>{
         const fone=l.whatsapp||l.telefone||'';
         const dt=l.encontrado_em?new Date(l.encontrado_em).toLocaleDateString('pt-BR'):'';
-        const emailTag=l.email_enviado?`<span style="color:#fb923c;font-size:10px">✉</span>`:'';
         const obsPreview=l.observacoes?(l.observacoes.length>35?l.observacoes.substring(0,35)+'…':l.observacoes):'';
+        // Ícones de canal de contato
+        let canalIcons = '';
+        if(l.email_enviado) canalIcons += `<span style="color:#fb923c;font-size:10px" title="Email enviado"><i class="fa fa-envelope"></i></span> `;
+        if(l.wa_enviado) canalIcons += `<span style="color:#22c55e;font-size:10px" title="WhatsApp enviado"><i class="fab fa-whatsapp"></i></span> `;
         return `
         <div class="lcard" draggable="true"
           ondragstart="event.dataTransfer.setData('text/plain','${l.id}');this.classList.add('dragging')"
           ondragend="this.classList.remove('dragging')"
           onclick="openLead(${JSON.stringify(l).replace(/"/g,'&quot;')})">
-          <div class="lcard-name"><i class="fa fa-building" style="color:#6366f1;font-size:11px"></i> ${l.nome_fantasia||'—'}</div>
+          <div class="lcard-name"><i class="fa fa-building" style="color:#6366f1;font-size:11px"></i> ${l.nome_fantasia||'—'} ${canalIcons}</div>
           ${l._decisor?`<div style="font-size:10px;color:#a78bfa;margin-top:2px"><i class="fa fa-user-tie" style="font-size:9px"></i> ${l._decisor}</div>`:''}
           ${fone?`<div style="font-size:10px;color:var(--muted);margin-top:2px"><i class="fa fa-phone" style="font-size:8px"></i> ${fone}</div>`:''}
           ${l.email?`<div style="font-size:10px;color:var(--muted)"><i class="fa fa-envelope" style="font-size:8px"></i> ${l.email}</div>`:''}
           ${obsPreview?`<div style="font-size:9px;color:#fbbf24;margin-top:3px;font-style:italic">${obsPreview}</div>`:''}
           <div class="lcard-foot">
             <span class="lcard-score"><span style="color:#fbbf24">★</span> ${l.score||0}</span>
-            <span>${emailTag}</span>
             ${dt?`<span style="font-size:9px;color:var(--muted)">${dt}</span>`:''}
           </div>
         </div>`}).join('');
