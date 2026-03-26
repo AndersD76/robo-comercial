@@ -201,11 +201,9 @@ _HEADERS = {
 
 # Páginas onde normalmente tem contato — ordem de prioridade
 _CONTATO_PATHS = [
-    '', '/contato', '/contact', '/fale-conosco', '/contatos',
-    '/sobre', '/about', '/quem-somos', '/institucional',
-    '/empresa', '/a-empresa', '/sobre-nos',
-    '/equipe', '/diretoria', '/time', '/nossa-equipe',
-    '/footer', '/rodape',
+    '', '/contato', '/contact', '/fale-conosco',
+    '/sobre', '/about', '/quem-somos',
+    '/empresa', '/a-empresa',
 ]
 
 _EMAIL_BLACKLIST = [
@@ -374,7 +372,7 @@ async def _scrape_site(url: str) -> dict:
     parsed = urlparse(base)
     raiz = f'{parsed.scheme}://{parsed.netloc}'
 
-    timeout = aiohttp.ClientTimeout(total=12)
+    timeout = aiohttp.ClientTimeout(total=8)
     todo_html = ''
     paginas_ok = 0
 
@@ -430,7 +428,7 @@ async def _scrape_site(url: str) -> dict:
                     todo_html, re.IGNORECASE
                 )
                 urls_vistas = set()
-                for href in links[:6]:
+                for href in links[:3]:
                     try:
                         if href.startswith('mailto:') or href.startswith('tel:') or href.startswith('#'):
                             continue
@@ -582,7 +580,7 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list) -> int:
         url_scrape = r.get('url', lead.get('website', ''))
         decisores = []
         try:
-            contatos = await _scrape_site(url_scrape)
+            contatos = await asyncio.wait_for(_scrape_site(url_scrape), timeout=25)
             # Email
             if contatos['emails']:
                 if not lead.get('email'):
@@ -619,6 +617,9 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list) -> int:
                 extras.append(f'{len(decisores)} decisor(es)')
             extra_str = (' | ' + ', '.join(extras)) if extras else ''
             print(f'[{schema}]   🔎 {lead["website"]}: {n_tel} tel, {n_email} email{extra_str}', flush=True)
+        except asyncio.TimeoutError:
+            print(f'[{schema}]   ⚠ Timeout scrape {lead["website"]} (>25s)', flush=True)
+            contatos = {'telefones': [], 'emails': [], 'cnpj': None, 'decisores': []}
         except Exception as e:
             print(f'[{schema}]   ⚠ Erro scrape {lead["website"]}: {e}', flush=True)
 

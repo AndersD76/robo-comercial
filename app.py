@@ -71,6 +71,14 @@ _init_public_schema_safe()
 # DB HELPERS
 # =============================================================================
 
+def _serialize_row(row: dict) -> dict:
+    """Converte datetime e outros tipos não-serializáveis para string."""
+    for k, v in row.items():
+        if v is not None and not isinstance(v, (str, int, float, bool)):
+            row[k] = str(v)
+    return row
+
+
 def _conn(schema=None):
     conn = psycopg2.connect(DATABASE_URL,
                             cursor_factory=psycopg2.extras.RealDictCursor)
@@ -357,7 +365,7 @@ def get_leads(schema: str, limite: int = 500) -> list:
                              FROM contatos ct WHERE ct.empresa_id = e.id AND ct.decisor = 1
                              LIMIT 1) AS _decisor
                      FROM empresas e ORDER BY e.encontrado_em DESC LIMIT %s""", (limite,))
-        rows = [dict(r) for r in c.fetchall()]
+        rows = [_serialize_row(dict(r)) for r in c.fetchall()]
         conn.close()
         return rows
     except Exception as e:
@@ -372,7 +380,7 @@ def get_logs(schema: str, limite: int = 60) -> list:
         conn = _conn(schema)
         c = conn.cursor()
         c.execute("SELECT tipo, mensagem, timestamp FROM logs ORDER BY timestamp DESC LIMIT %s", (limite,))
-        rows = [dict(r) for r in c.fetchall()]
+        rows = [_serialize_row(dict(r)) for r in c.fetchall()]
         conn.close()
         return rows
     except Exception as e:
