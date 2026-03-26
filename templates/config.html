@@ -168,6 +168,30 @@
     <textarea id="msg_inicial" rows="6" placeholder="Olá! Sou da equipe {{nome_empresa}}.&#10;&#10;Vi que a {{nome}} pode se interessar...&#10;&#10;Posso agendar uma conversa? {{cal_link}}">{{ cfg.msg_inicial or '' }}</textarea>
   </div>
 
+  <!-- CONFIG EMAIL REMETENTE -->
+  <div class="card">
+    <div class="card-title"><i class="fa fa-at"></i> Configuração de Email</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
+      Configure o Resend para enviar emails de prospecção. <a href="https://resend.com" target="_blank" style="color:#818cf8">Criar conta no Resend</a>
+    </p>
+    <div class="field">
+      <label>API Key do Resend</label>
+      <input type="password" id="resend_api_key" value="{{ cfg.resend_api_key or '' }}" placeholder="re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+      <small style="color:var(--muted);font-size:11px">Pegue em <a href="https://resend.com/api-keys" target="_blank" style="color:#818cf8">resend.com/api-keys</a></small>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="field">
+        <label>Email remetente</label>
+        <input type="email" id="email_remetente" value="{{ cfg.email_remetente or '' }}" placeholder="contato@suaempresa.com.br">
+        <small style="color:var(--muted);font-size:11px">Domínio deve estar verificado no Resend</small>
+      </div>
+      <div class="field">
+        <label>Nome do remetente</label>
+        <input type="text" id="email_remetente_nome" value="{{ cfg.email_remetente_nome or '' }}" placeholder="Ex: João da Empresa XYZ">
+      </div>
+    </div>
+  </div>
+
   <!-- TEMPLATE EMAIL -->
   <div class="card">
     <div class="card-title"><i class="fa fa-envelope"></i> Template de Email (Mala Direta)</div>
@@ -410,7 +434,10 @@ async function saveConfig() {
         termos_busca: terms.filter(Boolean),
         msg_inicial: document.getElementById('msg_inicial').value,
         email_assunto_padrao: document.getElementById('email_assunto_padrao').value,
-        email_html_template: document.getElementById('email_html_template').value
+        email_html_template: document.getElementById('email_html_template').value,
+        resend_api_key: document.getElementById('resend_api_key').value,
+        email_remetente: document.getElementById('email_remetente').value,
+        email_remetente_nome: document.getElementById('email_remetente_nome').value
       })
     })
     const d = await r.json()

@@ -144,6 +144,9 @@ def _init_user_schema(schema: str):
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS msg_inicial TEXT",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_assunto_padrao TEXT",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_html_template TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_remetente TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_remetente_nome TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS resend_api_key TEXT",
         """CREATE TABLE IF NOT EXISTS agenda (
             id BIGSERIAL PRIMARY KEY,
             empresa_id BIGINT REFERENCES empresas(id) ON DELETE SET NULL,
@@ -1021,13 +1024,31 @@ def api_bulk_action(bot):
 
 # --- Email em massa ---
 
-def _send_email(api_key, sender_email, sender_name, to_email, to_name, subject, html):
+def _get_email_config(schema: str) -> dict:
+    """Lê config de email do user (bot_config) com fallback para env vars."""
+    cfg = get_bot_config(schema) if schema else {}
+    return {
+        'api_key': (cfg.get('resend_api_key') or
+                    os.environ.get('RESEND_API_KEY', '') or
+                    os.environ.get('BREVO_API_KEY', '')),
+        'sender_email': (cfg.get('email_remetente') or
+                         os.environ.get('EMAIL_FROM', '')),
+        'sender_name': (cfg.get('email_remetente_nome') or
+                        cfg.get('empresa_nome') or
+                        os.environ.get('EMAIL_FROM_NAME', '')),
+    }
+
+
+def _send_email(api_key, sender_email, sender_name,
+                to_email, to_name, subject, html):
     """Envia email via Resend (preferido) ou Brevo (fallback)."""
     import requests as http
-    resend_key = os.environ.get('RESEND_API_KEY', '')
-    if resend_key:
+    if not api_key or not sender_email:
+        return False
+    # Tenta Resend primeiro (key começa com "re_")
+    if api_key.startswith('re_'):
         r = http.post('https://api.resend.com/emails',
-                      headers={'Authorization': f'Bearer {resend_key}',
+                      headers={'Authorization': f'Bearer {api_key}',
                                'Content-Type': 'application/json'},
                       json={'from': f'{sender_name} <{sender_email}>',
                             'to': [to_email],
@@ -1035,18 +1056,17 @@ def _send_email(api_key, sender_email, sender_name, to_email, to_name, subject, 
                             'html': html},
                       timeout=15)
         return r.status_code in (200, 201)
-    # Fallback: Brevo
-    brevo_key = os.environ.get('BREVO_API_KEY', '')
-    if brevo_key:
-        r = http.post('https://api.brevo.com/v3/smtp/email',
-                      headers={'api-key': brevo_key, 'Content-Type': 'application/json'},
-                      json={'sender': {'name': sender_name, 'email': sender_email},
-                            'to': [{'email': to_email, 'name': to_name}],
-                            'subject': subject,
-                            'htmlContent': html},
-                      timeout=15)
-        return r.status_code in (200, 201)
-    return False
+    # Senão tenta Brevo
+    r = http.post('https://api.brevo.com/v3/smtp/email',
+                  headers={'api-key': api_key,
+                           'Content-Type': 'application/json'},
+                  json={'sender': {'name': sender_name,
+                                   'email': sender_email},
+                        'to': [{'email': to_email, 'name': to_name}],
+                        'subject': subject,
+                        'htmlContent': html},
+                  timeout=15)
+    return r.status_code in (200, 201)
 
 
 @app.route('/api/<bot>/send-emails', methods=['POST'])
@@ -1057,13 +1077,14 @@ def api_send_emails(bot):
     lead_ids = data.get('ids', [])
     if not lead_ids:
         return jsonify({'error': 'nenhum lead selecionado'}), 400
-    api_key = os.environ.get('RESEND_API_KEY', '') or os.environ.get('BREVO_API_KEY', '')
-    if not api_key:
-        return jsonify({'error': 'RESEND_API_KEY ou BREVO_API_KEY não configurado'}), 400
-    sender_email = os.environ.get('EMAIL_FROM', '')
-    sender_name = os.environ.get('EMAIL_FROM_NAME', 'Máquina de Vendas')
-    if not sender_email:
-        return jsonify({'error': 'EMAIL_FROM nao configurado'}), 400
+    ecfg = _get_email_config(schema)
+    if not ecfg['api_key']:
+        return jsonify({'error': 'Configure sua API Key do Resend em Configurações'}), 400
+    if not ecfg['sender_email']:
+        return jsonify({'error': 'Configure seu email remetente em Configurações'}), 400
+    api_key = ecfg['api_key']
+    sender_email = ecfg['sender_email']
+    sender_name = ecfg['sender_name'] or 'Minha Empresa'
 
     tpl_path = os.path.join(os.path.dirname(__file__), 'templates', 'email_custom.html')
     if not os.path.exists(tpl_path):
@@ -1129,14 +1150,14 @@ def api_email_campanha(bot):
     if not corpo and not html_template:
         return jsonify({'error': 'corpo ou template HTML é obrigatório'}), 400
 
-    api_key = (os.environ.get('RESEND_API_KEY', '')
-               or os.environ.get('BREVO_API_KEY', ''))
-    sender_email = os.environ.get('EMAIL_FROM', '')
-    sender_name = os.environ.get('EMAIL_FROM_NAME', 'Máquina de Vendas')
-    if not api_key:
-        return jsonify({'error': 'RESEND_API_KEY ou BREVO_API_KEY não configurado'}), 400
-    if not sender_email:
-        return jsonify({'error': 'EMAIL_FROM não configurado'}), 400
+    ecfg = _get_email_config(schema)
+    if not ecfg['api_key']:
+        return jsonify({'error': 'Configure sua API Key do Resend em Configurações'}), 400
+    if not ecfg['sender_email']:
+        return jsonify({'error': 'Configure seu email remetente em Configurações'}), 400
+    api_key = ecfg['api_key']
+    sender_email = ecfg['sender_email']
+    sender_name = ecfg['sender_name'] or 'Minha Empresa'
 
     try:
         conn = _conn(schema)
@@ -1231,6 +1252,9 @@ def api_save_config(bot):
     msg_inicial = data.get('msg_inicial', '')
     email_assunto = data.get('email_assunto_padrao', '')
     email_html = data.get('email_html_template', '')
+    email_remetente = data.get('email_remetente', '')
+    email_remetente_nome = data.get('email_remetente_nome', '')
+    resend_api_key = data.get('resend_api_key', '')
 
     if not termos and descricao:
         ia = _gerar_termos_ia(empresa_nome, descricao, website)
@@ -1249,11 +1273,16 @@ def api_save_config(bot):
                          descricao=%s, termos_busca=%s, linkedin_email=%s,
                          linkedin_cargos=%s, msg_inicial=%s,
                          email_assunto_padrao=%s, email_html_template=%s,
+                         email_remetente=%s, email_remetente_nome=%s,
+                         resend_api_key=%s,
                          atualizado_em=NOW()"""
             params = [empresa_nome, website, descricao, json.dumps(termos),
                       li_email or None, json.dumps(li_cargos),
                       msg_inicial or None, email_assunto or None,
-                      email_html or None]
+                      email_html or None,
+                      email_remetente or None,
+                      email_remetente_nome or None,
+                      resend_api_key or None]
             if li_password:
                 sql += ", linkedin_password=%s"
                 params.append(li_password)
@@ -1264,13 +1293,17 @@ def api_save_config(bot):
             c.execute("""INSERT INTO bot_config
                 (empresa_nome, website, descricao, termos_busca,
                  linkedin_email, linkedin_password, linkedin_cargos,
-                 msg_inicial, email_assunto_padrao, email_html_template)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                 msg_inicial, email_assunto_padrao, email_html_template,
+                 email_remetente, email_remetente_nome, resend_api_key)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                       (empresa_nome, website, descricao,
                        json.dumps(termos), li_email or None,
                        li_password or None, json.dumps(li_cargos),
                        msg_inicial or None, email_assunto or None,
-                       email_html or None))
+                       email_html or None,
+                       email_remetente or None,
+                       email_remetente_nome or None,
+                       resend_api_key or None))
         conn.commit()
 
         # Atualizar users (separado para não bloquear o save principal)
