@@ -784,7 +784,8 @@
               <code style="color:#818cf8">{{"{{nome}}"}}</code> — Nome da empresa &nbsp;|&nbsp;
               <code style="color:#818cf8">{{"{{email}}"}}</code> — Email do lead &nbsp;|&nbsp;
               <code style="color:#818cf8">{{"{{segmento}}"}}</code> — Segmento &nbsp;|&nbsp;
-              <code style="color:#818cf8">{{"{{cidade}}"}}</code> — Cidade
+              <code style="color:#818cf8">{{"{{cidade}}"}}</code> — Cidade &nbsp;|&nbsp;
+              <code style="color:#818cf8">{{"{{link_agenda}}"}}</code> — Link de agendamento
             </div>
             <div style="margin-top:8px;font-size:11px;color:var(--muted)">
               Para alterar o template, assunto ou remetente, vá em <a href="/configurar" style="color:#818cf8">Configurações</a>.
@@ -1300,6 +1301,8 @@ function openLead(l){
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button onclick="addQuickNote(${l.id})" class="btn-cfg" style="font-size:11px"><i class="fa fa-sticky-note"></i> Nota</button>
         <button onclick="addQuickTask(${l.id})" class="btn-cfg" style="font-size:11px;background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.25);color:#fbbf24"><i class="fa fa-list-check"></i> Tarefa</button>
+        <button onclick="agendarReuniao(${l.id})" class="btn-cfg" style="font-size:11px;background:rgba(59,130,246,.12);border-color:rgba(59,130,246,.25);color:#60a5fa"><i class="fa fa-calendar-plus"></i> Agendar Reunião</button>
+        <button onclick="copiarLinkAgenda(${l.id})" class="btn-cfg" style="font-size:11px;background:rgba(139,92,246,.12);border-color:rgba(139,92,246,.25);color:#a78bfa"><i class="fa fa-link"></i> Link Agenda</button>
         <button onclick="logCall(${l.id})" class="btn-cfg" style="font-size:11px;background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.25);color:#4ade80"><i class="fa fa-phone"></i> Ligação</button>
         <button onclick="delWA(${l.id})" class="btn-cfg" style="font-size:11px;background:rgba(248,113,113,.12);border-color:rgba(248,113,113,.25);color:#f87171"><i class="fa fa-trash"></i> Excluir</button>
       </div>
@@ -1378,6 +1381,70 @@ function addQuickNote(leadId){
     body:JSON.stringify({tipo:'nota',descricao:note})
   }).then(r=>r.json()).then(d=>{
     if(d.ok){ loadTimeline(leadId); switchModalTab('timeline',document.querySelectorAll('.modal-tab')[1]); }
+  });
+}
+
+function agendarReuniao(leadId){
+  // Abre o form de novo evento já vinculado ao lead
+  const lead = _currentModalLead;
+  const nome = lead ? lead.nome_fantasia || 'Lead' : 'Lead';
+  const hoje = new Date().toISOString().slice(0,10);
+  const html=`<div style="padding:24px">
+    <h3 style="font-size:17px;font-weight:700;margin-bottom:16px"><i class="fa fa-calendar-plus" style="color:#3b82f6"></i> Agendar Reunião — ${nome}</h3>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label style="font-size:12px;font-weight:600;color:var(--muted2);display:block;margin-bottom:4px">Data/Hora *</label>
+          <input id="evt-inicio" type="datetime-local" value="${hoje}T10:00" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;font-family:inherit"></div>
+        <div><label style="font-size:12px;font-weight:600;color:var(--muted2);display:block;margin-bottom:4px">Fim</label>
+          <input id="evt-fim" type="datetime-local" value="${hoje}T10:30" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;font-family:inherit"></div>
+      </div>
+      <div><label style="font-size:12px;font-weight:600;color:var(--muted2);display:block;margin-bottom:4px">Local</label>
+        <input id="evt-local" placeholder="Ex: Google Meet, Escritório..." style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;font-family:inherit"></div>
+      <div><label style="font-size:12px;font-weight:600;color:var(--muted2);display:block;margin-bottom:4px">Notas</label>
+        <textarea id="evt-desc" rows="2" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;font-family:inherit;resize:vertical"></textarea></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button onclick="document.getElementById('overlay').classList.remove('open')" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer;font-family:inherit">Cancelar</button>
+        <button onclick="salvarReuniao(${leadId})" style="background:#3b82f6;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit"><i class="fa fa-check"></i> Agendar</button>
+      </div>
+    </div>
+  </div>`;
+  const modal=document.querySelector('#overlay .modal');
+  modal.innerHTML=html;
+  document.getElementById('overlay').classList.add('open');
+}
+function salvarReuniao(leadId){
+  const inicio=document.getElementById('evt-inicio').value;
+  if(!inicio){alert('Selecione data e hora');return}
+  fetch(`/api/${BOT}/agenda`,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      titulo:'Reunião — '+(_currentModalLead?_currentModalLead.nome_fantasia:'Lead'),
+      data_inicio:inicio,
+      data_fim:document.getElementById('evt-fim').value||null,
+      tipo:'reuniao',
+      empresa_id:leadId,
+      local:document.getElementById('evt-local').value||null,
+      descricao:document.getElementById('evt-desc').value||null
+    })}).then(r=>r.json()).then(d=>{
+    if(d.ok){
+      // Auto-mover para qualificado
+      fetch(`/api/${BOT}/lead/${leadId}`,{method:'PUT',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({status:'qualificado'})}).then(()=>{
+        document.getElementById('overlay').classList.remove('open');
+        loadPipe();loadWA();refreshStats();loadAgenda();
+        alert('Reunião agendada!');
+      });
+    }
+  });
+}
+function copiarLinkAgenda(leadId){
+  fetch(`/api/${BOT}/lead/${leadId}/link-agenda`).then(r=>r.json()).then(d=>{
+    if(d.link){
+      navigator.clipboard.writeText(d.link).then(()=>{
+        alert('Link copiado!\\n'+d.link);
+      }).catch(()=>{
+        prompt('Copie o link:',d.link);
+      });
+    }
   });
 }
 

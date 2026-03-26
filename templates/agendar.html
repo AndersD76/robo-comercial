@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agendar Reunião — {{ empresa }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',sans-serif;background:#060b18;color:#f1f5f9;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+    .card{background:#0d1526;border:1px solid rgba(99,102,241,.18);border-radius:16px;padding:32px;max-width:440px;width:100%}
+    h1{font-size:22px;font-weight:800;margin-bottom:4px}
+    .sub{color:#94a3b8;font-size:13px;margin-bottom:24px}
+    .lead-name{color:#a78bfa;font-weight:600}
+    label{display:block;font-size:12px;font-weight:600;color:#94a3b8;margin-bottom:6px}
+    input[type=date]{width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(99,102,241,.18);background:#111d35;color:#f1f5f9;font-size:14px;font-family:inherit;margin-bottom:16px}
+    .slots{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px;min-height:40px}
+    .slot{padding:10px;border-radius:8px;border:1px solid rgba(99,102,241,.18);background:#111d35;color:#f1f5f9;font-size:14px;font-weight:600;cursor:pointer;text-align:center;transition:.15s}
+    .slot:hover{border-color:#6366f1;background:rgba(99,102,241,.12)}
+    .slot.selected{background:#6366f1;color:#fff;border-color:#6366f1}
+    .slot.disabled{opacity:.3;cursor:not-allowed}
+    .btn{width:100%;padding:12px;border-radius:8px;border:none;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:.2s}
+    .btn-primary{background:#6366f1;color:#fff}
+    .btn-primary:hover{background:#4f46e5}
+    .btn-primary:disabled{opacity:.4;cursor:not-allowed}
+    .msg{text-align:center;padding:16px;border-radius:8px;margin-top:12px;font-size:13px}
+    .msg-ok{background:rgba(34,197,94,.12);color:#4ade80}
+    .msg-err{background:rgba(248,113,113,.12);color:#f87171}
+    .empty{color:#64748b;font-size:13px;text-align:center;padding:20px}
+    .loading{color:#64748b;font-size:12px;text-align:center}
+    .success-box{text-align:center;padding:30px 10px}
+    .success-box i{font-size:48px;color:#4ade80;display:block;margin-bottom:16px}
+    .success-box h2{font-size:20px;margin-bottom:8px}
+    .success-box p{color:#94a3b8;font-size:13px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div id="form-view">
+      <h1>Agendar Reunião</h1>
+      <p class="sub">com <strong>{{ empresa }}</strong></p>
+      {% if lead_nome %}
+      <p style="font-size:13px;margin-bottom:16px">Olá, <span class="lead-name">{{ lead_nome }}</span>! Escolha o melhor dia e horário:</p>
+      {% endif %}
+
+      <label>Escolha a data</label>
+      <input type="date" id="pick-date" onchange="loadSlots()">
+
+      <label>Horários disponíveis</label>
+      <div class="slots" id="slots-grid">
+        <div class="empty">Selecione uma data acima</div>
+      </div>
+
+      <button class="btn btn-primary" id="btn-confirm" onclick="confirmar()" disabled>
+        Confirmar agendamento
+      </button>
+      <div id="msg-box"></div>
+    </div>
+
+    <div id="success-view" style="display:none">
+      <div class="success-box">
+        <i class="fa fa-calendar-check"></i>
+        <h2>Reunião Agendada!</h2>
+        <p id="success-detail"></p>
+        <p style="margin-top:16px;color:#64748b;font-size:12px">Você receberá uma confirmação em breve.</p>
+      </div>
+    </div>
+  </div>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script>
+  const TOKEN = '{{ token }}';
+  let selectedSlot = null;
+
+  // Set min date to today
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('pick-date').min = today;
+  document.getElementById('pick-date').value = today;
+
+  // Auto-load today's slots
+  window.onload = () => loadSlots();
+
+  function loadSlots() {
+    const date = document.getElementById('pick-date').value;
+    if (!date) return;
+    const grid = document.getElementById('slots-grid');
+    grid.innerHTML = '<div class="loading"><i class="fa fa-spinner fa-spin"></i> Carregando...</div>';
+    selectedSlot = null;
+    document.getElementById('btn-confirm').disabled = true;
+
+    fetch(`/api/agendar/${TOKEN}/slots?data=${date}`)
+      .then(r => r.json())
+      .then(d => {
+        if (!d.slots || !d.slots.length) {
+          grid.innerHTML = '<div class="empty">Nenhum horário disponível nesta data</div>';
+          return;
+        }
+        grid.innerHTML = d.slots.map(s =>
+          `<button class="slot" onclick="pickSlot(this,'${s}')">${s}</button>`
+        ).join('');
+      })
+      .catch(() => {
+        grid.innerHTML = '<div class="empty">Erro ao carregar horários</div>';
+      });
+  }
+
+  function pickSlot(el, hora) {
+    document.querySelectorAll('.slot').forEach(s => s.classList.remove('selected'));
+    el.classList.add('selected');
+    selectedSlot = hora;
+    document.getElementById('btn-confirm').disabled = false;
+  }
+
+  function confirmar() {
+    if (!selectedSlot) return;
+    const date = document.getElementById('pick-date').value;
+    const btn = document.getElementById('btn-confirm');
+    btn.disabled = true;
+    btn.textContent = 'Agendando...';
+
+    fetch(`/api/agendar/${TOKEN}/confirmar`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({data: date, hora: selectedSlot})
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        document.getElementById('form-view').style.display = 'none';
+        document.getElementById('success-view').style.display = '';
+        const dt = new Date(`${d.data}T${d.hora}`);
+        const fmt = dt.toLocaleDateString('pt-BR', {weekday:'long', day:'numeric', month:'long'});
+        document.getElementById('success-detail').textContent =
+          `${fmt} às ${d.hora}`;
+      } else {
+        const msg = document.getElementById('msg-box');
+        msg.innerHTML = `<div class="msg msg-err">${d.error || 'Erro ao agendar'}</div>`;
+        btn.disabled = false;
+        btn.textContent = 'Confirmar agendamento';
+        loadSlots(); // reload slots
+      }
+    })
+    .catch(() => {
+      btn.disabled = false;
+      btn.textContent = 'Confirmar agendamento';
+    });
+  }
+  </script>
+</body>
+</html>

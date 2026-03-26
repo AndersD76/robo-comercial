@@ -148,6 +148,11 @@ def _init_user_schema(schema: str):
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_remetente_nome TEXT",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS resend_api_key TEXT",
         "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS wa_enviado TIMESTAMP",
+        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS agenda_token TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_inicio INTEGER DEFAULT 9",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_fim INTEGER DEFAULT 18",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS duracao_reuniao INTEGER DEFAULT 30",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS dias_semana TEXT DEFAULT '1,2,3,4,5'",
         """CREATE TABLE IF NOT EXISTS agenda (
             id BIGSERIAL PRIMARY KEY,
             empresa_id BIGINT REFERENCES empresas(id) ON DELETE SET NULL,
@@ -1108,13 +1113,15 @@ def api_send_emails(bot):
     if not leads:
         return jsonify({'error': 'nenhum lead com email'}), 400
 
-    demo_link = os.environ.get('DEMO_CAL_LINK', '')
     empresa_nome = user['empresa_nome'] if user else ''
     enviados = erros = 0
     for lead in leads:
         nome = lead['nome_fantasia'] or 'empresa'
+        link_agenda = _get_link_agenda(schema, lead['id'])
         html = (tpl_html.replace('{{nome}}', nome)
-                        .replace('{{DEMO_CAL_LINK}}', demo_link)
+                        .replace('{{DEMO_CAL_LINK}}', link_agenda)
+                        .replace('{{cal_link}}', link_agenda)
+                        .replace('{{link_agenda}}', link_agenda)
                         .replace('{{EMPRESA}}', empresa_nome))
         try:
             ok = _send_email(api_key, sender_email, sender_name,
@@ -1184,11 +1191,15 @@ def api_email_campanha(bot):
     enviados = erros = 0
     for lead in leads:
         nome = lead['nome_fantasia'] or 'empresa'
+        link_agenda = _get_link_agenda(schema, lead['id'])
         vars_map = {
             '{{nome}}': nome,
             '{{email}}': lead['email'] or '',
             '{{segmento}}': lead.get('segmento') or '',
             '{{cidade}}': lead.get('cidade') or '',
+            '{{link_agenda}}': link_agenda,
+            '{{cal_link}}': link_agenda,
+            '{{DEMO_CAL_LINK}}': link_agenda,
         }
         if html_template:
             html = html_template
@@ -1821,6 +1832,203 @@ Responda SOMENTE com o HTML, sem explicações ou markdown."""}]
 @app.route('/health')
 def health():
     return jsonify({'status': 'ok', 'version': '2.1'})
+
+
+# =============================================================================
+# AGENDAMENTO PÚBLICO (lead acessa sem login)
+# =============================================================================
+
+def _get_agenda_token(schema, lead_id):
+    """Gera ou retorna token único para agendamento do lead."""
+    conn = _conn(schema)
+    c = conn.cursor()
+    c.execute('SELECT agenda_token FROM empresas WHERE id=%s', (lead_id,))
+    row = c.fetchone()
+    if row and row.get('agenda_token'):
+        conn.close()
+        return row['agenda_token']
+    token = secrets.token_urlsafe(16)
+    c.execute('UPDATE empresas SET agenda_token=%s WHERE id=%s',
+              (token, lead_id))
+    conn.commit()
+    conn.close()
+    return token
+
+
+def _get_link_agenda(schema, lead_id):
+    """Retorna URL pública de agendamento para o lead."""
+    token = _get_agenda_token(schema, lead_id)
+    base = os.environ.get('BASE_URL', request.host_url.rstrip('/'))
+    return f'{base}/agendar/{token}'
+
+
+def _find_lead_by_token(token):
+    """Busca lead e schema pelo token de agendamento."""
+    if not DATABASE_URL or not token:
+        return None, None
+    try:
+        conn = psycopg2.connect(
+            DATABASE_URL,
+            cursor_factory=psycopg2.extras.RealDictCursor)
+        c = conn.cursor()
+        c.execute('SELECT id, schema_name FROM users')
+        users = c.fetchall()
+        conn.close()
+        for u in users:
+            sch = u.get('schema_name')
+            if not sch:
+                continue
+            try:
+                conn2 = _conn(sch)
+                c2 = conn2.cursor()
+                c2.execute(
+                    'SELECT * FROM empresas WHERE agenda_token=%s',
+                    (token,))
+                lead = c2.fetchone()
+                conn2.close()
+                if lead:
+                    return dict(lead), sch
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return None, None
+
+
+def _horarios_disponiveis(schema, data_str):
+    """Retorna horários disponíveis para uma data (YYYY-MM-DD)."""
+    cfg = get_bot_config(schema)
+    h_ini = cfg.get('horario_inicio', 9) or 9
+    h_fim = cfg.get('horario_fim', 18) or 18
+    duracao = cfg.get('duracao_reuniao', 30) or 30
+    dias_ok = str(cfg.get('dias_semana', '1,2,3,4,5') or '1,2,3,4,5')
+
+    from datetime import datetime, timedelta
+    dt = datetime.strptime(data_str, '%Y-%m-%d')
+    # weekday: 0=seg, 6=dom — mas isoweekday: 1=seg, 7=dom
+    if str(dt.isoweekday()) not in dias_ok:
+        return []
+
+    # Busca eventos já agendados nesse dia
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute(
+            "SELECT data_inicio, data_fim FROM agenda "
+            "WHERE data_inicio::date = %s AND concluido = FALSE",
+            (data_str,))
+        ocupados = []
+        for r in c.fetchall():
+            ini = r['data_inicio']
+            fim = r['data_fim'] or (ini + timedelta(minutes=duracao))
+            ocupados.append((ini, fim))
+        conn.close()
+    except Exception:
+        ocupados = []
+
+    # Gera slots
+    slots = []
+    hora = dt.replace(hour=int(h_ini), minute=0, second=0)
+    fim_dia = dt.replace(hour=int(h_fim), minute=0, second=0)
+    now = datetime.now()
+
+    while hora + timedelta(minutes=duracao) <= fim_dia:
+        if hora > now:  # só horários futuros
+            conflito = False
+            slot_fim = hora + timedelta(minutes=duracao)
+            for oc_ini, oc_fim in ocupados:
+                if hora < oc_fim and slot_fim > oc_ini:
+                    conflito = True
+                    break
+            if not conflito:
+                slots.append(hora.strftime('%H:%M'))
+        hora += timedelta(minutes=duracao)
+    return slots
+
+
+@app.route('/agendar/<token>')
+def pagina_agendar(token):
+    lead, schema = _find_lead_by_token(token)
+    if not lead:
+        return '<h2>Link inválido ou expirado</h2>', 404
+    cfg = get_bot_config(schema)
+    empresa = cfg.get('empresa_nome', 'Empresa')
+    return render_template('agendar.html',
+                           token=token,
+                           empresa=empresa,
+                           lead_nome=lead.get('nome_fantasia', ''))
+
+
+@app.route('/api/agendar/<token>/slots')
+def api_agenda_slots(token):
+    lead, schema = _find_lead_by_token(token)
+    if not lead:
+        return jsonify({'error': 'token inválido'}), 404
+    data = request.args.get('data')
+    if not data:
+        return jsonify({'error': 'data obrigatória (YYYY-MM-DD)'}), 400
+    slots = _horarios_disponiveis(schema, data)
+    return jsonify({'slots': slots, 'data': data})
+
+
+@app.route('/api/agendar/<token>/confirmar', methods=['POST'])
+def api_agenda_confirmar(token):
+    lead, schema = _find_lead_by_token(token)
+    if not lead:
+        return jsonify({'error': 'token inválido'}), 404
+    data = request.get_json(silent=True) or {}
+    data_str = data.get('data')
+    hora_str = data.get('hora')
+    if not data_str or not hora_str:
+        return jsonify({'error': 'data e hora obrigatórios'}), 400
+
+    from datetime import datetime, timedelta
+    cfg = get_bot_config(schema)
+    duracao = cfg.get('duracao_reuniao', 30) or 30
+
+    # Verifica disponibilidade
+    slots = _horarios_disponiveis(schema, data_str)
+    if hora_str not in slots:
+        return jsonify({'error': 'Horário não disponível'}), 409
+
+    dt_inicio = datetime.strptime(f'{data_str} {hora_str}', '%Y-%m-%d %H:%M')
+    dt_fim = dt_inicio + timedelta(minutes=duracao)
+    nome = lead.get('nome_fantasia', 'Lead')
+
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute("""INSERT INTO agenda
+            (empresa_id, titulo, data_inicio, data_fim, tipo)
+            VALUES (%s, %s, %s, %s, 'reuniao') RETURNING id""",
+            (lead['id'], f'Reunião — {nome}',
+             dt_inicio, dt_fim))
+        evt_id = c.fetchone()['id']
+        # Auto-mover para qualificado
+        c.execute("""UPDATE empresas SET status =
+            CASE WHEN status IN ('novo','contactada','respondeu')
+            THEN 'qualificado' ELSE status END
+            WHERE id = %s""", (lead['id'],))
+        c.execute("""INSERT INTO atividades
+            (empresa_id, tipo, descricao)
+            VALUES (%s, 'reuniao', %s)""",
+            (lead['id'],
+             f'Reunião agendada pelo lead: {data_str} {hora_str}'))
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True, 'id': evt_id,
+                        'data': data_str, 'hora': hora_str})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<bot>/lead/<int:lead_id>/link-agenda')
+@login_required
+def api_lead_link_agenda(bot, lead_id):
+    """Retorna link de agendamento para um lead específico."""
+    schema = _get_schema() or bot
+    link = _get_link_agenda(schema, lead_id)
+    return jsonify({'link': link})
 
 
 # =============================================================================
