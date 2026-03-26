@@ -1330,20 +1330,28 @@ Site: {website}
 O que ela vende: {descricao}
 
 Sua tarefa é identificar QUEM COMPRA este produto/serviço e gerar termos para achar esses compradores.
-NÃO busque fabricantes, distribuidores ou fornecedores do mesmo produto — busque os CLIENTES FINAIS que precisam comprar.
 
-Exemplo: se a empresa vende equipamentos agrícolas, os compradores são cooperativas, cerealistas, fazendas, armazéns — NÃO outros fabricantes de equipamentos.
+REGRAS CRÍTICAS:
+- NÃO gere termos que descrevam o produto/serviço (isso acha concorrentes e blogs!)
+- NÃO use termos como "monitoramento de funcionários" ou "software de gestão" — isso retorna artigos e concorrentes
+- BUSQUE pelo TIPO DE EMPRESA que precisa comprar isso
+- Pense: qual é o SEGMENTO, PORTE e TIPO de empresa que seria cliente?
+
+Exemplo ERRADO (vende software de monitoramento): "monitoramento de funcionários home office" → retorna blogs e concorrentes!
+Exemplo CORRETO: "empresa tecnologia SP contato telefone site:.com.br", "call center terceirizado RJ contato", "escritório contabilidade SP telefone"
+
+Exemplo ERRADO (vende equipamentos agrícolas): "equipamentos agrícolas venda" → retorna concorrentes!
+Exemplo CORRETO: "cooperativa agricola SP contato", "cerealista MT telefone site:.com.br"
 
 Retorne JSON com dois campos:
-1. "termos": 15 termos de busca Google para encontrar empresas COMPRADORAS deste produto.
-   - Use o tipo de empresa compradora + estado brasileiro (SP, MG, PR, RS, GO, MT, SC, BA, PE, MS)
-   - Inclua palavras como "contato", "telefone", "site:.com.br"
-   - Exemplos de formato: "cooperativa agricola SP contato", "cerealista MT telefone site:.com.br"
-2. "cargos": 8 cargos das pessoas decisoras DENTRO dessas empresas compradoras que autorizam a compra.
-   - Seja específico ao tipo de empresa compradora
+1. "termos": 20 termos de busca Google para encontrar empresas COMPRADORAS.
+   - Use o TIPO de empresa compradora + cidade ou estado + "contato" ou "telefone" + "site:.com.br"
+   - Varie entre diferentes tipos de empresas compradoras e diferentes estados
+   - NUNCA mencione o produto/serviço vendido nos termos!
+2. "cargos": 8 cargos das pessoas decisoras que autorizam a compra.
 
 Responda SOMENTE com JSON válido. Exemplo:
-{{"termos": ["cooperativa agricola SP contato", "armazem graos MT telefone"], "cargos": ["gerente de operações de cooperativa", "diretor de suprimentos"]}}"""}]
+{{"termos": ["cooperativa agricola SP contato site:.com.br", "cerealista MT telefone", "fazenda soja GO contato"], "cargos": ["gerente de operações", "diretor de suprimentos"]}}"""}]
         )
         text = msg.content[0].text.strip()
         match = re.search(r'\{.*\}', text, re.DOTALL)

@@ -17,6 +17,38 @@ import aiohttp
 import psycopg2
 import psycopg2.extras
 
+# Domínios de blogs, portais e sites que NÃO são empresas compradores
+_DOMINIOS_BLACKLIST = {
+    'globo.com', 'g1.globo.com', 'uol.com.br', 'terra.com.br',
+    'exame.com', 'folha.uol.com.br', 'estadao.com.br',
+    'infomoney.com.br', 'valor.globo.com', 'cnnbrasil.com.br',
+    'gazetadopovo.com.br', 'r7.com', 'ig.com.br', 'band.uol.com.br',
+    'medium.com', 'wikipedia.org', 'pt.wikipedia.org',
+    'youtube.com', 'facebook.com', 'instagram.com', 'twitter.com',
+    'linkedin.com', 'tiktok.com', 'pinterest.com', 'reddit.com',
+    'amazon.com.br', 'mercadolivre.com.br', 'magazineluiza.com.br',
+    'gov.br', 'jus.br', 'senado.leg.br', 'camara.leg.br',
+    'sebrae.com.br', 'jusbrasil.com.br', 'conjur.com.br',
+    'techtudo.com.br', 'canaltech.com.br', 'tecmundo.com.br',
+    'olhardigital.com.br', 'tecnoblog.net', 'b9.com.br',
+    'rockcontent.com', 'resultadosdigitais.com.br', 'neilpatel.com',
+    'hubspot.com', 'salesforce.com', 'pipedrive.com',
+    'blog.bling.com.br', 'blog.contaazul.com',
+    'glassdoor.com.br', 'indeed.com.br', 'vagas.com.br',
+    'catho.com.br', 'gupy.io', 'infojobs.com.br',
+    'clicksign.com', 'docusign.com.br',
+    'bitrix24.com.br', 'bitrix24.com', 'clockify.me',
+    'sesametime.com', 'pontomais.com.br',
+    'guiadacarreira.com.br', 'mundoconectado.com.br',
+}
+
+# Palavras no domínio que indicam blog/portal (não empresa)
+_DOMINIO_PATTERNS_SKIP = [
+    'blog', 'wiki', 'forum', 'noticias', 'news', 'revista',
+    'jornal', 'guia', 'portal', 'dicas', 'tutorial',
+    'comparativo', 'ranking', 'melhor', 'review',
+]
+
 # Adiciona o diretório atual ao path para importar buscador.py
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -574,6 +606,24 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list) -> int:
     for r in resultados:
         lead = _resultado_para_empresa(r)
         if not lead.get('website'):
+            continue
+
+        # Filtra blogs, portais e sites não-empresariais
+        dominio = lead['website'].lower()
+        dominio_limpo = re.sub(r'^www\.', '', dominio)
+        is_blacklisted = False
+        for bl in _DOMINIOS_BLACKLIST:
+            if dominio_limpo == bl or dominio_limpo.endswith('.' + bl):
+                is_blacklisted = True
+                break
+        if not is_blacklisted:
+            for pat in _DOMINIO_PATTERNS_SKIP:
+                if pat in dominio_limpo:
+                    is_blacklisted = True
+                    break
+        if is_blacklisted:
+            print(f'[{schema}]   ✗ Skip (blog/portal): {dominio}',
+                  flush=True)
             continue
 
         # SEMPRE scrapa o site para buscar telefone, email, CNPJ e decisores

@@ -156,7 +156,13 @@ PALAVRAS_POSITIVAS = [
     'fazenda', 'rural', 'agricola', 'agrícola', 'agro',
 ]
 
-PALAVRAS_NEGATIVAS = ['encerrada', 'baixada', 'inativa', 'falência']
+PALAVRAS_NEGATIVAS = [
+    'encerrada', 'baixada', 'inativa', 'falência',
+    'melhores programas', 'melhores softwares', 'top 10',
+    'como fazer', 'o que é', 'checklist', 'dicas de',
+    'artigo', 'blog', 'tutorial', 'review', 'comparativo',
+    'download grátis', 'free trial', 'teste grátis',
+]
 
 # =============================================================================
 # MENSAGENS WHATSAPP — Tombadores e Coletores de Grãos
