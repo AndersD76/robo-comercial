@@ -1327,31 +1327,39 @@ def _gerar_termos_ia(empresa_nome: str, descricao: str, website: str) -> dict:
 
 Empresa vendedora: {empresa_nome}
 Site: {website}
-O que ela vende: {descricao}
+O que ela vende/faz: {descricao}
 
-Sua tarefa é identificar QUEM COMPRA este produto/serviço e gerar termos para achar esses compradores.
+OBJETIVO: gerar termos de busca Google para encontrar SITES DE EMPRESAS que seriam CLIENTES (compradores) deste produto/serviço.
 
-REGRAS CRÍTICAS:
-- NÃO gere termos que descrevam o produto/serviço (isso acha concorrentes e blogs!)
-- NÃO use termos como "monitoramento de funcionários" ou "software de gestão" — isso retorna artigos e concorrentes
-- BUSQUE pelo TIPO DE EMPRESA que precisa comprar isso
-- Pense: qual é o SEGMENTO, PORTE e TIPO de empresa que seria cliente?
+PROBLEMA COMUM: termos genéricos como "monitoramento de funcionários" ou "software de gestão" retornam blogs, artigos, portais de notícias e concorrentes — NÃO retornam clientes.
 
-Exemplo ERRADO (vende software de monitoramento): "monitoramento de funcionários home office" → retorna blogs e concorrentes!
-Exemplo CORRETO: "empresa tecnologia SP contato telefone site:.com.br", "call center terceirizado RJ contato", "escritório contabilidade SP telefone"
+COMO PENSAR:
+1. Primeiro identifique QUEM precisa comprar isso (qual tipo/segmento de empresa)
+2. Depois crie termos que achem o SITE INSTITUCIONAL dessas empresas
 
-Exemplo ERRADO (vende equipamentos agrícolas): "equipamentos agrícolas venda" → retorna concorrentes!
-Exemplo CORRETO: "cooperativa agricola SP contato", "cerealista MT telefone site:.com.br"
+FORMATO DOS TERMOS:
+- "[tipo de empresa cliente] [cidade ou estado] contato site:.com.br"
+- "[segmento do cliente] [região] telefone"
+- O objetivo é cair no site institucional da empresa, na página de contato
 
-Retorne JSON com dois campos:
-1. "termos": 20 termos de busca Google para encontrar empresas COMPRADORAS.
-   - Use o TIPO de empresa compradora + cidade ou estado + "contato" ou "telefone" + "site:.com.br"
-   - Varie entre diferentes tipos de empresas compradoras e diferentes estados
-   - NUNCA mencione o produto/serviço vendido nos termos!
-2. "cargos": 8 cargos das pessoas decisoras que autorizam a compra.
+EXEMPLOS:
+Se vende software de monitoramento de funcionários:
+- ERRADO: "monitoramento de funcionários home office" (acha blogs!)
+- CERTO: "empresa call center SP contato site:.com.br" (acha clientes!)
+- CERTO: "escritório advocacia grande porte RJ contato" (acha clientes!)
+- CERTO: "consultoria TI equipe remota SP telefone site:.com.br"
 
-Responda SOMENTE com JSON válido. Exemplo:
-{{"termos": ["cooperativa agricola SP contato site:.com.br", "cerealista MT telefone", "fazenda soja GO contato"], "cargos": ["gerente de operações", "diretor de suprimentos"]}}"""}]
+Se vende tombadores de grãos:
+- ERRADO: "tombador de grãos" (acha concorrentes!)
+- CERTO: "cerealista MT contato telefone site:.com.br" (acha clientes!)
+- CERTO: "cooperativa agricola PR contato"
+
+Retorne JSON:
+1. "termos": 20 termos variados (diferentes tipos de cliente + diferentes estados/cidades)
+2. "cargos": 8 cargos de decisores de compra DENTRO dessas empresas clientes
+
+SOMENTE JSON válido:
+{{"termos": ["cerealista MT contato site:.com.br", "cooperativa agricola PR telefone"], "cargos": ["gerente de operações", "diretor de compras"]}}"""}]
         )
         text = msg.content[0].text.strip()
         match = re.search(r'\{.*\}', text, re.DOTALL)
