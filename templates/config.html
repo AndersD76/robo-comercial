@@ -168,27 +168,54 @@
     <textarea id="msg_inicial" rows="6" placeholder="Olá! Sou da equipe {{nome_empresa}}.&#10;&#10;Vi que a {{nome}} pode se interessar...&#10;&#10;Posso agendar uma conversa? {{cal_link}}">{{ cfg.msg_inicial or '' }}</textarea>
   </div>
 
-  <!-- CONFIG EMAIL REMETENTE -->
+  <!-- CONFIG EMAIL -->
   <div class="card">
     <div class="card-title"><i class="fa fa-at"></i> Configuração de Email</div>
     <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
-      Configure o Resend para enviar emails de prospecção. <a href="https://resend.com" target="_blank" style="color:#818cf8">Criar conta no Resend</a>
+      Configure o SMTP do seu email para enviar campanhas de prospecção. Funciona com Gmail, Outlook, email corporativo, etc.
     </p>
-    <div class="field">
-      <label>API Key do Resend</label>
-      <input type="password" id="resend_api_key" value="{{ cfg.resend_api_key or '' }}" placeholder="re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
-      <small style="color:var(--muted);font-size:11px">Pegue em <a href="https://resend.com/api-keys" target="_blank" style="color:#818cf8">resend.com/api-keys</a></small>
-    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div class="field">
         <label>Email remetente</label>
         <input type="email" id="email_remetente" value="{{ cfg.email_remetente or '' }}" placeholder="seuemail@gmail.com">
-        <small style="color:var(--muted);font-size:11px">Email que aparece como remetente (ex: seu email comercial)</small>
       </div>
       <div class="field">
         <label>Nome do remetente</label>
         <input type="text" id="email_remetente_nome" value="{{ cfg.email_remetente_nome or '' }}" placeholder="Ex: João da Empresa XYZ">
       </div>
+    </div>
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px">
+      <div class="field">
+        <label>Servidor SMTP</label>
+        <input type="text" id="smtp_host" value="{{ cfg.smtp_host or '' }}" placeholder="smtp.gmail.com">
+        <small style="color:var(--muted);font-size:11px">Gmail: smtp.gmail.com | Outlook: smtp.office365.com</small>
+      </div>
+      <div class="field">
+        <label>Porta</label>
+        <input type="number" id="smtp_port" value="{{ cfg.smtp_port or 587 }}" placeholder="587">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="field">
+        <label>Usuário SMTP</label>
+        <input type="text" id="smtp_user" value="{{ cfg.smtp_user or '' }}" placeholder="seuemail@gmail.com">
+        <small style="color:var(--muted);font-size:11px">Geralmente é o mesmo email</small>
+      </div>
+      <div class="field">
+        <label>Senha / App Password</label>
+        <input type="password" id="smtp_password" value="{{ cfg.smtp_password or '' }}" placeholder="senha ou app password">
+        <small style="color:var(--muted);font-size:11px">Gmail: use <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:#818cf8">Senha de App</a></small>
+      </div>
+    </div>
+    <div style="margin-top:12px;padding:10px;background:rgba(99,102,241,.04);border:1px solid rgba(99,102,241,.12);border-radius:8px">
+      <details>
+        <summary style="font-size:11px;color:var(--muted2);cursor:pointer;font-weight:600">Usar Resend (alternativa ao SMTP)</summary>
+        <div class="field" style="margin-top:10px">
+          <label>API Key do Resend</label>
+          <input type="password" id="resend_api_key" value="{{ cfg.resend_api_key or '' }}" placeholder="re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+          <small style="color:var(--muted);font-size:11px">Pegue em <a href="https://resend.com/api-keys" target="_blank" style="color:#818cf8">resend.com/api-keys</a>. Requer domínio verificado.</small>
+        </div>
+      </details>
     </div>
   </div>
 
@@ -437,7 +464,11 @@ async function saveConfig() {
         email_html_template: document.getElementById('email_html_template').value,
         resend_api_key: document.getElementById('resend_api_key').value,
         email_remetente: document.getElementById('email_remetente').value,
-        email_remetente_nome: document.getElementById('email_remetente_nome').value
+        email_remetente_nome: document.getElementById('email_remetente_nome').value,
+        smtp_host: document.getElementById('smtp_host').value,
+        smtp_port: parseInt(document.getElementById('smtp_port').value) || 587,
+        smtp_user: document.getElementById('smtp_user').value,
+        smtp_password: document.getElementById('smtp_password').value
       })
     })
     const d = await r.json()

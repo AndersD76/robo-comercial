@@ -147,6 +147,10 @@ def _init_user_schema(schema: str):
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_remetente TEXT",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_remetente_nome TEXT",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS resend_api_key TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_host TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_port INTEGER DEFAULT 587",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_user TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
         "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS wa_enviado TIMESTAMP",
         "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS agenda_token TEXT",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_inicio INTEGER DEFAULT 9",
@@ -1032,30 +1036,60 @@ def api_bulk_action(bot):
 # --- Email em massa ---
 
 def _get_email_config(schema: str) -> dict:
-    """Lê config de email do user (bot_config) com fallback para env vars."""
+    """Lê config de email do user (bot_config)."""
     cfg = get_bot_config(schema) if schema else {}
     return {
-        'api_key': (cfg.get('resend_api_key') or
-                    os.environ.get('RESEND_API_KEY', '') or
-                    os.environ.get('BREVO_API_KEY', '')),
         'sender_email': (cfg.get('email_remetente') or
                          os.environ.get('EMAIL_FROM', '')),
         'sender_name': (cfg.get('email_remetente_nome') or
-                        cfg.get('empresa_nome') or
-                        os.environ.get('EMAIL_FROM_NAME', '')),
+                        cfg.get('empresa_nome') or ''),
+        'smtp_host': cfg.get('smtp_host') or '',
+        'smtp_port': cfg.get('smtp_port') or 587,
+        'smtp_user': cfg.get('smtp_user') or '',
+        'smtp_password': cfg.get('smtp_password') or '',
+        'resend_api_key': cfg.get('resend_api_key') or '',
     }
 
 
-def _send_email(api_key, sender_email, sender_name,
-                to_email, to_name, subject, html):
-    """Envia email via Resend (preferido) ou Brevo (fallback)."""
-    import requests as http
-    if not api_key or not sender_email:
+def _send_email(ecfg, to_email, to_name, subject, html):
+    """Envia email via SMTP direto, Resend ou Brevo."""
+    sender_email = ecfg.get('sender_email', '')
+    sender_name = ecfg.get('sender_name', '')
+    if not sender_email:
         return False
-    # Tenta Resend primeiro (key começa com "re_")
-    if api_key.startswith('re_'):
+
+    # Opção 1: SMTP direto (qualquer email)
+    smtp_host = ecfg.get('smtp_host', '')
+    smtp_user = ecfg.get('smtp_user', '')
+    smtp_pass = ecfg.get('smtp_password', '')
+    if smtp_host and smtp_user and smtp_pass:
+        try:
+            import smtplib
+            from email.mime.multipart import MIMEMultipart
+            from email.mime.text import MIMEText
+            msg = MIMEMultipart('alternative')
+            msg['From'] = f'{sender_name} <{sender_email}>'
+            msg['To'] = to_email
+            msg['Subject'] = subject
+            msg.attach(MIMEText(html, 'html', 'utf-8'))
+            port = int(ecfg.get('smtp_port', 587))
+            with smtplib.SMTP(smtp_host, port, timeout=15) as s:
+                s.ehlo()
+                if port != 25:
+                    s.starttls()
+                s.login(smtp_user, smtp_pass)
+                s.sendmail(sender_email, to_email, msg.as_string())
+            return True
+        except Exception as e:
+            print(f'[SMTP] erro: {e}')
+            return False
+
+    # Opção 2: Resend API
+    resend_key = ecfg.get('resend_api_key', '')
+    if resend_key:
+        import requests as http
         r = http.post('https://api.resend.com/emails',
-                      headers={'Authorization': f'Bearer {api_key}',
+                      headers={'Authorization': f'Bearer {resend_key}',
                                'Content-Type': 'application/json'},
                       json={'from': f'{sender_name} <{sender_email}>',
                             'to': [to_email],
@@ -1063,17 +1097,8 @@ def _send_email(api_key, sender_email, sender_name,
                             'html': html},
                       timeout=15)
         return r.status_code in (200, 201)
-    # Senão tenta Brevo
-    r = http.post('https://api.brevo.com/v3/smtp/email',
-                  headers={'api-key': api_key,
-                           'Content-Type': 'application/json'},
-                  json={'sender': {'name': sender_name,
-                                   'email': sender_email},
-                        'to': [{'email': to_email, 'name': to_name}],
-                        'subject': subject,
-                        'htmlContent': html},
-                  timeout=15)
-    return r.status_code in (200, 201)
+
+    return False
 
 
 @app.route('/api/<bot>/send-emails', methods=['POST'])
@@ -1085,13 +1110,12 @@ def api_send_emails(bot):
     if not lead_ids:
         return jsonify({'error': 'nenhum lead selecionado'}), 400
     ecfg = _get_email_config(schema)
-    if not ecfg['api_key']:
-        return jsonify({'error': 'Configure sua API Key do Resend em Configurações'}), 400
+    has_smtp = ecfg.get('smtp_host') and ecfg.get('smtp_user')
+    has_resend = bool(ecfg.get('resend_api_key'))
+    if not has_smtp and not has_resend:
+        return jsonify({'error': 'Configure SMTP ou Resend em Configurações'}), 400
     if not ecfg['sender_email']:
         return jsonify({'error': 'Configure seu email remetente em Configurações'}), 400
-    api_key = ecfg['api_key']
-    sender_email = ecfg['sender_email']
-    sender_name = ecfg['sender_name'] or 'Minha Empresa'
 
     tpl_path = os.path.join(os.path.dirname(__file__), 'templates', 'email_custom.html')
     if not os.path.exists(tpl_path):
@@ -1124,8 +1148,7 @@ def api_send_emails(bot):
                         .replace('{{link_agenda}}', link_agenda)
                         .replace('{{EMPRESA}}', empresa_nome))
         try:
-            ok = _send_email(api_key, sender_email, sender_name,
-                             lead['email'], nome,
+            ok = _send_email(ecfg, lead['email'], nome,
                              f'{nome}, conheça {empresa_nome}', html)
             if ok:
                 enviados += 1
@@ -1166,13 +1189,12 @@ def api_email_campanha(bot):
         return jsonify({'error': 'corpo ou template HTML é obrigatório'}), 400
 
     ecfg = _get_email_config(schema)
-    if not ecfg['api_key']:
-        return jsonify({'error': 'Configure sua API Key do Resend em Configurações'}), 400
+    has_smtp = ecfg.get('smtp_host') and ecfg.get('smtp_user')
+    has_resend = bool(ecfg.get('resend_api_key'))
+    if not has_smtp and not has_resend:
+        return jsonify({'error': 'Configure SMTP ou Resend em Configurações'}), 400
     if not ecfg['sender_email']:
         return jsonify({'error': 'Configure seu email remetente em Configurações'}), 400
-    api_key = ecfg['api_key']
-    sender_email = ecfg['sender_email']
-    sender_name = ecfg['sender_name'] or 'Minha Empresa'
 
     try:
         conn = _conn(schema)
@@ -1218,8 +1240,7 @@ def api_email_campanha(bot):
 
         try:
             ok = _send_email(
-                api_key, sender_email, sender_name,
-                lead['email'], nome, subj, html)
+                ecfg, lead['email'], nome, subj, html)
             if ok:
                 enviados += 1
                 try:
@@ -1276,6 +1297,10 @@ def api_save_config(bot):
     email_remetente = data.get('email_remetente', '')
     email_remetente_nome = data.get('email_remetente_nome', '')
     resend_api_key = data.get('resend_api_key', '')
+    smtp_host = data.get('smtp_host', '')
+    smtp_port = data.get('smtp_port', 587)
+    smtp_user = data.get('smtp_user', '')
+    smtp_password = data.get('smtp_password', '')
 
     if not termos and descricao:
         ia = _gerar_termos_ia(empresa_nome, descricao, website)
@@ -1296,6 +1321,8 @@ def api_save_config(bot):
                          email_assunto_padrao=%s, email_html_template=%s,
                          email_remetente=%s, email_remetente_nome=%s,
                          resend_api_key=%s,
+                         smtp_host=%s, smtp_port=%s,
+                         smtp_user=%s, smtp_password=%s,
                          atualizado_em=NOW()"""
             params = [empresa_nome, website, descricao, json.dumps(termos),
                       li_email or None, json.dumps(li_cargos),
@@ -1303,7 +1330,9 @@ def api_save_config(bot):
                       email_html or None,
                       email_remetente or None,
                       email_remetente_nome or None,
-                      resend_api_key or None]
+                      resend_api_key or None,
+                      smtp_host or None, smtp_port or 587,
+                      smtp_user or None, smtp_password or None]
             if li_password:
                 sql += ", linkedin_password=%s"
                 params.append(li_password)
@@ -1315,8 +1344,9 @@ def api_save_config(bot):
                 (empresa_nome, website, descricao, termos_busca,
                  linkedin_email, linkedin_password, linkedin_cargos,
                  msg_inicial, email_assunto_padrao, email_html_template,
-                 email_remetente, email_remetente_nome, resend_api_key)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                 email_remetente, email_remetente_nome, resend_api_key,
+                 smtp_host, smtp_port, smtp_user, smtp_password)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                       (empresa_nome, website, descricao,
                        json.dumps(termos), li_email or None,
                        li_password or None, json.dumps(li_cargos),
@@ -1324,7 +1354,9 @@ def api_save_config(bot):
                        email_html or None,
                        email_remetente or None,
                        email_remetente_nome or None,
-                       resend_api_key or None))
+                       resend_api_key or None,
+                       smtp_host or None, smtp_port or 587,
+                       smtp_user or None, smtp_password or None))
         conn.commit()
 
         # Atualizar users (separado para não bloquear o save principal)
