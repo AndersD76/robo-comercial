@@ -839,12 +839,14 @@ async def main_loop(schema: str):
         print(f'\n[{schema}] ━━━ Ciclo #{ciclo} | buscas hoje: {get_contagem_diaria(schema, "buscas")} ━━━', flush=True)
 
         try:
-            await ciclo_busca(schema, buscador, termos, palavras_conc)
+            salvos = await ciclo_busca(schema, buscador, termos, palavras_conc)
         except Exception as e:
             print(f'[{schema}] Erro no ciclo: {e}', flush=True)
             log_db(schema, 'erro', str(e))
+            salvos = 0
 
-        # Sem pausa — próximo ciclo imediato
+        # Delay mínimo anti-bloqueio (3-5s) — evita rate-limit dos motores
+        await asyncio.sleep(random.uniform(3, 5))
 
 
 if __name__ == '__main__':

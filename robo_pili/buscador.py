@@ -450,50 +450,151 @@ class Buscador:
             print(f'  [ERRO] Brave HTTP: {e}')
         return resultados
 
+    async def _buscar_google_http(self, termo, max_resultados=20):
+        """Busca Google via HTTP puro (sem Playwright) - melhor cobertura .com.br."""
+        resultados = []
+        try:
+            url = (
+                f'https://www.google.com.br/search'
+                f'?q={quote_plus(termo)}&num={max_resultados}&hl=pt-BR&gl=br'
+            )
+            headers = {
+                **self._HTTP_HEADERS,
+                'User-Agent': random.choice([
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0',
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15',
+                ]),
+            }
+            async with httpx.AsyncClient(
+                headers=headers,
+                follow_redirects=True,
+                timeout=15.0,
+            ) as client:
+                resp = await client.get(url)
+                html = resp.text
+
+            if 'sorry' in html.lower()[:500] or 'captcha' in html.lower()[:500]:
+                print('  [AVISO] Google HTTP: CAPTCHA detectado')
+                return []
+
+            # Extrai resultados do HTML do Google
+            # Padrão: <a href="/url?q=URL&..."> ou links diretos
+            blocos = re.findall(
+                r'<div class="[^"]*"[^>]*>.*?<a\s+href="(/url\?q=|)(https?://[^"&]+)[^"]*"[^>]*>.*?</a>.*?</div>',
+                html, re.DOTALL
+            )
+
+            # Fallback: links diretos
+            if not blocos:
+                links = re.findall(
+                    r'<a[^>]+href="(?:/url\?q=)?(https?://[^"&]+)"[^>]*>(.*?)</a>',
+                    html, re.DOTALL
+                )
+                for href, titulo_html in links[:max_resultados]:
+                    titulo = re.sub(r'<[^>]+>', '', titulo_html).strip()
+                    if not titulo or len(titulo) < 4:
+                        continue
+                    try:
+                        dominio = urlparse(href).netloc.lower()
+                    except Exception:
+                        continue
+                    if any(s in dominio for s in self.sites_ignorar):
+                        continue
+                    if 'google' in dominio:
+                        continue
+                    telefones = self._extrair_telefones(titulo)
+                    resultados.append({
+                        'url': href, 'dominio': dominio,
+                        'titulo': titulo[:200], 'snippet': '',
+                        'telefones': telefones, 'fonte': 'google_http',
+                    })
+            else:
+                for prefix, href in blocos[:max_resultados]:
+                    try:
+                        dominio = urlparse(href).netloc.lower()
+                    except Exception:
+                        continue
+                    if any(s in dominio for s in self.sites_ignorar):
+                        continue
+                    if 'google' in dominio:
+                        continue
+                    resultados.append({
+                        'url': href, 'dominio': dominio,
+                        'titulo': '', 'snippet': '',
+                        'telefones': [], 'fonte': 'google_http',
+                    })
+        except Exception as e:
+            print(f'  [ERRO] Google HTTP: {e}')
+        return resultados
+
     # =========================================================================
     # BUSCA PRINCIPAL
     # =========================================================================
 
+    # Contador para rotacionar motor primário
+    _motor_idx = 0
+
     async def buscar_leads(self, termo=None, max_resultados=20):
-        """Busca leads: HTTP primeiro (funciona de datacenter), Playwright como fallback."""
+        """Busca leads: rotaciona motores HTTP, Playwright como fallback."""
         if not termo:
             termo = random.choice(TERMOS_BUSCA)
 
         print(f"\n  Buscando: '{termo}'")
 
-        # === FASE 1: HTTP puro (funciona de datacenter) ===
-        resultados = await self._buscar_bing_http(termo, max_resultados)
-        if resultados:
-            print(f"  Bing HTTP: {len(resultados)} resultados")
+        # Rotaciona motor primário a cada busca
+        motores = [
+            ('Google', self._buscar_google_http),
+            ('Bing', self._buscar_bing_http),
+            ('DDG', self._buscar_ddg_http),
+            ('Brave', self._buscar_brave_http),
+        ]
+        Buscador._motor_idx = (Buscador._motor_idx + 1) % len(motores)
+        # Reordena: motor da vez primeiro, depois os outros
+        ordem = motores[Buscador._motor_idx:] + motores[:Buscador._motor_idx]
 
-        if len(resultados) < 5:
-            ddg = await self._buscar_ddg_http(termo, max_resultados)
-            if ddg:
-                print(f"  DDG HTTP: +{len(ddg)} resultados")
-                urls_vistas = {r['url'] for r in resultados}
-                for r in ddg:
+        resultados = []
+        urls_vistas = set()
+
+        for nome_motor, fn_busca in ordem:
+            if len(resultados) >= 5:
+                break  # Já tem resultados suficientes
+            try:
+                novos = await fn_busca(termo, max_resultados)
+                adicionados = 0
+                for r in novos:
                     if r['url'] not in urls_vistas:
+                        urls_vistas.add(r['url'])
                         resultados.append(r)
+                        adicionados += 1
+                if adicionados:
+                    print(f"  {nome_motor} HTTP: +{adicionados} resultados")
+            except Exception as e:
+                print(f"  [ERRO] {nome_motor}: {e}")
 
-        if len(resultados) < 3:
-            brave = await self._buscar_brave_http(termo, max_resultados)
-            if brave:
-                print(f"  Brave HTTP: +{len(brave)} resultados")
-                urls_vistas = {r['url'] for r in resultados}
-                for r in brave:
-                    if r['url'] not in urls_vistas:
-                        resultados.append(r)
-
-        # === FASE 2: Playwright fallback (se HTTP falhou) ===
+        # Playwright fallback (Google → Bing → DDG)
         if len(resultados) < 3 and self.page:
             print("  HTTP insuficiente - tentando Playwright...")
-            pw_bing = await self.buscar_bing(termo, max_resultados)
-            if pw_bing:
-                print(f"  Bing PW: +{len(pw_bing)} resultados")
-                urls_vistas = {r['url'] for r in resultados}
-                for r in pw_bing:
-                    if r['url'] not in urls_vistas:
-                        resultados.append(r)
+            pw_fns = [
+                ('Google PW', self.buscar_google),
+                ('Bing PW', self.buscar_bing),
+                ('DDG PW', self.buscar_duckduckgo),
+            ]
+            for nome_pw, fn_pw in pw_fns:
+                if len(resultados) >= 3:
+                    break
+                try:
+                    novos = await fn_pw(termo, max_resultados)
+                    adicionados = 0
+                    for r in novos:
+                        if r['url'] not in urls_vistas:
+                            urls_vistas.add(r['url'])
+                            resultados.append(r)
+                            adicionados += 1
+                    if adicionados:
+                        print(f"  {nome_pw}: +{adicionados} resultados")
+                except Exception as e:
+                    print(f"  [ERRO] {nome_pw}: {e}")
 
         # Filtra e pontua
         leads = []
