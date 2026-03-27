@@ -141,13 +141,6 @@
   <!-- TERMOS DE BUSCA -->
   <div class="card">
     <div class="card-title"><i class="fa fa-magnifying-glass"></i> Termos de Busca</div>
-    <div style="margin-bottom:14px;padding:10px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.15);border-radius:8px">
-      <div class="field" style="margin-bottom:0">
-        <label>API Key do Serper.dev <small style="color:var(--muted)">(Google Search API — sem bloqueio)</small></label>
-        <input type="password" id="serper_api_key" value="{{ cfg.serper_api_key or '' }}" placeholder="cole sua API key do serper.dev">
-        <small style="color:var(--muted);font-size:11px">Grátis: 2500 buscas. Pegue em <a href="https://serper.dev" target="_blank" style="color:#22c55e">serper.dev</a>. Sem isso o bot usa scraping direto (pode ser bloqueado).</small>
-      </div>
-    </div>
     <div class="terms-header">
       <span id="terms-count">0 termos configurados</span>
       <button class="btn-gen" id="btn-gen" onclick="generateTerms()">
@@ -475,8 +468,7 @@ async function saveConfig() {
         smtp_host: document.getElementById('smtp_host').value,
         smtp_port: parseInt(document.getElementById('smtp_port').value) || 587,
         smtp_user: document.getElementById('smtp_user').value,
-        smtp_password: document.getElementById('smtp_password').value,
-        serper_api_key: document.getElementById('serper_api_key').value
+        smtp_password: document.getElementById('smtp_password').value
       })
     })
     const d = await r.json()

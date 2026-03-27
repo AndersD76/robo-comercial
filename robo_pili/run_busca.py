@@ -867,8 +867,8 @@ async def main_loop(schema: str):
             log_db(schema, 'erro', str(e))
             salvos = 0
 
-        # Delay mínimo anti-bloqueio (3-5s) — evita rate-limit dos motores
-        await asyncio.sleep(random.uniform(3, 5))
+        # Delay anti-bloqueio — necessário para não ser banido
+        await asyncio.sleep(random.uniform(15, 30))
 
 
 if __name__ == '__main__':
