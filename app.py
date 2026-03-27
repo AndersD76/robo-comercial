@@ -1287,7 +1287,7 @@ def api_save_config(bot):
     empresa_nome = data.get('empresa_nome', '')
     website = data.get('website', '')
     descricao = data.get('descricao', '')
-    termos = data.get('termos_busca') or []
+    termos = data.get('termos_busca') or None  # None = não alterar
     li_email = data.get('linkedin_email', '')
     li_password = data.get('linkedin_password', '')
     li_cargos = data.get('linkedin_cargos') or []
@@ -1302,20 +1302,23 @@ def api_save_config(bot):
     smtp_user = data.get('smtp_user', '')
     smtp_password = data.get('smtp_password', '')
 
-    if not termos and descricao:
-        ia = _gerar_termos_ia(empresa_nome, descricao, website)
-        termos = ia['termos']
-        if not li_cargos:
-            li_cargos = ia['cargos']
-
     conn = None
     try:
         # Garante que colunas novas existem
         _init_user_schema(schema)
         conn = _conn(schema)
         c = conn.cursor()
-        c.execute('SELECT id FROM bot_config LIMIT 1')
+        c.execute('SELECT * FROM bot_config LIMIT 1')
         exists = c.fetchone()
+
+        # Preserva termos existentes se não enviados
+        if termos is None and exists:
+            old_termos = exists.get('termos_busca') or []
+            if isinstance(old_termos, str):
+                old_termos = json.loads(old_termos)
+            termos = old_termos
+        termos = termos or []
+
         if exists:
             sql = """UPDATE bot_config SET empresa_nome=%s, website=%s,
                          descricao=%s, termos_busca=%s, linkedin_email=%s,
