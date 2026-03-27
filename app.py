@@ -151,6 +151,7 @@ def _init_user_schema(schema: str):
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_port INTEGER DEFAULT 587",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_user TEXT",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS serper_api_key TEXT",
         "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS wa_enviado TIMESTAMP",
         "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS agenda_token TEXT",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_inicio INTEGER DEFAULT 9",
@@ -1301,6 +1302,7 @@ def api_save_config(bot):
     smtp_port = data.get('smtp_port', 587)
     smtp_user = data.get('smtp_user', '')
     smtp_password = data.get('smtp_password', '')
+    serper_api_key = data.get('serper_api_key', '')
 
     conn = None
     try:
@@ -1328,6 +1330,7 @@ def api_save_config(bot):
                          resend_api_key=%s,
                          smtp_host=%s, smtp_port=%s,
                          smtp_user=%s, smtp_password=%s,
+                         serper_api_key=%s,
                          atualizado_em=NOW()"""
             params = [empresa_nome, website, descricao, json.dumps(termos),
                       li_email or None, json.dumps(li_cargos),
@@ -1337,7 +1340,8 @@ def api_save_config(bot):
                       email_remetente_nome or None,
                       resend_api_key or None,
                       smtp_host or None, smtp_port or 587,
-                      smtp_user or None, smtp_password or None]
+                      smtp_user or None, smtp_password or None,
+                      serper_api_key or None]
             if li_password:
                 sql += ", linkedin_password=%s"
                 params.append(li_password)

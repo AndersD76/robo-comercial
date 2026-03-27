@@ -5,9 +5,10 @@ Usa Playwright (Chrome real) para buscar no Bing/DuckDuckGo sem ser bloqueado
 """
 
 import re
+import os
 import random
 import asyncio
-from urllib.parse import quote_plus, urlparse, parse_qs, unquote
+from urllib.parse import quote_plus, urlparse, unquote
 
 import httpx
 
@@ -532,49 +533,122 @@ class Buscador:
     # BUSCA PRINCIPAL
     # =========================================================================
 
-    # Contador para rotacionar motor primário
+    # =========================================================================
+    # SERPER.DEV API (Google Search API — funciona de qualquer IP)
+    # =========================================================================
+
+    async def _buscar_serper(self, termo, max_resultados=20):
+        """Busca via Serper.dev API (Google). Precisa SERPER_API_KEY."""
+        api_key = os.environ.get('SERPER_API_KEY', '')
+        if not api_key:
+            return []
+        resultados = []
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(
+                    'https://google.serper.dev/search',
+                    headers={
+                        'X-API-KEY': api_key,
+                        'Content-Type': 'application/json',
+                    },
+                    json={
+                        'q': termo,
+                        'gl': 'br',
+                        'hl': 'pt-br',
+                        'num': max_resultados,
+                    },
+                )
+                data = resp.json()
+
+            for item in data.get('organic', []):
+                link = item.get('link', '')
+                if not link.startswith('http'):
+                    continue
+                try:
+                    dominio = urlparse(link).netloc.lower()
+                except Exception:
+                    continue
+                if any(s in dominio for s in self.sites_ignorar):
+                    continue
+                titulo = item.get('title', '')
+                snippet = item.get('snippet', '')
+                tels = self._extrair_telefones(
+                    snippet + ' ' + titulo
+                )
+                resultados.append({
+                    'url': link,
+                    'dominio': dominio,
+                    'titulo': titulo[:200],
+                    'snippet': snippet[:500],
+                    'telefones': tels,
+                    'fonte': 'serper',
+                })
+        except Exception as e:
+            print(f'  [ERRO] Serper API: {e}')
+        return resultados
+
+    # =========================================================================
+    # BUSCA PRINCIPAL
+    # =========================================================================
+
     _motor_idx = 0
+    _falhas_consecutivas = 0
 
     async def buscar_leads(self, termo=None, max_resultados=20):
-        """Busca leads: rotaciona motores HTTP, Playwright como fallback."""
+        """Busca leads: Serper API primeiro, HTTP fallback, Playwright último."""
         if not termo:
             termo = random.choice(TERMOS_BUSCA)
 
         print(f"\n  Buscando: '{termo}'")
 
-        # Rotaciona motor primário a cada busca
-        motores = [
-            ('Google', self._buscar_google_http),
-            ('Bing', self._buscar_bing_http),
-            ('DDG', self._buscar_ddg_http),
-            ('Brave', self._buscar_brave_http),
-        ]
-        Buscador._motor_idx = (Buscador._motor_idx + 1) % len(motores)
-        # Reordena: motor da vez primeiro, depois os outros
-        ordem = motores[Buscador._motor_idx:] + motores[:Buscador._motor_idx]
-
         resultados = []
         urls_vistas = set()
 
-        for nome_motor, fn_busca in ordem:
-            if len(resultados) >= 5:
-                break  # Já tem resultados suficientes
-            try:
-                novos = await fn_busca(termo, max_resultados)
-                adicionados = 0
-                for r in novos:
-                    if r['url'] not in urls_vistas:
-                        urls_vistas.add(r['url'])
-                        resultados.append(r)
-                        adicionados += 1
-                if adicionados:
-                    print(f"  {nome_motor} HTTP: +{adicionados} resultados")
-            except Exception as e:
-                print(f"  [ERRO] {nome_motor}: {e}")
+        # === FASE 1: Serper API (sem bloqueio) ===
+        serper = await self._buscar_serper(termo, max_resultados)
+        if serper:
+            for r in serper:
+                if r['url'] not in urls_vistas:
+                    urls_vistas.add(r['url'])
+                    resultados.append(r)
+            print(f"  Serper API: {len(resultados)} resultados")
 
-        # Playwright fallback (Google → Bing → DDG)
+        # === FASE 2: HTTP scraping (rotaciona motores) ===
+        if len(resultados) < 5:
+            motores = [
+                ('Google', self._buscar_google_http),
+                ('Bing', self._buscar_bing_http),
+                ('DDG', self._buscar_ddg_http),
+                ('Brave', self._buscar_brave_http),
+            ]
+            idx = Buscador._motor_idx % len(motores)
+            Buscador._motor_idx += 1
+            ordem = motores[idx:] + motores[:idx]
+
+            for nome_motor, fn_busca in ordem:
+                if len(resultados) >= 5:
+                    break
+                try:
+                    novos = await fn_busca(
+                        termo, max_resultados
+                    )
+                    added = 0
+                    for r in novos:
+                        if r['url'] not in urls_vistas:
+                            urls_vistas.add(r['url'])
+                            resultados.append(r)
+                            added += 1
+                    if added:
+                        print(
+                            f"  {nome_motor} HTTP: "
+                            f"+{added} resultados"
+                        )
+                except Exception as e:
+                    print(f"  [ERRO] {nome_motor}: {e}")
+
+        # === FASE 3: Playwright fallback ===
         if len(resultados) < 3 and self.page:
-            print("  HTTP insuficiente - tentando Playwright...")
+            print("  HTTP insuficiente - Playwright...")
             pw_fns = [
                 ('Google PW', self.buscar_google),
                 ('Bing PW', self.buscar_bing),
@@ -585,16 +659,30 @@ class Buscador:
                     break
                 try:
                     novos = await fn_pw(termo, max_resultados)
-                    adicionados = 0
+                    added = 0
                     for r in novos:
                         if r['url'] not in urls_vistas:
                             urls_vistas.add(r['url'])
                             resultados.append(r)
-                            adicionados += 1
-                    if adicionados:
-                        print(f"  {nome_pw}: +{adicionados} resultados")
+                            added += 1
+                    if added:
+                        print(f"  {nome_pw}: +{added}")
                 except Exception as e:
                     print(f"  [ERRO] {nome_pw}: {e}")
+
+        # Backoff: se nada funcionou, espera mais
+        if not resultados:
+            Buscador._falhas_consecutivas += 1
+            wait = min(
+                30 * Buscador._falhas_consecutivas, 300
+            )
+            print(
+                f"  Todos motores bloqueados — "
+                f"aguardando {wait}s"
+            )
+            await asyncio.sleep(wait)
+        else:
+            Buscador._falhas_consecutivas = 0
 
         # Filtra e pontua
         leads = []
@@ -605,8 +693,9 @@ class Buscador:
                 leads.append(r)
 
         leads.sort(key=lambda x: x['relevancia'], reverse=True)
-
-        print(f"  Encontrados: {len(leads)} resultados relevantes")
+        print(
+            f"  Encontrados: {len(leads)} resultados relevantes"
+        )
         return leads
 
     async def buscar_multiplos(self, termos=None, max_por_termo=15):

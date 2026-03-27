@@ -108,6 +108,23 @@ def get_descricao_empresa(schema: str) -> str:
     return ''
 
 
+def load_serper_key(schema: str):
+    """Lê serper_api_key do bot_config e seta como env var."""
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute("SELECT serper_api_key FROM bot_config ORDER BY id DESC LIMIT 1")
+        row = c.fetchone()
+        conn.close()
+        key = row.get('serper_api_key') if row else None
+        if key:
+            os.environ['SERPER_API_KEY'] = key
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def _gerar_palavras_concorrente(descricao: str) -> list:
     """Extrai palavras-chave do produto/serviço para filtrar concorrentes.
 
@@ -820,6 +837,11 @@ async def main_loop(schema: str):
     except Exception as e:
         print(f'[{schema}] Erro ao iniciar navegador: {e}', flush=True)
         print(f'[{schema}] Tentando modo HTTP...', flush=True)
+
+    # Carrega Serper API key do banco
+    if load_serper_key(schema):
+        print(f'[{schema}] Serper.dev API configurada',
+              flush=True)
 
     # Carrega descrição do produto para filtrar concorrentes
     descricao = get_descricao_empresa(schema)
