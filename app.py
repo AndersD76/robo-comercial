@@ -1310,6 +1310,8 @@ def api_save_config(bot):
 
     conn = None
     try:
+        # Garante que colunas novas existem
+        _init_user_schema(schema)
         conn = _conn(schema)
         c = conn.cursor()
         c.execute('SELECT id FROM bot_config LIMIT 1')
