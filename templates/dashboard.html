@@ -1118,19 +1118,23 @@ function refreshStats(){
 const STAGES=['novo','contactada','respondeu','qualificado','demo','convertido'];
 let _pipeData={};
 
+let _pipePages = {};
 function loadPipe(){
-  fetch(`/api/pipeline?bot=${BOT}`).then(r=>r.json()).then(data=>{
-    _pipeData=data;
+  let params = new URLSearchParams({bot: BOT});
+  STAGES.forEach(st => { if(_pipePages[st]) params.set(`page_${st}`, _pipePages[st]); });
+  fetch(`/api/pipeline?${params}`).then(r=>r.json()).then(data=>{
+    _pipeData={};
     let total=0;
     STAGES.forEach(st=>{
       const col=document.getElementById(`kb-${st}`);
       const cnt=document.getElementById(`cnt-${st}`);
       if(!col) return;
-      const leads=data[st]||[];
-      if(cnt) cnt.textContent=leads.length;
-      total+=leads.length;
+      const info=data[st]||{leads:[],total:0,page:1,pages:1};
+      const leads=info.leads||[];
+      _pipeData[st]=leads;
+      if(cnt) cnt.textContent=info.total||leads.length;
+      total+=info.total||leads.length;
 
-      // Setup drag-and-drop on column
       col.ondragover=e=>{e.preventDefault();col.classList.add('drag-over');};
       col.ondragleave=()=>col.classList.remove('drag-over');
       col.ondrop=e=>{
@@ -1140,12 +1144,12 @@ function loadPipe(){
         if(leadId) dropLead(leadId,st);
       };
 
-      if(!leads.length){ col.innerHTML='<div class="col-empty">Arraste leads aqui</div>'; return; }
-      col.innerHTML=leads.map(l=>{
+      let html='';
+      if(!leads.length){ html='<div class="col-empty">Arraste leads aqui</div>'; }
+      else { html=leads.map(l=>{
         const fone=l.whatsapp||l.telefone||'';
         const dt=l.encontrado_em?new Date(l.encontrado_em).toLocaleDateString('pt-BR'):'';
         const obsPreview=l.observacoes?(l.observacoes.length>35?l.observacoes.substring(0,35)+'…':l.observacoes):'';
-        // Ícones de canal de contato
         let canalIcons = '';
         if(l.email_enviado) canalIcons += `<span style="color:#fb923c;font-size:10px" title="Email enviado"><i class="fa fa-envelope"></i></span> `;
         if(l.wa_enviado) canalIcons += `<span style="color:#22c55e;font-size:10px" title="WhatsApp enviado"><i class="fab fa-whatsapp"></i></span> `;
@@ -1163,11 +1167,26 @@ function loadPipe(){
             <span class="lcard-score"><span style="color:#fbbf24">★</span> ${l.score||0}</span>
             ${dt?`<span style="font-size:9px;color:var(--muted)">${dt}</span>`:''}
           </div>
-        </div>`}).join('');
+        </div>`}).join(''); }
+
+      // Paginação
+      if(info.pages>1){
+        html+=`<div style="display:flex;justify-content:center;align-items:center;gap:8px;padding:8px 0;font-size:11px;color:var(--muted)">
+          <button onclick="event.stopPropagation();pipePage('${st}',-1)" ${info.page<=1?'disabled':''} style="background:none;border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px"${info.page<=1?' disabled':''}><i class="fa fa-chevron-left"></i></button>
+          <span>${info.page}/${info.pages}</span>
+          <button onclick="event.stopPropagation();pipePage('${st}',1)" ${info.page>=info.pages?'disabled':''} style="background:none;border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px"${info.page>=info.pages?' disabled':''}><i class="fa fa-chevron-right"></i></button>
+        </div>`;
+      }
+      col.innerHTML=html;
     });
     const el=document.getElementById('pipe-total');
     if(el) el.textContent=total?`${total} lead${total!==1?'s':''}`:' ';
   }).catch(()=>{});
+}
+function pipePage(st,dir){
+  _pipePages[st]=(_pipePages[st]||1)+dir;
+  if(_pipePages[st]<1) _pipePages[st]=1;
+  loadPipe();
 }
 
 function dropLead(leadId,newStatus){

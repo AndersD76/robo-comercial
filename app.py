@@ -582,11 +582,16 @@ def api_pipeline():
     if not schema:
         return jsonify({})
     stages = ['novo', 'contactada', 'respondeu', 'qualificado', 'demo', 'convertido']
+    per_page = request.args.get('per_page', 50, type=int)
     try:
         conn = _conn(schema)
         c = conn.cursor()
         result = {}
         for st in stages:
+            page = request.args.get(f'page_{st}', 1, type=int)
+            offset = (page - 1) * per_page
+            c.execute("SELECT COUNT(*) AS total FROM empresas WHERE status=%s", (st,))
+            total = c.fetchone()['total']
             c.execute("""SELECT e.id, e.nome_fantasia, e.segmento, e.cidade, e.estado,
                                 e.telefone, e.whatsapp, e.email, e.score, e.status,
                                 e.email_enviado, e.wa_enviado,
@@ -595,8 +600,15 @@ def api_pipeline():
                                 (SELECT ct.nome || ' - ' || ct.cargo
                                  FROM contatos ct WHERE ct.empresa_id = e.id AND ct.decisor = 1
                                  LIMIT 1) AS _decisor
-                         FROM empresas e WHERE e.status=%s ORDER BY e.score DESC, e.encontrado_em DESC""", (st,))
-            result[st] = [_serialize_row(dict(r)) for r in c.fetchall()]
+                         FROM empresas e WHERE e.status=%s
+                         ORDER BY e.score DESC, e.encontrado_em DESC
+                         LIMIT %s OFFSET %s""", (st, per_page, offset))
+            result[st] = {
+                'leads': [_serialize_row(dict(r)) for r in c.fetchall()],
+                'total': total,
+                'page': page,
+                'pages': max(1, (total + per_page - 1) // per_page)
+            }
         conn.close()
         return jsonify(result)
     except Exception as e:
