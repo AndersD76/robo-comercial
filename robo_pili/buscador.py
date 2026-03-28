@@ -95,9 +95,11 @@ class Buscador:
         """Busca no Google Brasil via JS — melhor cobertura para .com.br"""
         resultados = []
         try:
+            start = getattr(self, '_search_start', 0)
             url = (
                 f'https://www.google.com.br/search'
                 f'?q={quote_plus(termo)}&num={max_resultados}&hl=pt-BR&gl=br'
+                f'&start={start}'
             )
             await self.page.goto(url, wait_until='domcontentloaded', timeout=30000)
             await asyncio.sleep(random.uniform(3, 5))
@@ -318,9 +320,12 @@ class Buscador:
         """Busca Bing via HTTP puro (sem Playwright) - funciona de datacenter."""
         resultados = []
         try:
+            start = getattr(self, '_search_start', 0)
+            first = start + 1  # Bing usa first=1,11,21...
             url = (
                 f'https://www.bing.com/search?q={quote_plus(termo)}'
                 f'&count={max_resultados}&cc=BR&setlang=pt-BR'
+                f'&first={first}'
             )
             async with httpx.AsyncClient(
                 headers=self._HTTP_HEADERS,
@@ -465,9 +470,11 @@ class Buscador:
         """Busca Google via HTTP puro (sem Playwright) - melhor cobertura .com.br."""
         resultados = []
         try:
+            start = getattr(self, '_search_start', 0)
             url = (
                 f'https://www.google.com.br/search'
                 f'?q={quote_plus(termo)}&num={max_resultados}&hl=pt-BR&gl=br'
+                f'&start={start}'
             )
             headers = {
                 **self._HTTP_HEADERS,
@@ -604,12 +611,16 @@ class Buscador:
     _motor_idx = 0
     _falhas_consecutivas = 0
 
-    async def buscar_leads(self, termo=None, max_resultados=20):
+    async def buscar_leads(self, termo=None, max_resultados=20, start=0):
         """Busca leads: Serper API primeiro, HTTP fallback, Playwright último."""
         if not termo:
             termo = random.choice(TERMOS_BUSCA)
 
-        print(f"\n  Buscando: '{termo}'")
+        self._search_start = start  # offset para paginação
+        if start > 0:
+            print(f"\n  Buscando: '{termo}' (start={start})")
+        else:
+            print(f"\n  Buscando: '{termo}'")
 
         resultados = []
         urls_vistas = set()

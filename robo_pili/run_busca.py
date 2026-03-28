@@ -672,11 +672,21 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
     # Sem limite diário — roda direto
 
     termo = random.choice(termos)
-    print(f'[{schema}] 🔍 Buscando: "{termo}"', flush=True)
-    log_db(schema, 'info', f'Busca: {termo}')
+    # Rastreia páginas por termo para pegar resultados novos
+    if not hasattr(buscador, '_termo_paginas'):
+        buscador._termo_paginas = {}
+    pagina = buscador._termo_paginas.get(termo, 0)
+    buscador._termo_paginas[termo] = pagina + 1
+    start = pagina * 10  # Google usa start=0, 10, 20...
+
+    if start > 0:
+        print(f'[{schema}] 🔍 Buscando: "{termo}" (página {pagina + 1})', flush=True)
+    else:
+        print(f'[{schema}] 🔍 Buscando: "{termo}"', flush=True)
+    log_db(schema, 'info', f'Busca: {termo} (p{pagina + 1})')
 
     try:
-        resultados = await buscador.buscar_leads(termo)
+        resultados = await buscador.buscar_leads(termo, start=start)
     except Exception as e:
         print(f'[{schema}] Erro na busca: {e}', flush=True)
         return 0
@@ -789,6 +799,8 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
                 partes.append('CNPJ')
             tag = '+'.join(partes)
             print(f'[{schema}] ✓ [{tag}] score={score} | {nome} | {lead["email"]}', flush=True)
+        else:
+            print(f'[{schema}]   ↩ Duplicado: {lead.get("website", "?")}', flush=True)
 
             # Salva decisores como contatos da empresa
             if decisores and empresa_id:
@@ -850,6 +862,13 @@ async def main_loop(schema: str):
         print(f'[{schema}] Filtro concorrentes: {len(palavras_conc)} palavras-chave do produto', flush=True)
 
     ciclo = 0
+    # Rastreia páginas já buscadas por termo: {termo: página_atual}
+    termo_pagina = {}
+    # Termos esgotados (3 páginas sem novos leads)
+    termos_esgotados = set()
+    # Rodadas sem novos leads por termo
+    termo_sem_novos = {}
+
     while True:
         ciclo += 1
         termos = get_termos(schema)
@@ -858,14 +877,38 @@ async def main_loop(schema: str):
             await asyncio.sleep(60)
             continue
 
-        print(f'\n[{schema}] ━━━ Ciclo #{ciclo} | buscas hoje: {get_contagem_diaria(schema, "buscas")} ━━━', flush=True)
+        # Filtra termos não esgotados
+        termos_ativos = [t for t in termos if t not in termos_esgotados]
+        if not termos_ativos:
+            # Todos esgotados — reseta e tenta de novo (novos resultados podem aparecer)
+            print(f'[{schema}] Todos os {len(termos)} termos esgotados. Resetando...', flush=True)
+            termos_esgotados.clear()
+            termo_pagina.clear()
+            termo_sem_novos.clear()
+            termos_ativos = termos
+
+        print(f'\n[{schema}] ━━━ Ciclo #{ciclo} | buscas hoje: {get_contagem_diaria(schema, "buscas")} | termos ativos: {len(termos_ativos)}/{len(termos)} ━━━', flush=True)
 
         try:
-            salvos = await ciclo_busca(schema, buscador, termos, palavras_conc)
+            salvos = await ciclo_busca(schema, buscador, termos_ativos, palavras_conc)
         except Exception as e:
             print(f'[{schema}] Erro no ciclo: {e}', flush=True)
             log_db(schema, 'erro', str(e))
             salvos = 0
+
+        # Rastreia termo usado (pega do log — ciclo_busca usa random.choice)
+        # Se 0 leads, marca como sem novos
+        if salvos == 0:
+            # Incrementa contador de "sem novos" para todos termos ativos
+            # (não sabemos exatamente qual foi usado, mas com o tempo todos vão ser marcados)
+            for t in termos_ativos:
+                termo_sem_novos[t] = termo_sem_novos.get(t, 0) + 1
+                if termo_sem_novos[t] >= len(termos_ativos) * 2:
+                    termos_esgotados.add(t)
+                    print(f'[{schema}]   ⏭ Termo esgotado: "{t[:40]}..."', flush=True)
+        else:
+            # Reset contadores — ainda achando coisas
+            termo_sem_novos.clear()
 
         # Delay anti-bloqueio — necessário para não ser banido
         await asyncio.sleep(random.uniform(15, 30))
