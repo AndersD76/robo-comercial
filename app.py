@@ -1430,41 +1430,53 @@ def _gerar_termos_ia(empresa_nome: str, descricao: str, website: str) -> dict:
         client = anthropic.Anthropic(api_key=api_key)
         msg = client.messages.create(
             model='claude-haiku-4-5-20251001',
-            max_tokens=800,
+            max_tokens=2000,
             messages=[{'role': 'user', 'content': f"""Você é especialista em prospecção B2B no Brasil.
 
 Empresa vendedora: {empresa_nome}
 Site: {website}
 O que ela vende/faz: {descricao}
 
-OBJETIVO: gerar termos de busca Google para encontrar SITES DE EMPRESAS que seriam CLIENTES (compradores) deste produto/serviço.
+OBJETIVO: gerar MUITOS termos de busca Google para encontrar SITES DE EMPRESAS que seriam CLIENTES (compradores) deste produto/serviço.
 
-PROBLEMA COMUM: termos genéricos como "monitoramento de funcionários" ou "software de gestão" retornam blogs, artigos, portais de notícias e concorrentes — NÃO retornam clientes.
+REGRAS CRÍTICAS:
+1. NUNCA gere termos que descrevam o produto/serviço vendido (isso acha concorrentes e blogs!)
+2. Gere termos que achem o SITE INSTITUCIONAL das empresas que COMPRARIAM isso
+3. Pense: quem é o COMPRADOR? Qual o segmento, porte, região?
 
-COMO PENSAR:
-1. Primeiro identifique QUEM precisa comprar isso (qual tipo/segmento de empresa)
-2. Depois crie termos que achem o SITE INSTITUCIONAL dessas empresas
-
-FORMATO DOS TERMOS:
-- "[tipo de empresa cliente] [cidade ou estado] contato site:.com.br"
-- "[segmento do cliente] [região] telefone"
-- O objetivo é cair no site institucional da empresa, na página de contato
+FORMATO DOS TERMOS (varie entre esses padrões):
+- "[tipo de empresa] [cidade] contato site:.com.br"
+- "[segmento] [estado] telefone email"
+- "[tipo empresa] [bairro/região] endereço contato"
+- "lista [segmento] [cidade]"
+- "[segmento] [cidade] quem somos"
+- "[cargo decisor] [segmento] [cidade]"
 
 EXEMPLOS:
-Se vende software de monitoramento de funcionários:
-- ERRADO: "monitoramento de funcionários home office" (acha blogs!)
-- CERTO: "empresa call center SP contato site:.com.br" (acha clientes!)
-- CERTO: "escritório advocacia grande porte RJ contato" (acha clientes!)
-- CERTO: "consultoria TI equipe remota SP telefone site:.com.br"
+Se vende software de monitoramento de PCs:
+- ERRADO: "monitoramento de funcionários" (acha concorrentes!)
+- CERTO: "escritório contabilidade centro SP contato site:.com.br"
+- CERTO: "empresa call center Campinas telefone email"
+- CERTO: "agência publicidade Pinheiros SP quem somos"
+- CERTO: "lista escritórios advocacia Belo Horizonte"
+- CERTO: "empresa logística Curitiba contato site:.com.br"
+- CERTO: "construtora obras São Paulo telefone"
 
 Se vende tombadores de grãos:
 - ERRADO: "tombador de grãos" (acha concorrentes!)
-- CERTO: "cerealista MT contato telefone site:.com.br" (acha clientes!)
-- CERTO: "cooperativa agricola PR contato"
+- CERTO: "cerealista MT contato site:.com.br"
+- CERTO: "cooperativa agrícola Londrina telefone"
+
+IMPORTANTE:
+- Gere 50 termos (não 20!) — quanto mais, melhor
+- Varie MUITO: diferentes segmentos de cliente, diferentes cidades (capitais + interiores), diferentes estados
+- Cubra pelo menos 10 estados brasileiros diferentes
+- Cubra pelo menos 8 segmentos diferentes de empresas clientes
+- Use cidades do interior também (Campinas, Londrina, Joinville, Uberlândia, etc.)
 
 Retorne JSON:
-1. "termos": 20 termos variados (diferentes tipos de cliente + diferentes estados/cidades)
-2. "cargos": 8 cargos de decisores de compra DENTRO dessas empresas clientes
+1. "termos": 50 termos variados
+2. "cargos": 10 cargos de decisores de compra DENTRO dessas empresas clientes
 
 SOMENTE JSON válido:
 {{"termos": ["cerealista MT contato site:.com.br", "cooperativa agricola PR telefone"], "cargos": ["gerente de operações", "diretor de compras"]}}"""}]
@@ -1483,13 +1495,25 @@ SOMENTE JSON válido:
 
 
 def _termos_fallback(descricao: str) -> list:
-    palavras = [w for w in descricao.lower().split() if len(w) > 4][:3]
-    estados = ['SP', 'MG', 'PR', 'RS', 'GO', 'SC', 'MT']
+    segmentos = [
+        'escritório contabilidade', 'escritório advocacia', 'agência publicidade',
+        'agência marketing digital', 'consultoria empresarial', 'empresa logística',
+        'construtora', 'clínica médica', 'empresa comércio', 'indústria',
+        'empresa recursos humanos', 'empresa call center', 'empresa tecnologia',
+        'corretora seguros', 'imobiliária', 'empresa transporte',
+    ]
+    cidades = [
+        'São Paulo', 'Rio de Janeiro', 'Belo Horizonte', 'Curitiba',
+        'Porto Alegre', 'Brasília', 'Salvador', 'Goiânia',
+        'Campinas', 'Fortaleza', 'Recife', 'Florianópolis',
+        'Joinville', 'Uberlândia', 'Londrina', 'Ribeirão Preto',
+    ]
     termos = []
-    for p in palavras:
-        for e in estados[:4]:
-            termos.append(f'{p} {e} site:.com.br contato')
-    return termos or ['empresa industria site:.com.br contato']
+    for seg in segmentos:
+        for cid in random.sample(cidades, min(3, len(cidades))):
+            termos.append(f'{seg} {cid} contato site:.com.br')
+    random.shuffle(termos)
+    return termos[:50]
 
 
 # --- API Tokens ---

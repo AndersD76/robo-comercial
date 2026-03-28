@@ -101,13 +101,31 @@ class Buscador:
                 f'?q={quote_plus(termo)}&num={max_resultados}&hl=pt-BR&gl=br'
                 f'&start={start}'
             )
+            # Seta cookie de consentimento antes de buscar
+            try:
+                await self.context.add_cookies([
+                    {'name': 'CONSENT', 'value': 'PENDING+987', 'domain': '.google.com.br', 'path': '/'},
+                    {'name': 'SOCS', 'value': 'CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmVuIAEaBgiA_LyaBg', 'domain': '.google.com.br', 'path': '/'},
+                ])
+            except Exception:
+                pass
             await self.page.goto(url, wait_until='domcontentloaded', timeout=30000)
-            await asyncio.sleep(random.uniform(3, 5))
+            await asyncio.sleep(random.uniform(3, 6))
 
             pg_url = self.page.url
             if 'sorry' in pg_url or 'captcha' in pg_url.lower():
-                print('  [AVISO] Google pediu CAPTCHA — pulando para Bing')
-                return []
+                print('  [AVISO] Google pediu CAPTCHA — tentando via google.com...')
+                # Tenta google.com (internacional) como fallback
+                url2 = url.replace('google.com.br', 'google.com')
+                try:
+                    await self.page.goto(url2, wait_until='domcontentloaded', timeout=30000)
+                    await asyncio.sleep(random.uniform(3, 5))
+                    pg_url = self.page.url
+                    if 'sorry' in pg_url or 'captcha' in pg_url.lower():
+                        print('  [AVISO] Google CAPTCHA em ambos — pulando para Bing')
+                        return []
+                except Exception:
+                    return []
 
             dados = await self.page.evaluate("""() => {
                 const items = [];
@@ -476,16 +494,14 @@ class Buscador:
                 f'?q={quote_plus(termo)}&num={max_resultados}&hl=pt-BR&gl=br'
                 f'&start={start}'
             )
-            headers = {
-                **self._HTTP_HEADERS,
-                'User-Agent': random.choice([
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0',
-                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15',
-                ]),
+            headers = self._HTTP_HEADERS
+            cookies = {
+                'CONSENT': 'PENDING+987',
+                'SOCS': 'CAESHAgBEhJnd3NfMjAyMzA4MTAtMF9SQzIaAmVuIAEaBgiA_LyaBg',
             }
             async with httpx.AsyncClient(
                 headers=headers,
+                cookies=cookies,
                 follow_redirects=True,
                 timeout=15.0,
             ) as client:
