@@ -333,7 +333,8 @@ async function generateTerms() {
     if (d.ok && d.termos) {
       terms = d.termos
       renderTerms()
-      showToast(`✓ ${d.termos.length} termos gerados pela IA`, true)
+      showToast(`✓ ${d.termos.length} termos gerados — salvando...`, true)
+      await saveConfig()
     } else {
       showToast('Erro ao gerar termos: ' + (d.error || 'falha'), false)
     }
