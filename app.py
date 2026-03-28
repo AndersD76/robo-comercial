@@ -595,7 +595,7 @@ def api_pipeline():
                                 (SELECT ct.nome || ' - ' || ct.cargo
                                  FROM contatos ct WHERE ct.empresa_id = e.id AND ct.decisor = 1
                                  LIMIT 1) AS _decisor
-                         FROM empresas e WHERE e.status=%s ORDER BY e.score DESC LIMIT 30""", (st,))
+                         FROM empresas e WHERE e.status=%s ORDER BY e.score DESC, e.encontrado_em DESC""", (st,))
             result[st] = [_serialize_row(dict(r)) for r in c.fetchall()]
         conn.close()
         return jsonify(result)
