@@ -333,8 +333,8 @@ async function generateTerms() {
     if (d.ok && d.termos) {
       terms = d.termos
       renderTerms()
-      showToast(`✓ ${d.termos.length} termos gerados — salvando...`, true)
-      await saveConfig()
+      showToast(`✓ ${d.termos.length} termos gerados e salvos!`, true)
+      await saveConfig(false)
     } else {
       showToast('Erro ao gerar termos: ' + (d.error || 'falha'), false)
     }
@@ -445,7 +445,7 @@ function previewCfgHtml() {
   preview.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-async function saveConfig() {
+async function saveConfig(redirect=true) {
   // Sync terms from inputs
   document.querySelectorAll('.term-item input[type=text]').forEach((inp, i) => { terms[i] = inp.value })
   const btn = document.getElementById('btn-save')
@@ -474,8 +474,13 @@ async function saveConfig() {
     })
     const d = await r.json()
     if (d.ok) {
-      btn.innerHTML = '<i class="fa fa-check"></i> Salvo! Redirecionando...'
-      setTimeout(() => { window.location.href = '/dashboard' }, 800)
+      if (redirect) {
+        btn.innerHTML = '<i class="fa fa-check"></i> Salvo! Redirecionando...'
+        setTimeout(() => { window.location.href = '/dashboard' }, 800)
+      } else {
+        btn.innerHTML = '<i class="fa fa-check"></i> Salvo!'
+        setTimeout(() => { btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'; btn.disabled = false }, 1500)
+      }
       return
     } else showToast('Erro: ' + (d.error || 'falha'), false)
   } catch(e) { showToast('Erro de conexão', false) }
