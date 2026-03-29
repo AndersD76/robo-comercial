@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ name }} — Máquina de Vendas</title>
+  <title>{{ name }} — TurboVenda</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -533,7 +533,7 @@
   <div class="hdr-left">
     <a href="/" class="back-btn"><i class="fa fa-chevron-left"></i></a>
     <span class="hdr-sep">|</span>
-    <span class="hdr-bot-name">⚡ Máquina de Vendas</span>
+    <span class="hdr-bot-name">⚡ TurboVenda</span>
     <span class="hdr-bot-sub">{{ name }}</span>
   </div>
   <div class="hdr-right">
@@ -542,6 +542,8 @@
       <span id="status-txt">Parado</span>
     </div>
     <a href="/configurar" class="back-btn" style="gap:5px"><i class="fa fa-gear"></i> Config</a>
+    <button onclick="upgradeProPlano()" id="btn-upgrade" class="back-btn" style="gap:5px;background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;border:none;cursor:pointer;display:none"><i class="fa fa-crown"></i> Upgrade Pro</button>
+    <span id="plano-badge" style="display:none;font-size:10px;padding:3px 8px;border-radius:6px;font-weight:700"></span>
     <a href="/logout" class="back-btn" style="gap:5px"><i class="fa fa-right-from-bracket"></i></a>
     <div class="hdr-clock" id="clock">--:--</div>
   </div>
@@ -2440,6 +2442,46 @@ async function enriquecerLead(id){
     }
   }catch(e){btn.innerHTML='Erro';btn.disabled=false;}
 }
+
+// ========================
+// PLANO / UPGRADE
+// ========================
+async function loadPlano(){
+  try{
+    const r=await fetch('/api/meu-plano');
+    const d=await r.json();
+    const badge=document.getElementById('plano-badge');
+    const btn=document.getElementById('btn-upgrade');
+    if(d.plano==='trial'){
+      btn.style.display='flex';
+      badge.style.display='inline-block';
+      badge.textContent='TRIAL';
+      badge.style.background='rgba(251,191,36,.15)';
+      badge.style.color='#fbbf24';
+    }else{
+      btn.style.display='none';
+      badge.style.display='inline-block';
+      badge.textContent='PRO';
+      badge.style.background='rgba(34,197,94,.15)';
+      badge.style.color='#22c55e';
+    }
+  }catch(e){}
+}
+async function upgradeProPlano(){
+  try{
+    const r=await fetch('/api/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plano:'pro'})});
+    const d=await r.json();
+    if(d.init_point){
+      window.location.href=d.init_point;
+    }else if(d.sandbox_init_point){
+      window.location.href=d.sandbox_init_point;
+    }else{
+      alert(d.error||'Erro ao criar checkout');
+    }
+  }catch(e){alert('Erro de conexão');}
+}
+// Carrega plano ao iniciar
+loadPlano();
 </script>
 
 <!-- ADD LEAD MODAL -->

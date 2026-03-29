@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Configurar Robô — Máquina de Vendas</title>
+  <title>Configurar Robô — TurboVenda</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
@@ -109,7 +109,7 @@
 </head>
 <body>
 <header>
-  <div class="hdr-logo">Máquina<span>Vendas</span></div>
+  <div class="hdr-logo">Turbo<span>Venda</span></div>
   <div class="hdr-right">
     <span class="hdr-user">{{ user.empresa_nome or user.email }}</span>
     <a href="/dashboard" class="btn-sm btn-dash"><i class="fa fa-gauge"></i> Dashboard</a>
@@ -265,7 +265,7 @@
     </div>
     <div class="token-list" id="token-list" style="margin-top:16px"></div>
     <div class="token-new">
-      <input type="text" id="token-label" placeholder="Nome do token (ex: Máquina de Vendas CRM)">
+      <input type="text" id="token-label" placeholder="Nome do token (ex: TurboVenda CRM)">
       <button class="btn-create-token" onclick="createToken()">
         <i class="fa fa-plus"></i> Gerar token
       </button>

@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python /c/Users/danie/AppData/Local/Temp/apply_extraction.py)"
+      "Bash(python /c/Users/danie/AppData/Local/Temp/apply_extraction.py)",
+      "WebFetch(domain:prospectar.com.br)",
+      "WebFetch(domain:rdap.registro.br)"
     ]
   }
 }

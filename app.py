@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Máquina de Vendas — SaaS multi-tenant
-Landing page + cadastro + dashboard por empresa + LinkedIn + busca IA
+TurboVenda — SaaS CRM multi-tenant
+Prospecção IA + CRM + Email + WhatsApp + Agendamento
 """
 
 import hashlib
@@ -62,6 +62,28 @@ def _init_public_schema_safe():
             ativo     BOOLEAN DEFAULT TRUE,
             criado_em TIMESTAMP DEFAULT NOW()
         )""")
+        # Migrations planos/pagamentos
+        for stmt in [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+            "plano_expira TIMESTAMP",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+            "mp_customer_id TEXT",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+            "mp_subscription_id TEXT",
+            """CREATE TABLE IF NOT EXISTS pagamentos (
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT REFERENCES users(id),
+                mp_payment_id TEXT,
+                status TEXT,
+                valor DECIMAL(10,2),
+                plano TEXT,
+                criado_em TIMESTAMP DEFAULT NOW()
+            )""",
+        ]:
+            try:
+                c.execute(stmt)
+            except Exception:
+                conn.rollback()
         conn.commit()
         conn.close()
     except Exception as e:
@@ -2602,6 +2624,213 @@ def api_lead_link_agenda(bot, lead_id):
     schema = _get_schema() or bot
     link = _get_link_agenda(schema, lead_id)
     return jsonify({'link': link})
+
+
+# =============================================================================
+# MERCADO PAGO — PAGAMENTOS
+# =============================================================================
+
+MP_ACCESS_TOKEN = os.environ.get('MP_ACCESS_TOKEN', '')
+MP_PLANOS = {
+    'pro': {
+        'nome': 'TurboVenda Pro',
+        'valor': 297.00,
+        'descricao': 'CRM + Prospecção IA + Email + WhatsApp',
+    },
+}
+
+
+@app.route('/api/planos')
+def api_planos():
+    """Retorna planos disponíveis."""
+    planos = []
+    for key, p in MP_PLANOS.items():
+        planos.append({
+            'id': key, 'nome': p['nome'],
+            'valor': p['valor'], 'descricao': p['descricao'],
+        })
+    return jsonify(planos)
+
+
+@app.route('/api/checkout', methods=['POST'])
+@login_required
+def api_checkout():
+    """Cria preferência de pagamento no Mercado Pago."""
+    import requests as http
+    if not MP_ACCESS_TOKEN:
+        return jsonify({
+            'error': 'Mercado Pago não configurado'}), 500
+    data = request.get_json(silent=True) or {}
+    plano_id = data.get('plano', 'pro')
+    plano = MP_PLANOS.get(plano_id)
+    if not plano:
+        return jsonify({'error': 'Plano inválido'}), 400
+
+    user = get_current_user()
+    base = os.environ.get(
+        'BASE_URL', request.host_url.rstrip('/'))
+
+    pref = {
+        'items': [{
+            'title': plano['nome'],
+            'quantity': 1,
+            'unit_price': plano['valor'],
+            'currency_id': 'BRL',
+        }],
+        'payer': {'email': user['email']},
+        'back_urls': {
+            'success': f'{base}/pagamento/sucesso',
+            'failure': f'{base}/pagamento/falha',
+            'pending': f'{base}/pagamento/pendente',
+        },
+        'auto_return': 'approved',
+        'notification_url': f'{base}/webhook/mercadopago',
+        'external_reference': f"user_{user['id']}_{plano_id}",
+        'metadata': {
+            'user_id': user['id'],
+            'plano': plano_id,
+        },
+    }
+    try:
+        r = http.post(
+            'https://api.mercadopago.com/checkout/preferences',
+            headers={
+                'Authorization': f'Bearer {MP_ACCESS_TOKEN}',
+                'Content-Type': 'application/json',
+            },
+            json=pref, timeout=15)
+        resp = r.json()
+        if r.status_code in (200, 201):
+            return jsonify({
+                'ok': True,
+                'init_point': resp.get('init_point'),
+                'sandbox_init_point': resp.get(
+                    'sandbox_init_point'),
+            })
+        return jsonify({
+            'error': resp.get('message', 'Erro MP')}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/webhook/mercadopago', methods=['POST'])
+def webhook_mercadopago():
+    """Webhook do Mercado Pago — atualiza plano do user."""
+    import requests as http
+    data = request.get_json(silent=True) or {}
+    if data.get('type') != 'payment':
+        return jsonify({'ok': True})
+
+    payment_id = data.get('data', {}).get('id')
+    if not payment_id or not MP_ACCESS_TOKEN:
+        return jsonify({'ok': True})
+
+    try:
+        r = http.get(
+            f'https://api.mercadopago.com/v1/payments/{payment_id}',
+            headers={
+                'Authorization': f'Bearer {MP_ACCESS_TOKEN}'},
+            timeout=10)
+        pay = r.json()
+        status = pay.get('status')
+        ext_ref = pay.get('external_reference', '')
+        valor = pay.get('transaction_amount', 0)
+        meta = pay.get('metadata', {})
+        user_id = meta.get('user_id')
+        plano = meta.get('plano', 'pro')
+
+        if not user_id and ext_ref.startswith('user_'):
+            parts = ext_ref.split('_')
+            if len(parts) >= 2:
+                user_id = int(parts[1])
+                if len(parts) >= 3:
+                    plano = parts[2]
+
+        if not user_id:
+            return jsonify({'ok': True})
+
+        conn = psycopg2.connect(
+            DATABASE_URL,
+            cursor_factory=psycopg2.extras.RealDictCursor)
+        c = conn.cursor()
+
+        # Registra pagamento
+        c.execute("""INSERT INTO pagamentos
+            (user_id, mp_payment_id, status, valor, plano)
+            VALUES (%s, %s, %s, %s, %s)""",
+            (user_id, str(payment_id), status, valor, plano))
+
+        # Ativa plano se aprovado
+        if status == 'approved':
+            from datetime import timedelta
+            c.execute("""UPDATE users SET
+                plano = %s,
+                plano_expira = NOW() + INTERVAL '30 days',
+                mp_subscription_id = %s
+                WHERE id = %s""",
+                (plano, str(payment_id), user_id))
+            print(f'[MP] User {user_id} -> plano {plano}'
+                  f' (payment {payment_id})', flush=True)
+
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f'[MP] Webhook error: {e}', flush=True)
+
+    return jsonify({'ok': True})
+
+
+@app.route('/pagamento/<resultado>')
+@login_required
+def pagamento_resultado(resultado):
+    """Página de resultado do pagamento."""
+    msgs = {
+        'sucesso': ('Pagamento aprovado!',
+                     'Seu plano Pro já está ativo.', '#22c55e'),
+        'falha': ('Pagamento não aprovado',
+                   'Tente novamente ou use outro método.', '#f87171'),
+        'pendente': ('Pagamento pendente',
+                      'Aguardando confirmação.', '#fbbf24'),
+    }
+    titulo, desc, cor = msgs.get(
+        resultado, ('Pagamento', '', '#818cf8'))
+    return f'''<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<title>Pagamento - TurboVenda</title>
+<style>
+body{{font-family:Inter,sans-serif;background:#060b18;
+color:#f1f5f9;display:flex;align-items:center;
+justify-content:center;min-height:100vh}}
+.box{{text-align:center;background:#0d1526;
+padding:40px;border-radius:16px;
+border:1px solid rgba(255,255,255,.06)}}
+h2{{color:{cor};margin-bottom:8px}}
+a{{color:#818cf8;text-decoration:none}}
+</style></head><body>
+<div class="box">
+<h2>{titulo}</h2><p>{desc}</p>
+<br><a href="/dashboard">Ir para o Dashboard &rarr;</a>
+</div></body></html>'''
+
+
+@app.route('/api/meu-plano')
+@login_required
+def api_meu_plano():
+    """Retorna info do plano do user logado."""
+    user = get_current_user()
+    plano = user.get('plano', 'trial')
+    expira = user.get('plano_expira')
+    ativo = plano != 'trial'
+    if expira:
+        from datetime import datetime
+        if isinstance(expira, str):
+            expira = datetime.fromisoformat(expira)
+        ativo = expira > datetime.now()
+    return jsonify({
+        'plano': plano,
+        'ativo': ativo,
+        'expira': str(expira) if expira else None,
+    })
 
 
 # =============================================================================

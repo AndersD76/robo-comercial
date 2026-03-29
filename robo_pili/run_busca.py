@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Máquina de Vendas — Bot de Busca
+TurboVenda — Bot de Busca
 Roda somente o ciclo de prospecção (sem WhatsApp).
 Uso: python run_busca.py --schema emp_1
 """
@@ -896,7 +896,7 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
 
 async def main_loop(schema: str):
     print(f'\n{"="*60}', flush=True)
-    print(f'[MáquinaVendas] Iniciando bot de busca — schema: {schema}', flush=True)
+    print(f'[TurboVenda] Iniciando bot de busca — schema: {schema}', flush=True)
     print(f'{"="*60}\n', flush=True)
 
     buscador = Buscador()
