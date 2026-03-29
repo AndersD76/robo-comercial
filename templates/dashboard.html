@@ -544,6 +544,7 @@
     <a href="/configurar" class="back-btn" style="gap:5px"><i class="fa fa-gear"></i> Config</a>
     <button onclick="upgradeProPlano()" id="btn-upgrade" class="back-btn" style="gap:5px;background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;border:none;cursor:pointer;display:none"><i class="fa fa-crown"></i> Upgrade Pro</button>
     <span id="plano-badge" style="display:none;font-size:10px;padding:3px 8px;border-radius:6px;font-weight:700"></span>
+    <button onclick="localStorage.removeItem('tv_tour_done');startTour()" class="back-btn" style="gap:5px;background:none;border:1px solid rgba(255,255,255,.08);cursor:pointer;color:#94a3b8" title="Tour guiado"><i class="fa fa-circle-question"></i></button>
     <a href="/logout" class="back-btn" style="gap:5px"><i class="fa fa-right-from-bracket"></i></a>
     <div class="hdr-clock" id="clock">--:--</div>
   </div>
@@ -2482,7 +2483,96 @@ async function upgradeProPlano(){
 }
 // Carrega plano ao iniciar
 loadPlano();
+
+// ========================
+// TOUR GUIADO
+// ========================
+const TOUR_STEPS=[
+  {sel:'.bot-card',title:'Robô de Prospecção',desc:'Aqui você inicia e controla o robô que busca leads automaticamente 24/7.',pos:'bottom'},
+  {sel:'.tab-btn',title:'Abas do CRM',desc:'Leads, Mala Direta, WhatsApp, Respostas, Agenda, Relatórios e Sequências.',pos:'bottom'},
+  {sel:'#lead-actions',title:'Ações Rápidas',desc:'Adicione leads, exporte CSV, envie emails em massa ou aplique ações em lote.',pos:'bottom'},
+  {sel:'.pipe-section',title:'Pipeline Kanban',desc:'Arraste cards entre as colunas para gerenciar o funil de vendas.',pos:'top'},
+  {sel:'#btn-upgrade',title:'Upgrade Pro',desc:'Desbloqueie leads ilimitados, sequências de email e todas as funcionalidades.',pos:'bottom'},
+  {sel:'.hdr-right a[href="/configurar"]',title:'Configurações',desc:'Configure termos de busca, email SMTP, templates e mais.',pos:'bottom'},
+];
+let _tourStep=0;
+function startTour(){
+  _tourStep=0;
+  showTourStep();
+}
+function showTourStep(){
+  // Remove anterior
+  document.querySelectorAll('.tour-overlay,.tour-tip').forEach(e=>e.remove());
+  if(_tourStep>=TOUR_STEPS.length){
+    localStorage.setItem('tv_tour_done','1');
+    return;
+  }
+  const step=TOUR_STEPS[_tourStep];
+  const el=document.querySelector(step.sel);
+  if(!el){_tourStep++;showTourStep();return;}
+  // Overlay escuro
+  const ov=document.createElement('div');
+  ov.className='tour-overlay';
+  ov.onclick=()=>{endTour()};
+  document.body.appendChild(ov);
+  // Highlight
+  const rect=el.getBoundingClientRect();
+  el.style.position='relative';el.style.zIndex='10001';
+  el.classList.add('tour-highlight');
+  // Tooltip
+  const tip=document.createElement('div');
+  tip.className='tour-tip';
+  tip.innerHTML=`<div style="font-weight:700;font-size:14px;margin-bottom:4px;color:#818cf8">${step.title}</div>
+    <div style="font-size:13px;color:#cbd5e1;margin-bottom:12px">${step.desc}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:11px;color:#64748b">${_tourStep+1}/${TOUR_STEPS.length}</span>
+      <div style="display:flex;gap:6px">
+        <button onclick="endTour()" style="background:none;border:1px solid rgba(255,255,255,.1);color:#94a3b8;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px">Pular</button>
+        ${_tourStep>0?'<button onclick="prevTourStep()" style="background:none;border:1px solid rgba(255,255,255,.1);color:#94a3b8;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px">Anterior</button>':''}
+        <button onclick="nextTourStep()" style="background:#6366f1;border:none;color:#fff;padding:4px 16px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">${_tourStep===TOUR_STEPS.length-1?'Concluir':'Próximo'}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(tip);
+  // Position
+  const tipRect=tip.getBoundingClientRect();
+  let top,left;
+  if(step.pos==='bottom'){top=rect.bottom+12;left=rect.left;}
+  else{top=rect.top-tipRect.height-12;left=rect.left;}
+  if(left+320>window.innerWidth) left=window.innerWidth-340;
+  if(left<10) left=10;
+  if(top<10) top=rect.bottom+12;
+  tip.style.top=top+'px';tip.style.left=left+'px';
+  el.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function nextTourStep(){
+  const step=TOUR_STEPS[_tourStep];
+  const el=document.querySelector(step.sel);
+  if(el){el.style.zIndex='';el.classList.remove('tour-highlight');}
+  _tourStep++;showTourStep();
+}
+function prevTourStep(){
+  const step=TOUR_STEPS[_tourStep];
+  const el=document.querySelector(step.sel);
+  if(el){el.style.zIndex='';el.classList.remove('tour-highlight');}
+  _tourStep=Math.max(0,_tourStep-1);showTourStep();
+}
+function endTour(){
+  TOUR_STEPS.forEach(s=>{const e=document.querySelector(s.sel);if(e){e.style.zIndex='';e.classList.remove('tour-highlight');}});
+  document.querySelectorAll('.tour-overlay,.tour-tip').forEach(e=>e.remove());
+  localStorage.setItem('tv_tour_done','1');
+}
+// Auto-start tour na primeira visita
+if(!localStorage.getItem('tv_tour_done')){
+  setTimeout(startTour,1500);
+}
 </script>
+
+<style>
+.tour-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000}
+.tour-tip{position:fixed;z-index:10002;background:#0f172a;border:1px solid rgba(99,102,241,.3);
+  border-radius:12px;padding:16px 20px;max-width:320px;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+.tour-highlight{box-shadow:0 0 0 4px rgba(99,102,241,.5),0 0 20px rgba(99,102,241,.3)!important;border-radius:8px}
+</style>
 
 <!-- ADD LEAD MODAL -->
 <div class="li-cfg-overlay" id="add-lead-overlay" onclick="closeAddLead(event)">
