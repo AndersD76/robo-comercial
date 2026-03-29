@@ -279,19 +279,21 @@
 </main>
 
 <div class="toast" id="toast"></div>
+<script id="terms-data" type="application/json">{{ (cfg.termos_busca or []) | tojson }}</script>
 
 <script>
 const BOT = '{{ user.schema_name if user and user.schema_name else "" }}';
-console.log('[CONFIG] BOT=' + BOT);
-console.log('[CONFIG] Script carregado OK');
 
-// Termos
-let terms = []
+// Termos — parse seguro via tag JSON
+let terms = [];
 try {
-  let _raw = {{ (cfg.termos_busca or []) | tojson }};
-  if (typeof _raw === 'string') { try { _raw = JSON.parse(_raw) } catch(e){} }
-  if (Array.isArray(_raw)) terms = _raw;
-} catch(e) { terms = [] }
+  var _el = document.getElementById('terms-data');
+  if (_el) {
+    var _raw = JSON.parse(_el.textContent);
+    if (typeof _raw === 'string') { try { _raw = JSON.parse(_raw) } catch(e){} }
+    if (Array.isArray(_raw)) terms = _raw;
+  }
+} catch(e) { terms = []; }
 
 function renderTerms() {
   const list = document.getElementById('terms-list')
