@@ -1529,6 +1529,7 @@ def _send_email(ecfg, to_email, to_name, subject, html):
     """Envia email via SMTP direto, Resend ou Brevo."""
     sender_email = ecfg.get('sender_email', '')
     sender_name = ecfg.get('sender_name', '')
+    print(f'[EMAIL] to={to_email} smtp={ecfg.get("smtp_host")}:{ecfg.get("smtp_port")} user={ecfg.get("smtp_user")} from={sender_email}', flush=True)
     if not sender_email:
         return False
 
@@ -1546,25 +1547,41 @@ def _send_email(ecfg, to_email, to_name, subject, html):
             msg['To'] = to_email
             msg['Subject'] = subject
             msg.attach(MIMEText(html, 'html', 'utf-8'))
+            # Tenta porta configurada, fallback 587
             port = int(ecfg.get('smtp_port', 587))
+            ports_to_try = [port]
             if port == 465:
-                with smtplib.SMTP_SSL(smtp_host, port,
-                                      timeout=15) as s:
-                    s.login(smtp_user, smtp_pass)
-                    s.sendmail(sender_email, to_email,
-                               msg.as_string())
-            else:
-                with smtplib.SMTP(smtp_host, port,
-                                  timeout=15) as s:
-                    s.ehlo()
-                    if port != 25:
-                        s.starttls()
-                    s.login(smtp_user, smtp_pass)
-                    s.sendmail(sender_email, to_email,
-                               msg.as_string())
-            return True
+                ports_to_try.append(587)
+            for p in ports_to_try:
+                try:
+                    if p == 465:
+                        with smtplib.SMTP_SSL(
+                                smtp_host, p,
+                                timeout=15) as s:
+                            s.login(smtp_user, smtp_pass)
+                            s.sendmail(
+                                sender_email, to_email,
+                                msg.as_string())
+                    else:
+                        with smtplib.SMTP(
+                                smtp_host, p,
+                                timeout=15) as s:
+                            s.ehlo()
+                            s.starttls()
+                            s.login(smtp_user, smtp_pass)
+                            s.sendmail(
+                                sender_email, to_email,
+                                msg.as_string())
+                    print(f'[SMTP] OK porta {p}',
+                          flush=True)
+                    return True
+                except Exception as e:
+                    print(f'[SMTP] porta {p} erro: {e}',
+                          flush=True)
+                    continue
+            return False
         except Exception as e:
-            print(f'[SMTP] erro: {e}')
+            print(f'[SMTP] erro geral: {e}', flush=True)
             return False
 
     # Opção 2: Resend API
