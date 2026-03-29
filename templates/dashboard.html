@@ -2468,18 +2468,114 @@ async function loadPlano(){
     }
   }catch(e){}
 }
-async function upgradeProPlano(){
+function upgradeProPlano(){
+  const ov=document.getElementById('overlay');
+  ov.innerHTML=`<div class="modal" style="max-width:480px;padding:28px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h3 style="margin:0;color:#e2e8f0"><i class="fa fa-crown" style="color:#f59e0b"></i> TurboVenda Pro</h3>
+      <button onclick="document.getElementById('overlay').style.display='none'" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:20px">&times;</button>
+    </div>
+    <div style="background:linear-gradient(135deg,rgba(99,102,241,.12),rgba(139,92,246,.12));border:1px solid rgba(99,102,241,.25);border-radius:12px;padding:20px;margin-bottom:20px;text-align:center">
+      <div style="font-size:36px;font-weight:900;color:#818cf8">R$299<span style="font-size:16px;font-weight:400;color:#94a3b8">/mês</span></div>
+      <div style="font-size:12px;color:#cbd5e1;margin-top:6px">Leads ilimitados | IA 24/7 | Email | WhatsApp | Sequências</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button onclick="showPayMethod('pix')" id="pm-pix" class="btn-cfg" style="flex:1;padding:10px;font-size:13px;background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.25);color:#22c55e;font-weight:700"><i class="fa fa-qrcode"></i> PIX</button>
+      <button onclick="showPayMethod('card')" id="pm-card" class="btn-cfg" style="flex:1;padding:10px;font-size:13px"><i class="fa fa-credit-card"></i> Cartão</button>
+      <button onclick="showPayMethod('boleto')" id="pm-boleto" class="btn-cfg" style="flex:1;padding:10px;font-size:13px"><i class="fa fa-barcode"></i> Boleto</button>
+    </div>
+    <div id="pay-form">
+      <div id="pay-pix" style="text-align:center;padding:20px">
+        <button onclick="gerarPix()" class="btn-cfg" style="width:100%;padding:14px;background:rgba(34,197,94,.15);border-color:rgba(34,197,94,.3);color:#22c55e;font-size:15px;font-weight:700"><i class="fa fa-qrcode"></i> Gerar QR Code PIX</button>
+        <div id="pix-result" style="margin-top:16px"></div>
+      </div>
+      <div id="pay-card" style="display:none">
+        <div class="field" style="margin-bottom:10px"><label style="font-size:11px;color:#94a3b8">Número do cartão</label>
+          <input id="cc-num" placeholder="0000 0000 0000 0000" maxlength="19" style="width:100%;background:#111d35;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px;color:#f1f5f9;font-size:14px"></div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <div class="field" style="flex:1"><label style="font-size:11px;color:#94a3b8">Validade</label>
+            <input id="cc-exp" placeholder="MM/AA" maxlength="5" style="width:100%;background:#111d35;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px;color:#f1f5f9;font-size:14px"></div>
+          <div class="field" style="flex:1"><label style="font-size:11px;color:#94a3b8">CVV</label>
+            <input id="cc-cvv" placeholder="123" maxlength="4" style="width:100%;background:#111d35;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px;color:#f1f5f9;font-size:14px"></div>
+        </div>
+        <div class="field" style="margin-bottom:10px"><label style="font-size:11px;color:#94a3b8">Nome no cartão</label>
+          <input id="cc-name" placeholder="NOME COMPLETO" style="width:100%;background:#111d35;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px;color:#f1f5f9;font-size:14px"></div>
+        <div class="field" style="margin-bottom:10px"><label style="font-size:11px;color:#94a3b8">CPF do titular</label>
+          <input id="cc-cpf" placeholder="000.000.000-00" maxlength="14" style="width:100%;background:#111d35;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px;color:#f1f5f9;font-size:14px"></div>
+        <button onclick="pagarCartao()" class="btn-cfg" style="width:100%;padding:14px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;color:#fff;font-size:15px;font-weight:700;border-radius:8px;cursor:pointer"><i class="fa fa-lock"></i> Pagar R$299</button>
+        <div id="card-result" style="margin-top:10px;font-size:12px;text-align:center"></div>
+      </div>
+      <div id="pay-boleto" style="display:none;text-align:center;padding:20px">
+        <button onclick="gerarBoleto()" class="btn-cfg" style="width:100%;padding:14px;background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.25);color:#fbbf24;font-size:15px;font-weight:700"><i class="fa fa-barcode"></i> Gerar Boleto</button>
+        <div id="boleto-result" style="margin-top:16px"></div>
+      </div>
+    </div>
+    <div style="text-align:center;margin-top:12px;font-size:10px;color:#475569"><i class="fa fa-lock"></i> Pagamento seguro via Mercado Pago</div>
+  </div>`;
+  ov.style.display='flex';
+}
+function showPayMethod(m){
+  ['pix','card','boleto'].forEach(t=>{
+    document.getElementById('pay-'+t).style.display=t===m?'':'none';
+    document.getElementById('pm-'+t).style.background=t===m?'rgba(99,102,241,.15)':'';
+    document.getElementById('pm-'+t).style.fontWeight=t===m?'700':'400';
+  });
+}
+async function gerarPix(){
+  document.getElementById('pix-result').innerHTML='<i class="fa fa-spinner fa-spin"></i> Gerando PIX...';
   try{
-    const r=await fetch('/api/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plano:'pro'})});
+    const r=await fetch('/api/pagamento/pix',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plano:'pro'})});
     const d=await r.json();
-    if(d.init_point){
-      window.location.href=d.init_point;
-    }else if(d.sandbox_init_point){
-      window.location.href=d.sandbox_init_point;
+    if(d.ok){
+      document.getElementById('pix-result').innerHTML=`
+        <div style="background:#0d1526;border:1px solid rgba(34,197,94,.2);border-radius:10px;padding:16px">
+          ${d.qr_code_base64?`<img src="data:image/png;base64,${d.qr_code_base64}" style="width:200px;height:200px;margin:0 auto;display:block;border-radius:8px">`:
+          `<div style="background:#fff;padding:12px;border-radius:8px;word-break:break-all;font-size:11px;color:#000;margin-bottom:8px">${d.qr_code||'QR indisponível'}</div>`}
+          <div style="margin-top:12px"><label style="font-size:10px;color:#94a3b8">Código PIX (copie e cole)</label>
+          <div style="background:#111d35;padding:8px;border-radius:6px;font-size:10px;word-break:break-all;color:#cbd5e1;cursor:pointer" onclick="navigator.clipboard.writeText(this.innerText);this.style.color='#22c55e'">${d.qr_code||''}</div></div>
+          <p style="font-size:11px;color:#22c55e;margin-top:10px"><i class="fa fa-clock"></i> Expira em 30 minutos</p>
+        </div>`;
     }else{
-      alert(d.error||'Erro ao criar checkout');
+      document.getElementById('pix-result').innerHTML=`<p style="color:#f87171">${d.error||'Erro'}</p>`;
     }
-  }catch(e){alert('Erro de conexão');}
+  }catch(e){document.getElementById('pix-result').innerHTML='<p style="color:#f87171">Erro de conexão</p>';}
+}
+async function pagarCartao(){
+  const num=document.getElementById('cc-num').value.replace(/\s/g,'');
+  const exp=document.getElementById('cc-exp').value;
+  const cvv=document.getElementById('cc-cvv').value;
+  const name=document.getElementById('cc-name').value;
+  const cpf=document.getElementById('cc-cpf').value.replace(/\D/g,'');
+  if(!num||!exp||!cvv||!name||!cpf){document.getElementById('card-result').innerHTML='<span style="color:#f87171">Preencha todos os campos</span>';return;}
+  document.getElementById('card-result').innerHTML='<i class="fa fa-spinner fa-spin" style="color:#818cf8"></i> Processando...';
+  try{
+    const r=await fetch('/api/pagamento/cartao',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({plano:'pro',card_number:num,expiration:exp,cvv,holder_name:name,cpf})});
+    const d=await r.json();
+    if(d.ok){
+      document.getElementById('card-result').innerHTML='<span style="color:#22c55e"><i class="fa fa-check-circle"></i> Pagamento aprovado! Plano Pro ativado.</span>';
+      setTimeout(()=>{location.reload()},2000);
+    }else{
+      document.getElementById('card-result').innerHTML=`<span style="color:#f87171">${d.error||'Pagamento recusado'}</span>`;
+    }
+  }catch(e){document.getElementById('card-result').innerHTML='<span style="color:#f87171">Erro de conexão</span>';}
+}
+async function gerarBoleto(){
+  document.getElementById('boleto-result').innerHTML='<i class="fa fa-spinner fa-spin"></i> Gerando boleto...';
+  try{
+    const r=await fetch('/api/pagamento/boleto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plano:'pro'})});
+    const d=await r.json();
+    if(d.ok){
+      document.getElementById('boleto-result').innerHTML=`
+        <div style="background:#0d1526;border:1px solid rgba(251,191,36,.2);border-radius:10px;padding:16px">
+          <p style="font-size:13px;color:#cbd5e1;margin-bottom:8px">Boleto gerado com sucesso!</p>
+          <a href="${d.boleto_url}" target="_blank" class="btn-cfg" style="display:inline-block;padding:10px 20px;background:rgba(251,191,36,.15);border-color:rgba(251,191,36,.3);color:#fbbf24;font-weight:700;text-decoration:none"><i class="fa fa-download"></i> Baixar Boleto</a>
+          <p style="font-size:11px;color:#fbbf24;margin-top:10px"><i class="fa fa-clock"></i> Vencimento em 3 dias úteis</p>
+        </div>`;
+    }else{
+      document.getElementById('boleto-result').innerHTML=`<p style="color:#f87171">${d.error||'Erro'}</p>`;
+    }
+  }catch(e){document.getElementById('boleto-result').innerHTML='<p style="color:#f87171">Erro de conexão</p>';}
 }
 // Carrega plano ao iniciar
 loadPlano();

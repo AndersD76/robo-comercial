@@ -2788,6 +2788,284 @@ def webhook_mercadopago():
     return jsonify({'ok': True})
 
 
+@app.route('/api/pagamento/pix', methods=['POST'])
+@login_required
+def api_pagamento_pix():
+    """Gera pagamento PIX via Mercado Pago."""
+    import requests as http
+    if not MP_ACCESS_TOKEN:
+        return jsonify({'error': 'MP não configurado'}), 500
+    data = request.get_json(silent=True) or {}
+    plano_id = data.get('plano', 'pro')
+    plano = MP_PLANOS.get(plano_id)
+    if not plano:
+        return jsonify({'error': 'Plano inválido'}), 400
+    user = get_current_user()
+    try:
+        r = http.post(
+            'https://api.mercadopago.com/v1/payments',
+            headers={
+                'Authorization': f'Bearer {MP_ACCESS_TOKEN}',
+                'Content-Type': 'application/json',
+                'X-Idempotency-Key': f"pix_{user['id']}_{plano_id}_{int(__import__('time').time())}",
+            },
+            json={
+                'transaction_amount': plano['valor'],
+                'description': plano['nome'],
+                'payment_method_id': 'pix',
+                'payer': {'email': user['email']},
+                'metadata': {
+                    'user_id': user['id'],
+                    'plano': plano_id,
+                },
+            }, timeout=15)
+        pay = r.json()
+        if r.status_code in (200, 201):
+            pix_data = pay.get(
+                'point_of_interaction', {}).get(
+                'transaction_data', {})
+            # Registra pagamento
+            try:
+                conn = psycopg2.connect(
+                    DATABASE_URL,
+                    cursor_factory=psycopg2.extras.RealDictCursor)
+                c = conn.cursor()
+                c.execute("""INSERT INTO pagamentos
+                    (user_id, mp_payment_id, status,
+                     valor, plano)
+                    VALUES (%s,%s,%s,%s,%s)""",
+                    (user['id'], str(pay.get('id')),
+                     pay.get('status'), plano['valor'],
+                     plano_id))
+                conn.commit()
+                conn.close()
+            except Exception:
+                pass
+            return jsonify({
+                'ok': True,
+                'qr_code': pix_data.get('qr_code'),
+                'qr_code_base64': pix_data.get(
+                    'qr_code_base64'),
+                'payment_id': pay.get('id'),
+            })
+        return jsonify({
+            'error': pay.get('message',
+                str(pay.get('cause', 'Erro')))}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/pagamento/cartao', methods=['POST'])
+@login_required
+def api_pagamento_cartao():
+    """Processa pagamento com cartão via MP."""
+    import requests as http
+    if not MP_ACCESS_TOKEN:
+        return jsonify({'error': 'MP não configurado'}), 500
+    data = request.get_json(silent=True) or {}
+    plano_id = data.get('plano', 'pro')
+    plano = MP_PLANOS.get(plano_id)
+    if not plano:
+        return jsonify({'error': 'Plano inválido'}), 400
+    user = get_current_user()
+    card_num = data.get('card_number', '').replace(' ', '')
+    exp = data.get('expiration', '')
+    cvv = data.get('cvv', '')
+    holder = data.get('holder_name', '')
+    cpf = data.get('cpf', '').replace('.', '').replace('-', '')
+    if not all([card_num, exp, cvv, holder, cpf]):
+        return jsonify({'error': 'Preencha todos os campos'}), 400
+    exp_parts = exp.split('/')
+    if len(exp_parts) != 2:
+        return jsonify({'error': 'Validade inválida'}), 400
+    exp_month = int(exp_parts[0])
+    exp_year = int('20' + exp_parts[1]) if len(
+        exp_parts[1]) == 2 else int(exp_parts[1])
+    # Detectar bandeira
+    bin6 = card_num[:6]
+    if card_num.startswith('4'):
+        payment_method = 'visa'
+    elif card_num.startswith(('51', '52', '53', '54', '55')):
+        payment_method = 'master'
+    elif card_num.startswith(('34', '37')):
+        payment_method = 'amex'
+    elif card_num.startswith('636368'):
+        payment_method = 'elo'
+    else:
+        payment_method = 'visa'
+    try:
+        # Criar token do cartão
+        token_r = http.post(
+            'https://api.mercadopago.com/v1/card_tokens',
+            headers={
+                'Authorization': f'Bearer {MP_ACCESS_TOKEN}',
+                'Content-Type': 'application/json',
+            },
+            json={
+                'card_number': card_num,
+                'expiration_month': exp_month,
+                'expiration_year': exp_year,
+                'security_code': cvv,
+                'cardholder': {
+                    'name': holder,
+                    'identification': {
+                        'type': 'CPF',
+                        'number': cpf,
+                    },
+                },
+            }, timeout=15)
+        token_data = token_r.json()
+        if token_r.status_code not in (200, 201):
+            return jsonify({
+                'error': token_data.get('message',
+                    'Erro ao tokenizar cartão')}), 400
+        card_token = token_data.get('id')
+        # Criar pagamento
+        r = http.post(
+            'https://api.mercadopago.com/v1/payments',
+            headers={
+                'Authorization': f'Bearer {MP_ACCESS_TOKEN}',
+                'Content-Type': 'application/json',
+                'X-Idempotency-Key': f"card_{user['id']}_{int(__import__('time').time())}",
+            },
+            json={
+                'transaction_amount': plano['valor'],
+                'token': card_token,
+                'description': plano['nome'],
+                'installments': 1,
+                'payment_method_id': payment_method,
+                'payer': {
+                    'email': user['email'],
+                    'identification': {
+                        'type': 'CPF',
+                        'number': cpf,
+                    },
+                },
+                'metadata': {
+                    'user_id': user['id'],
+                    'plano': plano_id,
+                },
+            }, timeout=15)
+        pay = r.json()
+        status = pay.get('status')
+        # Registra
+        try:
+            conn = psycopg2.connect(
+                DATABASE_URL,
+                cursor_factory=psycopg2.extras.RealDictCursor)
+            c = conn.cursor()
+            c.execute("""INSERT INTO pagamentos
+                (user_id, mp_payment_id, status,
+                 valor, plano)
+                VALUES (%s,%s,%s,%s,%s)""",
+                (user['id'], str(pay.get('id')),
+                 status, plano['valor'], plano_id))
+            if status == 'approved':
+                c.execute("""UPDATE users SET
+                    plano = %s,
+                    plano_expira = NOW() + INTERVAL '30 days'
+                    WHERE id = %s""",
+                    (plano_id, user['id']))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+        if status == 'approved':
+            return jsonify({'ok': True, 'status': 'approved'})
+        elif status == 'in_process':
+            return jsonify({
+                'ok': True,
+                'status': 'pending',
+                'error': 'Pagamento em análise'})
+        else:
+            detail = pay.get('status_detail', '')
+            msgs = {
+                'cc_rejected_call_for_authorize':
+                    'Cartão requer autorização. Ligue pro banco.',
+                'cc_rejected_insufficient_amount':
+                    'Saldo insuficiente.',
+                'cc_rejected_bad_filled_security_code':
+                    'CVV incorreto.',
+                'cc_rejected_bad_filled_date':
+                    'Data de validade incorreta.',
+                'cc_rejected_bad_filled_other':
+                    'Dados do cartão incorretos.',
+            }
+            return jsonify({
+                'error': msgs.get(detail,
+                    f'Pagamento recusado ({detail})')}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/pagamento/boleto', methods=['POST'])
+@login_required
+def api_pagamento_boleto():
+    """Gera boleto via Mercado Pago."""
+    import requests as http
+    if not MP_ACCESS_TOKEN:
+        return jsonify({'error': 'MP não configurado'}), 500
+    data = request.get_json(silent=True) or {}
+    plano_id = data.get('plano', 'pro')
+    plano = MP_PLANOS.get(plano_id)
+    if not plano:
+        return jsonify({'error': 'Plano inválido'}), 400
+    user = get_current_user()
+    try:
+        r = http.post(
+            'https://api.mercadopago.com/v1/payments',
+            headers={
+                'Authorization': f'Bearer {MP_ACCESS_TOKEN}',
+                'Content-Type': 'application/json',
+                'X-Idempotency-Key': f"boleto_{user['id']}_{int(__import__('time').time())}",
+            },
+            json={
+                'transaction_amount': plano['valor'],
+                'description': plano['nome'],
+                'payment_method_id': 'bolbradesco',
+                'payer': {
+                    'email': user['email'],
+                    'first_name': user.get('empresa_nome', 'Cliente'),
+                    'last_name': 'TurboVenda',
+                },
+                'metadata': {
+                    'user_id': user['id'],
+                    'plano': plano_id,
+                },
+            }, timeout=15)
+        pay = r.json()
+        if r.status_code in (200, 201):
+            boleto_url = pay.get(
+                'transaction_details', {}).get(
+                'external_resource_url', '')
+            try:
+                conn = psycopg2.connect(
+                    DATABASE_URL,
+                    cursor_factory=psycopg2.extras.RealDictCursor)
+                c = conn.cursor()
+                c.execute("""INSERT INTO pagamentos
+                    (user_id, mp_payment_id, status,
+                     valor, plano)
+                    VALUES (%s,%s,%s,%s,%s)""",
+                    (user['id'], str(pay.get('id')),
+                     pay.get('status'), plano['valor'],
+                     plano_id))
+                conn.commit()
+                conn.close()
+            except Exception:
+                pass
+            return jsonify({
+                'ok': True,
+                'boleto_url': boleto_url,
+                'payment_id': pay.get('id'),
+            })
+        return jsonify({
+            'error': pay.get('message',
+                str(pay.get('cause', 'Erro')))}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/pagamento/<resultado>')
 @login_required
 def pagamento_resultado(resultado):
