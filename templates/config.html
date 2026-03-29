@@ -281,16 +281,17 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const BOT = '{{ user.schema_name or "" }}'
+const BOT = '{{ user.schema_name if user and user.schema_name else "" }}';
+console.log('[CONFIG] BOT=' + BOT);
+console.log('[CONFIG] Script carregado OK');
 
 // Termos
-let terms = (() => {
-  try {
-    let t = {{ (cfg.termos_busca or []) | tojson }};
-    if (typeof t === 'string') t = JSON.parse(t);
-    return Array.isArray(t) ? t : [];
-  } catch(e) { return []; }
-})()
+let terms = []
+try {
+  let _raw = {{ (cfg.termos_busca or []) | tojson }};
+  if (typeof _raw === 'string') { try { _raw = JSON.parse(_raw) } catch(e){} }
+  if (Array.isArray(_raw)) terms = _raw;
+} catch(e) { terms = [] }
 
 function renderTerms() {
   const list = document.getElementById('terms-list')
