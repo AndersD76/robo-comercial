@@ -483,13 +483,21 @@ async function saveConfig(redirect=true) {
       if (redirect) {
         btn.innerHTML = '<i class="fa fa-check"></i> Salvo! Redirecionando...'
         setTimeout(() => { window.location.href = '/dashboard' }, 800)
+        return
       } else {
+        showToast('Configurações salvas!', true)
         btn.innerHTML = '<i class="fa fa-check"></i> Salvo!'
         setTimeout(() => { btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'; btn.disabled = false }, 1500)
+        return
       }
-      return
-    } else showToast('Erro: ' + (d.error || 'falha'), false)
-  } catch(e) { showToast('Erro de conexão', false) }
+    } else {
+      showToast('Erro: ' + (d.error || 'falha ao salvar'), false)
+      console.error('Save failed:', d)
+    }
+  } catch(e) {
+    showToast('Erro de conexão: ' + e.message, false)
+    console.error('Save exception:', e)
+  }
   btn.disabled = false
   btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'
 }
