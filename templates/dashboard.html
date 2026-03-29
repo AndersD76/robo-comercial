@@ -2608,90 +2608,56 @@ loadPlano();
 // TOUR GUIADO
 // ========================
 const TOUR_STEPS=[
-  {sel:'.bot-card',title:'Robô de Prospecção',desc:'Aqui você inicia e controla o robô que busca leads automaticamente 24/7.',pos:'bottom'},
-  {sel:'.tab-btn',title:'Abas do CRM',desc:'Leads, Mala Direta, WhatsApp, Respostas, Agenda, Relatórios e Sequências.',pos:'bottom'},
-  {sel:'#lead-actions',title:'Ações Rápidas',desc:'Adicione leads, exporte CSV, envie emails em massa ou aplique ações em lote.',pos:'bottom'},
-  {sel:'.pipe-section',title:'Pipeline Kanban',desc:'Arraste cards entre as colunas para gerenciar o funil de vendas.',pos:'top'},
-  {sel:'#btn-upgrade',title:'Upgrade Pro',desc:'Desbloqueie leads ilimitados, sequências de email e todas as funcionalidades.',pos:'bottom'},
-  {sel:'.hdr-right a[href="/configurar"]',title:'Configurações',desc:'Configure termos de busca, email SMTP, templates e mais.',pos:'bottom'},
+  {sel:'.bot-card',title:'Robô de Prospecção',desc:'Inicie o robô que busca leads automaticamente 24/7.'},
+  {sel:'.tab-btn',title:'Abas do CRM',desc:'Leads, Email, WhatsApp, Agenda, Relatórios e Sequências.'},
+  {sel:'#lead-actions',title:'Ações',desc:'Adicione leads, exporte CSV, envie emails ou enriqueça CNPJs.'},
+  {sel:'.pipe-section',title:'Pipeline Kanban',desc:'Arraste cards entre colunas para gerenciar o funil.'},
 ];
-let _tourStep=0;
-function startTour(){
-  _tourStep=0;
-  showTourStep();
-}
+let _tourStep=0, _tourEl=null;
+function startTour(){ _tourStep=0; showTourStep(); }
 function showTourStep(){
-  // Remove anterior
-  document.querySelectorAll('.tour-overlay,.tour-tip').forEach(e=>e.remove());
-  if(_tourStep>=TOUR_STEPS.length){
-    localStorage.setItem('tv_tour_done','1');
-    return;
-  }
-  const step=TOUR_STEPS[_tourStep];
-  const el=document.querySelector(step.sel);
+  // Limpa anterior
+  if(_tourEl){_tourEl.classList.remove('tour-hl');_tourEl=null;}
+  const old=document.getElementById('tour-box');if(old)old.remove();
+  if(_tourStep>=TOUR_STEPS.length){localStorage.setItem('tv_tour_done','1');return;}
+  const s=TOUR_STEPS[_tourStep];
+  const el=document.querySelector(s.sel);
   if(!el){_tourStep++;showTourStep();return;}
-  // Overlay escuro
-  const ov=document.createElement('div');
-  ov.className='tour-overlay';
-  ov.onclick=()=>{endTour()};
-  document.body.appendChild(ov);
-  // Highlight
-  const rect=el.getBoundingClientRect();
-  el.style.position='relative';el.style.zIndex='10001';
-  el.classList.add('tour-highlight');
-  // Tooltip
-  const tip=document.createElement('div');
-  tip.className='tour-tip';
-  tip.innerHTML=`<div style="font-weight:700;font-size:14px;margin-bottom:4px;color:#818cf8">${step.title}</div>
-    <div style="font-size:13px;color:#cbd5e1;margin-bottom:12px">${step.desc}</div>
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <span style="font-size:11px;color:#64748b">${_tourStep+1}/${TOUR_STEPS.length}</span>
-      <div style="display:flex;gap:6px">
-        <button onclick="endTour()" style="background:none;border:1px solid rgba(255,255,255,.1);color:#94a3b8;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px">Pular</button>
-        ${_tourStep>0?'<button onclick="prevTourStep()" style="background:none;border:1px solid rgba(255,255,255,.1);color:#94a3b8;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px">Anterior</button>':''}
-        <button onclick="nextTourStep()" style="background:#6366f1;border:none;color:#fff;padding:4px 16px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">${_tourStep===TOUR_STEPS.length-1?'Concluir':'Próximo'}</button>
-      </div>
-    </div>`;
-  document.body.appendChild(tip);
-  // Position
-  const tipRect=tip.getBoundingClientRect();
-  let top,left;
-  if(step.pos==='bottom'){top=rect.bottom+12;left=rect.left;}
-  else{top=rect.top-tipRect.height-12;left=rect.left;}
-  if(left+320>window.innerWidth) left=window.innerWidth-340;
-  if(left<10) left=10;
-  if(top<10) top=rect.bottom+12;
-  tip.style.top=top+'px';tip.style.left=left+'px';
   el.scrollIntoView({behavior:'smooth',block:'center'});
-}
-function nextTourStep(){
-  const step=TOUR_STEPS[_tourStep];
-  const el=document.querySelector(step.sel);
-  if(el){el.style.zIndex='';el.classList.remove('tour-highlight');}
-  _tourStep++;showTourStep();
-}
-function prevTourStep(){
-  const step=TOUR_STEPS[_tourStep];
-  const el=document.querySelector(step.sel);
-  if(el){el.style.zIndex='';el.classList.remove('tour-highlight');}
-  _tourStep=Math.max(0,_tourStep-1);showTourStep();
+  _tourEl=el;
+  setTimeout(()=>{
+    el.classList.add('tour-hl');
+    const r=el.getBoundingClientRect();
+    const box=document.createElement('div');box.id='tour-box';
+    box.innerHTML=`<div style="font-weight:700;color:#818cf8;margin-bottom:4px">${s.title}</div>
+      <div style="font-size:12px;color:#cbd5e1;margin-bottom:10px">${s.desc}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:10px;color:#64748b">${_tourStep+1}/${TOUR_STEPS.length}</span>
+        <div style="display:flex;gap:6px">
+          <button id="tour-skip" style="background:none;border:1px solid rgba(255,255,255,.1);color:#94a3b8;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px">Pular</button>
+          <button id="tour-next" style="background:#6366f1;border:none;color:#fff;padding:4px 14px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">${_tourStep===TOUR_STEPS.length-1?'Concluir':'Próximo'}</button>
+        </div></div>`;
+    box.style.cssText='position:fixed;z-index:10003;background:#0f172a;border:1px solid rgba(99,102,241,.3);border-radius:10px;padding:14px 18px;max-width:300px;box-shadow:0 8px 32px rgba(0,0,0,.6)';
+    let top=r.bottom+10,left=r.left;
+    if(top+150>window.innerHeight) top=r.top-150;
+    if(left+300>window.innerWidth) left=window.innerWidth-320;
+    if(left<10) left=10; if(top<10) top=10;
+    box.style.top=top+'px';box.style.left=left+'px';
+    document.body.appendChild(box);
+    document.getElementById('tour-next').onclick=()=>{if(_tourEl){_tourEl.classList.remove('tour-hl');_tourEl=null;}_tourStep++;showTourStep();};
+    document.getElementById('tour-skip').onclick=()=>{endTour();};
+  },300);
 }
 function endTour(){
-  TOUR_STEPS.forEach(s=>{const e=document.querySelector(s.sel);if(e){e.style.zIndex='';e.classList.remove('tour-highlight');}});
-  document.querySelectorAll('.tour-overlay,.tour-tip').forEach(e=>e.remove());
+  if(_tourEl){_tourEl.classList.remove('tour-hl');_tourEl=null;}
+  const b=document.getElementById('tour-box');if(b)b.remove();
   localStorage.setItem('tv_tour_done','1');
 }
-// Auto-start tour na primeira visita
-if(!localStorage.getItem('tv_tour_done')){
-  setTimeout(startTour,1500);
-}
+if(!localStorage.getItem('tv_tour_done')){setTimeout(startTour,2000);}
 </script>
 
 <style>
-.tour-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000}
-.tour-tip{position:fixed;z-index:10002;background:#0f172a;border:1px solid rgba(99,102,241,.3);
-  border-radius:12px;padding:16px 20px;max-width:320px;box-shadow:0 8px 32px rgba(0,0,0,.5)}
-.tour-highlight{box-shadow:0 0 0 4px rgba(99,102,241,.5),0 0 20px rgba(99,102,241,.3)!important;border-radius:8px}
+.tour-hl{outline:3px solid rgba(99,102,241,.7)!important;outline-offset:4px;position:relative;z-index:10001;border-radius:8px;transition:outline .3s}
 </style>
 
 <!-- ADD LEAD MODAL -->
