@@ -650,25 +650,20 @@ class Buscador:
                     resultados.append(r)
             print(f"  Serper API: {len(resultados)} resultados")
 
-        # === FASE 2: HTTP scraping (rotaciona motores) ===
+        # === FASE 2: HTTP scraping — tenta TODOS antes de ir pro Playwright ===
         if len(resultados) < 5:
+            # Bing primeiro (funciona melhor de datacenter), depois os outros
             motores = [
-                ('Google', self._buscar_google_http),
                 ('Bing', self._buscar_bing_http),
-                ('DDG', self._buscar_ddg_http),
+                ('Google', self._buscar_google_http),
                 ('Brave', self._buscar_brave_http),
+                ('DDG', self._buscar_ddg_http),
             ]
-            idx = Buscador._motor_idx % len(motores)
-            Buscador._motor_idx += 1
-            ordem = motores[idx:] + motores[:idx]
-
-            for nome_motor, fn_busca in ordem:
+            for nome_motor, fn_busca in motores:
                 if len(resultados) >= 5:
                     break
                 try:
-                    novos = await fn_busca(
-                        termo, max_resultados
-                    )
+                    novos = await fn_busca(termo, max_resultados)
                     added = 0
                     for r in novos:
                         if r['url'] not in urls_vistas:
@@ -676,20 +671,16 @@ class Buscador:
                             resultados.append(r)
                             added += 1
                     if added:
-                        print(
-                            f"  {nome_motor} HTTP: "
-                            f"+{added} resultados"
-                        )
+                        print(f"  {nome_motor} HTTP: +{added} resultados")
                 except Exception as e:
                     print(f"  [ERRO] {nome_motor}: {e}")
 
-        # === FASE 3: Playwright fallback ===
+        # === FASE 3: Playwright só se HTTP falhou total ===
         if len(resultados) < 3 and self.page:
             print("  HTTP insuficiente - Playwright...")
             pw_fns = [
                 ('Google PW', self.buscar_google),
                 ('Bing PW', self.buscar_bing),
-                ('DDG PW', self.buscar_duckduckgo),
             ]
             for nome_pw, fn_pw in pw_fns:
                 if len(resultados) >= 3:
@@ -707,17 +698,13 @@ class Buscador:
                 except Exception as e:
                     print(f"  [ERRO] {nome_pw}: {e}")
 
-        # Backoff: se nada funcionou, espera mais
+        # Se nada funcionou, não trava — só loga
         if not resultados:
             Buscador._falhas_consecutivas += 1
-            wait = min(
-                30 * Buscador._falhas_consecutivas, 300
-            )
-            print(
-                f"  Todos motores bloqueados — "
-                f"aguardando {wait}s"
-            )
-            await asyncio.sleep(wait)
+            if Buscador._falhas_consecutivas >= 5:
+                wait = min(15 * Buscador._falhas_consecutivas, 120)
+                print(f"  Motores bloqueados — aguardando {wait}s")
+                await asyncio.sleep(wait)
         else:
             Buscador._falhas_consecutivas = 0
 

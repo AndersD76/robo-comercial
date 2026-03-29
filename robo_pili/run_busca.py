@@ -40,6 +40,23 @@ _DOMINIOS_BLACKLIST = {
     'bitrix24.com.br', 'bitrix24.com', 'clockify.me',
     'sesametime.com', 'pontomais.com.br',
     'guiadacarreira.com.br', 'mundoconectado.com.br',
+    # Grandes corporações (aparecem nas páginas altas do Google)
+    'bb.com.br', 'itau.com.br', 'bradesco.com.br', 'santander.com.br',
+    'caixa.gov.br', 'bndes.gov.br', 'vivo.com.br', 'claro.com.br',
+    'tim.com.br', 'oi.com.br', 'citroen.com.br', 'ford.com.br',
+    'chevrolet.com.br', 'toyota.com.br', 'honda.com.br', 'fiat.com.br',
+    'volkswagen.com.br', 'ambev.com.br', 'nestle.com.br', 'unilever.com.br',
+    'coca-cola.com.br', 'pepsi.com.br', 'heineken.com', 'careers.theheinekencompany.com',
+    'chiquinho.com.br', 'supergasbras.com.br', 'shell.com.br', 'petrobras.com.br',
+    'natura.com.br', 'boticario.com.br', 'renner.com.br', 'riachuelo.com.br',
+    'americanas.com.br', 'casasbahia.com.br', 'pernambucanas.com.br',
+    'carrefour.com.br', 'paodeacucar.com', 'extra.com.br',
+    'sympla.com.br', 'solutudo.com.br', 'ohub.com.br',
+    'econodata.com.br', 'empresas.serasaexperian.com.br', 'cnpj.biz',
+    'empresaqui.com.br', 'cronoshare.com.br',
+    'manychat.com', 'descomplica.com.br', 'sereducacional.com',
+    'escoteiros.org.br', 'espro.org.br', 'komatsu.com.br',
+    'prefeitura.rio', '1746.rio', 'light.com.br',
 }
 
 # Palavras no domínio que indicam blog/portal (não empresa)
@@ -676,6 +693,10 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
     if not hasattr(buscador, '_termo_paginas'):
         buscador._termo_paginas = {}
     pagina = buscador._termo_paginas.get(termo, 0)
+    # Máximo 5 páginas por termo — depois disso Google retorna lixo
+    if pagina >= 5:
+        pagina = 0  # reseta e busca de novo (novos resultados podem surgir)
+        buscador._termo_paginas[termo] = 0
     buscador._termo_paginas[termo] = pagina + 1
     start = pagina * 10  # Google usa start=0, 10, 20...
 
