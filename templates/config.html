@@ -251,9 +251,10 @@
   </div>
 
   <!-- SALVAR -->
-  <button class="btn-save" id="btn-save" onclick="saveConfig()">
+  <button class="btn-save" id="btn-save" onclick="saveConfig(true)">
     <i class="fa fa-floppy-disk"></i> Salvar configurações
   </button>
+  <div id="save-debug" style="color:#f87171;font-size:11px;margin-top:8px;display:none"></div>
 
   <!-- API TOKENS -->
   <div class="card" style="margin-top:32px">
@@ -451,55 +452,60 @@ function previewCfgHtml() {
   preview.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-async function saveConfig(redirect=true) {
-  // Sync terms from inputs
-  document.querySelectorAll('.term-item input[type=text]').forEach((inp, i) => { terms[i] = inp.value })
-  const btn = document.getElementById('btn-save')
-  btn.disabled = true
-  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Salvando...'
+async function saveConfig(redirect) {
+  var dbg = document.getElementById('save-debug')
+  dbg.style.display = 'block'
+  dbg.textContent = '1. Iniciando save...'
   try {
-    const r = await fetch(`/api/${BOT}/config`, {
+    document.querySelectorAll('.term-item input[type=text]').forEach(function(inp, i) { terms[i] = inp.value })
+    var btn = document.getElementById('btn-save')
+    btn.disabled = true
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Salvando...'
+    dbg.textContent = '2. Fazendo fetch...'
+    var payload = {
+      empresa_nome: document.getElementById('empresa_nome').value,
+      website: document.getElementById('website').value,
+      descricao: document.getElementById('descricao').value,
+      termos_busca: Array.isArray(terms) ? terms.filter(Boolean) : [],
+      msg_inicial: document.getElementById('msg_inicial').value,
+      email_assunto_padrao: document.getElementById('email_assunto_padrao').value,
+      email_html_template: document.getElementById('email_html_template').value,
+      resend_api_key: document.getElementById('resend_api_key').value,
+      email_remetente: document.getElementById('email_remetente').value,
+      email_remetente_nome: document.getElementById('email_remetente_nome').value,
+      smtp_host: document.getElementById('smtp_host').value,
+      smtp_port: parseInt(document.getElementById('smtp_port').value) || 587,
+      smtp_user: document.getElementById('smtp_user').value,
+      smtp_password: document.getElementById('smtp_password').value
+    }
+    var r = await fetch('/api/' + BOT + '/config', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        empresa_nome: document.getElementById('empresa_nome').value,
-        website: document.getElementById('website').value,
-        descricao: document.getElementById('descricao').value,
-        termos_busca: terms.filter(Boolean),
-        msg_inicial: document.getElementById('msg_inicial').value,
-        email_assunto_padrao: document.getElementById('email_assunto_padrao').value,
-        email_html_template: document.getElementById('email_html_template').value,
-        resend_api_key: document.getElementById('resend_api_key').value,
-        email_remetente: document.getElementById('email_remetente').value,
-        email_remetente_nome: document.getElementById('email_remetente_nome').value,
-        smtp_host: document.getElementById('smtp_host').value,
-        smtp_port: parseInt(document.getElementById('smtp_port').value) || 587,
-        smtp_user: document.getElementById('smtp_user').value,
-        smtp_password: document.getElementById('smtp_password').value
-      })
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
     })
-    const txt = await r.text()
-    let d
-    try { d = JSON.parse(txt) } catch(e) { alert('Resposta inválida: ' + txt.substring(0, 200)); return }
-    if (!r.ok) { alert('Erro HTTP ' + r.status + ': ' + (d.error || txt.substring(0, 200))); return }
+    dbg.textContent = '3. Status: ' + r.status
+    var txt = await r.text()
+    dbg.textContent = '4. Resposta: ' + txt.substring(0, 100)
+    var d = JSON.parse(txt)
     if (d.ok) {
+      dbg.style.color = '#4ade80'
+      dbg.textContent = '5. OK! Redirecionando...'
       if (redirect) {
         window.location.href = '/dashboard'
-        return
       } else {
-        showToast('Configurações salvas!', true)
         btn.innerHTML = '<i class="fa fa-check"></i> Salvo!'
-        setTimeout(() => { btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'; btn.disabled = false }, 1500)
-        return
+        setTimeout(function() { btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'; btn.disabled = false }, 1500)
       }
     } else {
-      alert('Save retornou: ' + JSON.stringify(d))
+      dbg.textContent = '5. ERRO: ' + JSON.stringify(d)
+      btn.disabled = false
+      btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'
     }
   } catch(e) {
-    alert('Exception: ' + e.message)
+    dbg.textContent = 'EXCEPTION: ' + e.message + ' | ' + e.stack
+    btn.disabled = false
+    btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'
   }
-  btn.disabled = false
-  btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'
 }
 
 // Tokens
