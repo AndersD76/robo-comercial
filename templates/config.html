@@ -478,11 +478,12 @@ async function saveConfig(redirect=true) {
         smtp_password: document.getElementById('smtp_password').value
       })
     })
-    if (!r.ok) { showToast('Erro HTTP ' + r.status, false); return }
-    const d = await r.json()
+    const txt = await r.text()
+    let d
+    try { d = JSON.parse(txt) } catch(e) { alert('Resposta inválida: ' + txt.substring(0, 200)); return }
+    if (!r.ok) { alert('Erro HTTP ' + r.status + ': ' + (d.error || txt.substring(0, 200))); return }
     if (d.ok) {
       if (redirect) {
-        btn.innerHTML = '<i class="fa fa-check"></i> Salvo!'
         window.location.href = '/dashboard'
         return
       } else {
@@ -492,10 +493,10 @@ async function saveConfig(redirect=true) {
         return
       }
     } else {
-      showToast('Erro: ' + (d.error || JSON.stringify(d)), false)
+      alert('Save retornou: ' + JSON.stringify(d))
     }
   } catch(e) {
-    showToast('Erro: ' + e.message, false)
+    alert('Exception: ' + e.message)
   }
   btn.disabled = false
   btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'
