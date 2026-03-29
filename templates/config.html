@@ -283,7 +283,13 @@
 const BOT = '{{ user.schema_name or "" }}'
 
 // Termos
-let terms = {{ (cfg.termos_busca or []) | tojson }}
+let terms = (() => {
+  try {
+    let t = {{ (cfg.termos_busca or []) | tojson }};
+    if (typeof t === 'string') t = JSON.parse(t);
+    return Array.isArray(t) ? t : [];
+  } catch(e) { return []; }
+})()
 
 function renderTerms() {
   const list = document.getElementById('terms-list')

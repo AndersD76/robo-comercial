@@ -74,7 +74,7 @@ _init_public_schema_safe()
 def _serialize_row(row: dict) -> dict:
     """Converte datetime e outros tipos não-serializáveis para string."""
     for k, v in row.items():
-        if v is not None and not isinstance(v, (str, int, float, bool)):
+        if v is not None and not isinstance(v, (str, int, float, bool, list, dict)):
             row[k] = str(v)
     return row
 
@@ -1344,8 +1344,8 @@ def api_save_config(bot):
                          smtp_user=%s, smtp_password=%s,
                          serper_api_key=%s,
                          atualizado_em=NOW()"""
-            params = [empresa_nome, website, descricao, json.dumps(termos),
-                      li_email or None, json.dumps(li_cargos),
+            params = [empresa_nome, website, descricao, psycopg2.extras.Json(termos),
+                      li_email or None, psycopg2.extras.Json(li_cargos),
                       msg_inicial or None, email_assunto or None,
                       email_html or None,
                       email_remetente or None,
@@ -1369,8 +1369,8 @@ def api_save_config(bot):
                  smtp_host, smtp_port, smtp_user, smtp_password)
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                       (empresa_nome, website, descricao,
-                       json.dumps(termos), li_email or None,
-                       li_password or None, json.dumps(li_cargos),
+                       psycopg2.extras.Json(termos), li_email or None,
+                       li_password or None, psycopg2.extras.Json(li_cargos),
                        msg_inicial or None, email_assunto or None,
                        email_html or None,
                        email_remetente or None,
