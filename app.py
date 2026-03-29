@@ -2667,8 +2667,11 @@ def api_checkout():
         return jsonify({'error': 'Plano inválido'}), 400
 
     user = get_current_user()
-    base = os.environ.get(
-        'BASE_URL', request.host_url.rstrip('/'))
+    base = os.environ.get('BASE_URL', '')
+    if not base:
+        base = request.url_root.rstrip('/')
+        if base.startswith('http://') and 'railway' in base:
+            base = base.replace('http://', 'https://', 1)
 
     pref = {
         'items': [{
