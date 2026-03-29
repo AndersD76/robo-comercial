@@ -820,6 +820,41 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
                 partes.append('CNPJ')
             tag = '+'.join(partes)
             print(f'[{schema}] ✓ [{tag}] score={score} | {nome} | {lead["email"]}', flush=True)
+            # Auto-enriquecer CNPJ
+            if lead.get('cnpj'):
+                try:
+                    cnpj_d = ''.join(
+                        ch for ch in lead['cnpj'] if ch.isdigit())
+                    if len(cnpj_d) == 14:
+                        async with aiohttp.ClientSession() as s:
+                            async with s.get(
+                                f'https://brasilapi.com.br/api/cnpj/v1/{cnpj_d}',
+                                timeout=aiohttp.ClientTimeout(total=8)
+                            ) as resp:
+                                if resp.status == 200:
+                                    d = await resp.json()
+                                    conn_e = _conn(schema)
+                                    ce = conn_e.cursor()
+                                    ce.execute("""UPDATE empresas SET
+                                        razao_social = COALESCE(
+                                            NULLIF(razao_social,''), %s),
+                                        porte = %s,
+                                        cidade = COALESCE(
+                                            NULLIF(cidade,''), %s),
+                                        estado = COALESCE(
+                                            NULLIF(estado,''), %s),
+                                        enriquecido = TRUE,
+                                        enriquecido_em = NOW()
+                                        WHERE id = %s""",
+                                        (d.get('razao_social', ''),
+                                         d.get('porte', ''),
+                                         d.get('municipio', ''),
+                                         d.get('uf', ''),
+                                         empresa_id))
+                                    conn_e.commit()
+                                    conn_e.close()
+                except Exception:
+                    pass
         else:
             print(f'[{schema}]   ↩ Duplicado: {lead.get("website", "?")}', flush=True)
 
@@ -931,7 +966,29 @@ async def main_loop(schema: str):
             # Reset contadores — ainda achando coisas
             termo_sem_novos.clear()
 
-        # Delay anti-bloqueio — necessário para não ser banido
+        # Processar sequências de email pendentes (a cada 10 ciclos)
+        if ciclo % 10 == 0:
+            try:
+                conn_seq = _conn(schema)
+                cs = conn_seq.cursor()
+                cs.execute("""SELECT COUNT(*) AS n
+                    FROM sequencia_leads
+                    WHERE status = 'ativo'
+                    AND proximo_envio <= NOW()""")
+                pend = cs.fetchone()['n']
+                conn_seq.close()
+                if pend > 0:
+                    import requests as http_req
+                    port = os.environ.get('PORT', '5000')
+                    http_req.post(
+                        f'http://localhost:{port}'
+                        f'/api/{schema}/sequencias/processar',
+                        timeout=30)
+                    print(f'[{schema}] Sequencias: {pend} pendente(s) processadas', flush=True)
+            except Exception:
+                pass
+
+        # Delay anti-bloqueio
         await asyncio.sleep(random.uniform(15, 30))
 
 

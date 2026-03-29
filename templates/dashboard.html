@@ -611,6 +611,8 @@
         <button class="tab-btn"   onclick="goTab('whatsapp',this)"><i class="fab fa-whatsapp"></i> WhatsApp</button>
         <button class="tab-btn"   onclick="goTab('respostas',this)"><i class="fa fa-reply"></i> Respostas</button>
         <button class="tab-btn"   onclick="goTab('agenda',this)"><i class="fa fa-calendar-days"></i> Agenda</button>
+        <button class="tab-btn"   onclick="goTab('relatorios',this)"><i class="fa fa-chart-bar"></i> Relatórios</button>
+        <button class="tab-btn"   onclick="goTab('sequencias',this)"><i class="fa fa-layer-group"></i> Sequências</button>
         <button class="tab-btn"   onclick="goTab('log',this)"><i class="fa fa-list-ul"></i> Logs</button>
       </div>
       <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;" id="lead-actions">
@@ -651,6 +653,32 @@
         <table><thead><tr><th style="width:24px"><input type="checkbox" id="sel-all-wa" onchange="toggleSelectAll(this)"></th><th style="width:28px">#</th><th style="width:22%">Empresa</th><th style="width:11%">Telefone</th><th style="width:17%">Email</th><th style="width:13%">CNPJ</th><th style="width:14%">Decisor</th><th style="width:52px">Status</th><th style="width:30px">Pts</th><th style="width:80px">Data</th><th style="width:50px"></th></tr></thead>
         <tbody id="wa-tb"></tbody></table>
       </div>
+      <!-- RELATÓRIOS -->
+      <div id="tab-relatorios" style="display:none;padding:20px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+          <i class="fa fa-chart-bar" style="font-size:28px;color:#818cf8"></i>
+          <div><h3 style="margin:0;color:#e2e8f0">Relatórios</h3>
+            <small style="color:var(--muted)">Métricas de vendas, prospecção e engajamento</small></div>
+        </div>
+        <div id="relatorios-content">
+          <p style="color:var(--muted);text-align:center;padding:40px">Carregando...</p>
+        </div>
+      </div>
+
+      <!-- SEQUÊNCIAS -->
+      <div id="tab-sequencias" style="display:none;padding:20px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+          <i class="fa fa-layer-group" style="font-size:28px;color:#f472b6"></i>
+          <div><h3 style="margin:0;color:#e2e8f0">Sequências de Email</h3>
+            <small style="color:var(--muted)">Follow-ups automáticos em múltiplos passos</small></div>
+          <button class="btn-cfg" onclick="openSeqEditor()" style="margin-left:auto;background:rgba(244,114,182,.12);border-color:rgba(244,114,182,.25);color:#f472b6">
+            <i class="fa fa-plus"></i> Nova Sequência</button>
+        </div>
+        <div id="sequencias-list">
+          <p style="color:var(--muted);text-align:center;padding:40px">Carregando...</p>
+        </div>
+      </div>
+
       <div id="tab-log" style="display:none" class="scroll-box">
         <ul id="log-ul" style="list-style:none"></ul>
       </div>
@@ -908,7 +936,7 @@ function tick(){ document.getElementById('clock').textContent=new Date().toLocal
 tick(); setInterval(tick,10000);
 
 function goTab(panel,btn){
-  ['wa','log','email','whatsapp','respostas','agenda'].forEach(t=>{ const el=document.getElementById(`tab-${t}`); if(el) el.style.display=t===panel?'':'none'; });
+  ['wa','log','email','whatsapp','respostas','agenda','relatorios','sequencias'].forEach(t=>{ const el=document.getElementById(`tab-${t}`); if(el) el.style.display=t===panel?'':'none'; });
   btn.closest('div').querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   if(panel==='wa')  loadWA();
@@ -917,6 +945,8 @@ function goTab(panel,btn){
   if(panel==='respostas') loadRespostas();
   if(panel==='whatsapp') loadWaStats();
   if(panel==='agenda') loadAgenda();
+  if(panel==='relatorios') loadRelatorios();
+  if(panel==='sequencias') loadSequencias();
 }
 
 
@@ -1347,6 +1377,7 @@ function openLead(l){
         <button onclick="agendarReuniao(${l.id})" class="btn-cfg" style="font-size:11px;background:rgba(59,130,246,.12);border-color:rgba(59,130,246,.25);color:#60a5fa"><i class="fa fa-calendar-plus"></i> Agendar Reunião</button>
         <button onclick="copiarLinkAgenda(${l.id})" class="btn-cfg" style="font-size:11px;background:rgba(139,92,246,.12);border-color:rgba(139,92,246,.25);color:#a78bfa"><i class="fa fa-link"></i> Link Agenda</button>
         <button onclick="logCall(${l.id})" class="btn-cfg" style="font-size:11px;background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.25);color:#4ade80"><i class="fa fa-phone"></i> Ligação</button>
+        ${l.cnpj?`<button onclick="enriquecerLead(${l.id})" class="btn-cfg" style="font-size:11px;background:rgba(59,130,246,.12);border-color:rgba(59,130,246,.25);color:#60a5fa"><i class="fa fa-database"></i> ${l.enriquecido?'Re-enriquecer':'Enriquecer CNPJ'}</button>`:''}
         <button onclick="delWA(${l.id})" class="btn-cfg" style="font-size:11px;background:rgba(248,113,113,.12);border-color:rgba(248,113,113,.25);color:#f87171"><i class="fa fa-trash"></i> Excluir</button>
       </div>
     </div>
@@ -2198,6 +2229,216 @@ async function enviarMalaDireta(btn) {
   } catch(e) { status.style.color='#f87171'; status.textContent='Erro de conexão' }
   btn.disabled = false
   btn.innerHTML = oldHtml
+}
+
+// ========================
+// RELATÓRIOS
+// ========================
+async function loadRelatorios(){
+  const box=document.getElementById('relatorios-content');
+  box.innerHTML='<p style="color:var(--muted);text-align:center;padding:40px"><i class="fa fa-spinner fa-spin"></i> Carregando...</p>';
+  try{
+    const r=await fetch(`/api/${BOT}/relatorios`);
+    const d=await r.json();
+    if(d.error){box.innerHTML=`<p style="color:#f87171">${d.error}</p>`;return;}
+    const total=d.total_leads||1;
+    const cores={novo:'#818cf8',contactada:'#fb923c',respondeu:'#22c55e',qualificado:'#eab308',demo:'#3b82f6',convertido:'#10b981'};
+    let h=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px">`;
+    // KPIs
+    const kpis=[
+      {label:'Total Leads',val:d.total_leads,color:'#818cf8',icon:'fa-users'},
+      {label:'Emails Enviados',val:d.email?.emails_enviados||0,color:'#fb923c',icon:'fa-envelope'},
+      {label:'WhatsApp Enviados',val:d.whatsapp?.wa_enviados||0,color:'#22c55e',icon:'fa-brands fa-whatsapp'},
+      {label:'Taxa Resposta Email',val:d.email?.emails_enviados?Math.round((d.email.emails_respondidos/d.email.emails_enviados)*100):0,color:'#eab308',icon:'fa-reply',suffix:'%'},
+      {label:'Enriquecidos',val:d.enriquecimento?.enriquecidos||0,color:'#3b82f6',icon:'fa-database'},
+      {label:'Seq. Ativas',val:d.sequencias?.leads_ativos||0,color:'#f472b6',icon:'fa-layer-group'},
+    ];
+    kpis.forEach(k=>{
+      h+=`<div style="background:rgba(30,41,59,.8);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:16px;text-align:center">
+        <i class="fa ${k.icon}" style="color:${k.color};font-size:20px;margin-bottom:6px"></i>
+        <div style="font-size:28px;font-weight:700;color:${k.color}">${k.val}${k.suffix||''}</div>
+        <div style="font-size:11px;color:var(--muted)">${k.label}</div></div>`;
+    });
+    h+=`</div>`;
+    // Funil
+    h+=`<div style="background:rgba(30,41,59,.8);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:16px;margin-bottom:16px">
+      <h4 style="margin:0 0 12px;color:#e2e8f0"><i class="fa fa-filter"></i> Funil de Vendas</h4>`;
+    d.funil.forEach((f,i)=>{
+      const pct=total?Math.round((f.total/total)*100):0;
+      const conv=i>0&&d.funil[i-1].total?Math.round((f.total/d.funil[i-1].total)*100):i===0?100:0;
+      h+=`<div style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px;color:#e2e8f0">
+          <span>${f.etapa.toUpperCase()}</span><span>${f.total} (${pct}%)${i>0?' | conv: '+conv+'%':''}</span></div>
+        <div style="background:rgba(255,255,255,.06);border-radius:4px;height:20px;overflow:hidden">
+          <div style="background:${cores[f.etapa]||'#818cf8'};height:100%;width:${pct}%;border-radius:4px;transition:width .3s"></div></div></div>`;
+    });
+    h+=`</div>`;
+    // Leads por dia
+    if(d.por_dia&&d.por_dia.length){
+      const maxD=Math.max(...d.por_dia.map(x=>x.total))||1;
+      h+=`<div style="background:rgba(30,41,59,.8);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:16px;margin-bottom:16px">
+        <h4 style="margin:0 0 12px;color:#e2e8f0"><i class="fa fa-chart-line"></i> Leads / Dia (30 dias)</h4>
+        <div style="display:flex;align-items:flex-end;gap:2px;height:120px">`;
+      d.por_dia.forEach(dd=>{
+        const hPct=Math.round((dd.total/maxD)*100);
+        h+=`<div title="${dd.data}: ${dd.total}" style="flex:1;background:#818cf8;border-radius:2px 2px 0 0;min-width:4px;height:${hPct}%"></div>`;
+      });
+      h+=`</div><div style="display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-top:4px">
+        <span>${d.por_dia[0]?.data||''}</span><span>${d.por_dia[d.por_dia.length-1]?.data||''}</span></div></div>`;
+    }
+    // Top termos
+    if(d.top_termos&&d.top_termos.length){
+      const maxT=d.top_termos[0]?.total_resultados||1;
+      h+=`<div style="background:rgba(30,41,59,.8);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:16px;margin-bottom:16px">
+        <h4 style="margin:0 0 12px;color:#e2e8f0"><i class="fa fa-search"></i> Top Termos de Busca</h4>`;
+      d.top_termos.slice(0,10).forEach(t=>{
+        const pct=Math.round((t.total_resultados/maxT)*100);
+        h+=`<div style="margin-bottom:6px"><div style="display:flex;justify-content:space-between;font-size:11px;color:#e2e8f0;margin-bottom:2px">
+          <span>${t.termo.substring(0,50)}</span><span>${t.total_resultados} results | ${t.vezes_buscado}x</span></div>
+          <div style="background:rgba(255,255,255,.06);border-radius:3px;height:8px"><div style="background:#22c55e;height:100%;width:${pct}%;border-radius:3px"></div></div></div>`;
+      });
+      h+=`</div>`;
+    }
+    // Fontes
+    if(d.por_fonte&&d.por_fonte.length){
+      h+=`<div style="background:rgba(30,41,59,.8);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:16px">
+        <h4 style="margin:0 0 12px;color:#e2e8f0"><i class="fa fa-globe"></i> Leads por Fonte</h4>`;
+      d.por_fonte.forEach(f=>{
+        h+=`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:#e2e8f0;border-bottom:1px solid rgba(255,255,255,.04)">
+          <span>${f.fonte}</span><span style="color:#818cf8;font-weight:600">${f.total}</span></div>`;
+      });
+      h+=`</div>`;
+    }
+    box.innerHTML=h;
+  }catch(e){box.innerHTML=`<p style="color:#f87171">Erro: ${e.message}</p>`;}
+}
+
+// ========================
+// SEQUÊNCIAS
+// ========================
+let _seqData=[];
+async function loadSequencias(){
+  const box=document.getElementById('sequencias-list');
+  box.innerHTML='<p style="color:var(--muted);text-align:center;padding:40px"><i class="fa fa-spinner fa-spin"></i></p>';
+  try{
+    const r=await fetch(`/api/${BOT}/sequencias`);
+    _seqData=await r.json();
+    if(!_seqData.length){box.innerHTML=`<div style="text-align:center;padding:40px;color:var(--muted)">
+      <i class="fa fa-layer-group" style="font-size:40px;margin-bottom:12px;opacity:.3"></i>
+      <p>Nenhuma sequência criada ainda</p>
+      <p style="font-size:12px">Crie uma sequência com múltiplos passos de follow-up</p></div>`;return;}
+    let h='';
+    _seqData.forEach(s=>{
+      const passos=typeof s.passos==='string'?JSON.parse(s.passos):s.passos||[];
+      h+=`<div style="background:rgba(30,41,59,.8);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:16px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div><h4 style="margin:0;color:#e2e8f0">${s.nome}</h4>
+            <small style="color:var(--muted)">${passos.length} passo(s) | ${s.leads_ativos||0} leads ativos | ${s.leads_total||0} total</small></div>
+          <div style="display:flex;gap:6px">
+            <button class="btn-cfg" onclick="toggleSeq(${s.id},${!s.ativo})" style="font-size:10px;${s.ativo?'color:#22c55e':'color:#f87171'}">${s.ativo?'Ativa':'Pausada'}</button>
+            <button class="btn-cfg" onclick="openSeqEditor(${s.id})" style="font-size:10px"><i class="fa fa-pen"></i></button>
+            <button class="btn-cfg" onclick="deleteSeq(${s.id})" style="font-size:10px;color:#f87171"><i class="fa fa-trash"></i></button>
+          </div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">`;
+      passos.forEach((p,i)=>{
+        h+=`<div style="background:rgba(244,114,182,.08);border:1px solid rgba(244,114,182,.15);border-radius:6px;padding:8px 12px;font-size:11px">
+          <div style="color:#f472b6;font-weight:600">Dia ${p.dia}</div>
+          <div style="color:#e2e8f0">${p.assunto||'(sem assunto)'}</div></div>`;
+        if(i<passos.length-1) h+=`<div style="color:var(--muted);align-self:center">→</div>`;
+      });
+      h+=`</div></div>`;
+    });
+    box.innerHTML=h;
+  }catch(e){box.innerHTML=`<p style="color:#f87171">Erro: ${e.message}</p>`;}
+}
+async function toggleSeq(id,ativo){
+  await fetch(`/api/${BOT}/sequencia/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({ativo})});
+  loadSequencias();
+}
+async function deleteSeq(id){
+  if(!confirm('Excluir sequência?')) return;
+  await fetch(`/api/${BOT}/sequencia/${id}`,{method:'DELETE'});
+  loadSequencias();
+}
+function openSeqEditor(seqId){
+  const seq=seqId?_seqData.find(s=>s.id===seqId):null;
+  const passos=seq?(typeof seq.passos==='string'?JSON.parse(seq.passos):seq.passos||[]):[{dia:0,assunto:'',html_template:''}];
+  let h=`<div class="modal" style="max-width:600px;padding:24px">
+    <h3 style="margin:0 0 16px;color:#e2e8f0">${seq?'Editar':'Nova'} Sequência</h3>
+    <div class="field"><label>Nome da sequência</label>
+    <input id="seq-nome" value="${seq?.nome||''}" placeholder="Ex: Follow-up Prospecção"></div>
+    <h4 style="color:#e2e8f0;margin:16px 0 8px">Passos</h4>
+    <div id="seq-passos">`;
+  passos.forEach((p,i)=>{
+    h+=_seqPassoHtml(i,p);
+  });
+  h+=`</div>
+    <button class="btn-cfg" onclick="addSeqPasso()" style="margin:8px 0;font-size:11px"><i class="fa fa-plus"></i> Adicionar passo</button>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn-cfg" onclick="saveSeq(${seqId||'null'})" style="flex:1;background:rgba(244,114,182,.15);border-color:rgba(244,114,182,.3);color:#f472b6;padding:10px">Salvar</button>
+      <button class="btn-cfg" onclick="document.getElementById('overlay').style.display='none'" style="flex:1;padding:10px">Cancelar</button></div></div>`;
+  document.getElementById('overlay').innerHTML=h;
+  document.getElementById('overlay').style.display='flex';
+}
+function _seqPassoHtml(i,p){
+  return `<div class="seq-passo" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:12px;margin-bottom:8px">
+    <div style="display:flex;gap:8px;margin-bottom:6px">
+      <div style="flex:0 0 80px"><label style="font-size:10px;color:var(--muted)">Dia</label>
+        <input type="number" class="sp-dia" value="${p.dia}" min="0" style="width:100%"></div>
+      <div style="flex:1"><label style="font-size:10px;color:var(--muted)">Assunto</label>
+        <input class="sp-assunto" value="${(p.assunto||'').replace(/"/g,'&quot;')}" placeholder="Assunto do email" style="width:100%"></div>
+      <button onclick="this.closest('.seq-passo').remove()" style="background:none;border:none;color:#f87171;cursor:pointer;align-self:flex-end;padding:6px"><i class="fa fa-times"></i></button>
+    </div>
+    <label style="font-size:10px;color:var(--muted)">Template HTML</label>
+    <textarea class="sp-html" rows="3" style="width:100%;font-size:11px" placeholder="HTML do email...">${(p.html_template||'').replace(/</g,'&lt;')}</textarea></div>`;
+}
+function addSeqPasso(){
+  const box=document.getElementById('seq-passos');
+  const n=box.querySelectorAll('.seq-passo').length;
+  const lastDia=n>0?parseInt(box.querySelectorAll('.sp-dia')[n-1].value)||0:0;
+  box.insertAdjacentHTML('beforeend',_seqPassoHtml(n,{dia:lastDia+3,assunto:'',html_template:''}));
+}
+async function saveSeq(seqId){
+  const nome=document.getElementById('seq-nome').value.trim();
+  if(!nome){alert('Nome obrigatório');return;}
+  const passos=[];
+  document.querySelectorAll('.seq-passo').forEach(el=>{
+    passos.push({
+      dia:parseInt(el.querySelector('.sp-dia').value)||0,
+      assunto:el.querySelector('.sp-assunto').value,
+      html_template:el.querySelector('.sp-html').value
+    });
+  });
+  const url=seqId?`/api/${BOT}/sequencia/${seqId}`:`/api/${BOT}/sequencias`;
+  const method=seqId?'PUT':'POST';
+  await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify({nome,passos})});
+  document.getElementById('overlay').style.display='none';
+  loadSequencias();
+}
+
+// ========================
+// ENRIQUECIMENTO
+// ========================
+async function enriquecerLead(id){
+  const btn=event.target.closest('button');
+  btn.disabled=true;btn.innerHTML='<i class="fa fa-spinner fa-spin"></i>';
+  try{
+    const r=await fetch(`/api/${BOT}/lead/${id}/enriquecer`,{method:'POST'});
+    const d=await r.json();
+    if(d.ok){
+      btn.innerHTML='<i class="fa fa-check"></i> Enriquecido';
+      btn.style.color='#22c55e';
+      // Reload lead data
+      const lr=await fetch(`/api/${BOT}/leads`);
+      const leads=await lr.json();
+      const lead=leads.find(l=>l.id===id);
+      if(lead) openLead(lead);
+    }else{
+      btn.innerHTML='<i class="fa fa-times"></i> '+(d.error||'Erro');
+      btn.style.color='#f87171';
+      setTimeout(()=>{btn.innerHTML='<i class="fa fa-database"></i> Enriquecer';btn.style.color='#60a5fa';btn.disabled=false;},3000);
+    }
+  }catch(e){btn.innerHTML='Erro';btn.disabled=false;}
 }
 </script>
 

@@ -173,6 +173,31 @@ def _init_user_schema(schema: str):
             concluido BOOLEAN DEFAULT FALSE,
             criado_em TIMESTAMP DEFAULT NOW()
         )""",
+        # Enriquecimento
+        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS enriquecido BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS enriquecido_em TIMESTAMP",
+        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS natureza_juridica TEXT",
+        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS situacao_cadastral TEXT",
+        # Sequencias
+        """CREATE TABLE IF NOT EXISTS sequencias (
+            id BIGSERIAL PRIMARY KEY,
+            nome TEXT NOT NULL,
+            passos JSONB DEFAULT '[]',
+            ativo BOOLEAN DEFAULT TRUE,
+            criado_em TIMESTAMP DEFAULT NOW(),
+            atualizado_em TIMESTAMP DEFAULT NOW()
+        )""",
+        """CREATE TABLE IF NOT EXISTS sequencia_leads (
+            id BIGSERIAL PRIMARY KEY,
+            sequencia_id BIGINT REFERENCES sequencias(id) ON DELETE CASCADE,
+            empresa_id BIGINT REFERENCES empresas(id) ON DELETE CASCADE,
+            passo_atual INTEGER DEFAULT 0,
+            proximo_envio TIMESTAMP,
+            status TEXT DEFAULT 'ativo',
+            iniciado_em TIMESTAMP DEFAULT NOW(),
+            atualizado_em TIMESTAMP DEFAULT NOW(),
+            UNIQUE(sequencia_id, empresa_id)
+        )""",
     ]:
         try:
             c.execute(stmt)
@@ -760,10 +785,34 @@ def api_update_lead(bot, lead_id):
             old_st = old['status'] if old else '?'
             new_st = fields['status']
             if old_st != new_st:
-                c.execute("""INSERT INTO atividades (empresa_id, tipo, descricao, dados)
-                             VALUES (%s, 'status_change', %s, %s)""",
-                          (lead_id, f'{old_st} → {new_st}',
-                           json.dumps({'de': old_st, 'para': new_st})))
+                c.execute("""INSERT INTO atividades
+                    (empresa_id, tipo, descricao, dados)
+                    VALUES (%s, 'status_change', %s, %s)""",
+                    (lead_id, f'{old_st} -> {new_st}',
+                     json.dumps({'de': old_st, 'para': new_st})))
+                # Auto-enroll em sequências ativas
+                if new_st == 'contactada':
+                    c.execute("""SELECT id, passos
+                        FROM sequencias WHERE ativo = TRUE""")
+                    for seq in c.fetchall():
+                        ps = seq['passos']
+                        if isinstance(ps, str):
+                            ps = json.loads(ps)
+                        if ps:
+                            d0 = ps[0].get('dia', 0)
+                            try:
+                                c.execute("""INSERT INTO
+                                    sequencia_leads
+                                    (sequencia_id, empresa_id,
+                                     passo_atual, proximo_envio)
+                                    VALUES (%s, %s, 0,
+                                        NOW() + INTERVAL '%s days')
+                                    ON CONFLICT
+                                    (sequencia_id, empresa_id)
+                                    DO NOTHING""",
+                                    (seq['id'], lead_id, d0))
+                            except Exception:
+                                pass
         # Auto-log observacoes as note
         if 'observacoes' in fields and fields['observacoes']:
             c.execute("""INSERT INTO atividades (empresa_id, tipo, descricao)
@@ -957,6 +1006,391 @@ def api_tarefas_pendentes(bot):
         conn.close()
         return jsonify(rows)
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# --- Enriquecimento CNPJ ---
+
+@app.route('/api/<bot>/lead/<int:lead_id>/enriquecer', methods=['POST'])
+@login_required
+def api_enriquecer_lead(bot, lead_id):
+    schema = _get_schema() or bot
+    result = _enriquecer_cnpj(schema, lead_id)
+    if result.get('ok'):
+        return jsonify(result)
+    return jsonify(result), 400
+
+
+# --- Relatórios ---
+
+@app.route('/api/<bot>/relatorios')
+@login_required
+def api_relatorios(bot):
+    schema = _get_schema() or bot
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        # Funil
+        c.execute("""SELECT status, COUNT(*) as total
+            FROM empresas GROUP BY status""")
+        funil_raw = {r['status']: r['total'] for r in c.fetchall()}
+        etapas = ['novo', 'contactada', 'respondeu',
+                  'qualificado', 'demo', 'convertido']
+        funil = []
+        for et in etapas:
+            funil.append({'etapa': et, 'total': funil_raw.get(et, 0)})
+
+        # Leads por fonte
+        c.execute("""SELECT COALESCE(fonte, 'desconhecido') AS fonte,
+            COUNT(*) AS total FROM empresas
+            GROUP BY fonte ORDER BY total DESC LIMIT 10""")
+        por_fonte = [dict(r) for r in c.fetchall()]
+
+        # Leads por dia (ultimos 30 dias)
+        c.execute("""SELECT DATE(encontrado_em) AS data,
+            COUNT(*) AS total FROM empresas
+            WHERE encontrado_em >= NOW() - INTERVAL '30 days'
+            GROUP BY DATE(encontrado_em)
+            ORDER BY data""")
+        por_dia = [{'data': str(r['data']), 'total': r['total']}
+                   for r in c.fetchall()]
+
+        # Métricas email
+        c.execute("""SELECT
+            COUNT(*) FILTER (WHERE email_enviado IS NOT NULL)
+                AS emails_enviados,
+            COUNT(*) FILTER (WHERE email_enviado IS NOT NULL
+                AND status IN ('respondeu','qualificado',
+                    'demo','convertido'))
+                AS emails_respondidos
+            FROM empresas""")
+        em = dict(c.fetchone())
+
+        # Métricas WhatsApp
+        c.execute("""SELECT
+            COUNT(*) FILTER (WHERE wa_enviado IS NOT NULL)
+                AS wa_enviados,
+            COUNT(*) FILTER (WHERE wa_enviado IS NOT NULL
+                AND status IN ('respondeu','qualificado',
+                    'demo','convertido'))
+                AS wa_respondidos
+            FROM empresas""")
+        wm = dict(c.fetchone())
+
+        # Top termos de busca
+        c.execute("""SELECT termo,
+            SUM(resultados) AS total_resultados,
+            COUNT(*) AS vezes_buscado
+            FROM buscas GROUP BY termo
+            ORDER BY total_resultados DESC LIMIT 15""")
+        top_termos = [dict(r) for r in c.fetchall()]
+
+        # Tempo médio por etapa (via atividades)
+        c.execute("""SELECT
+            dados->>'de' AS de_status,
+            dados->>'para' AS para_status,
+            AVG(EXTRACT(EPOCH FROM
+                (criado_em - LAG(criado_em) OVER
+                    (PARTITION BY empresa_id
+                     ORDER BY criado_em))
+            )) / 3600.0 AS avg_horas
+            FROM atividades
+            WHERE tipo = 'status_change'
+            GROUP BY dados->>'de', dados->>'para'
+            ORDER BY avg_horas""")
+        tempo_etapas = [{'de': r['de_status'],
+                         'para': r['para_status'],
+                         'horas': round(r['avg_horas'] or 0, 1)}
+                        for r in c.fetchall()]
+
+        # Enriquecimento
+        c.execute("""SELECT
+            COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE enriquecido = TRUE)
+                AS enriquecidos
+            FROM empresas""")
+        enr = dict(c.fetchone())
+
+        # Sequências
+        c.execute("""SELECT
+            COUNT(*) AS total_sequencias,
+            (SELECT COUNT(*) FROM sequencia_leads
+                WHERE status = 'ativo') AS leads_ativos,
+            (SELECT COUNT(*) FROM sequencia_leads
+                WHERE status = 'concluido') AS leads_concluidos
+            FROM sequencias WHERE ativo = TRUE""")
+        seq_row = c.fetchone()
+        seq_metrics = dict(seq_row) if seq_row else {
+            'total_sequencias': 0,
+            'leads_ativos': 0,
+            'leads_concluidos': 0}
+
+        conn.close()
+        total = sum(f['total'] for f in funil)
+        return jsonify({
+            'funil': funil, 'total_leads': total,
+            'por_fonte': por_fonte, 'por_dia': por_dia,
+            'email': em, 'whatsapp': wm,
+            'top_termos': top_termos,
+            'tempo_etapas': tempo_etapas,
+            'enriquecimento': enr,
+            'sequencias': seq_metrics,
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+# --- Sequências de Email ---
+
+@app.route('/api/<bot>/sequencias')
+@login_required
+def api_list_sequencias(bot):
+    schema = _get_schema() or bot
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute("""SELECT s.*,
+            (SELECT COUNT(*) FROM sequencia_leads sl
+             WHERE sl.sequencia_id = s.id
+             AND sl.status = 'ativo') AS leads_ativos,
+            (SELECT COUNT(*) FROM sequencia_leads sl
+             WHERE sl.sequencia_id = s.id) AS leads_total
+            FROM sequencias s ORDER BY s.criado_em DESC""")
+        rows = [_serialize_row(dict(r)) for r in c.fetchall()]
+        conn.close()
+        return jsonify(rows)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<bot>/sequencias', methods=['POST'])
+@login_required
+def api_create_sequencia(bot):
+    schema = _get_schema() or bot
+    data = request.get_json(silent=True) or {}
+    nome = data.get('nome', '').strip()
+    passos = data.get('passos', [])
+    if not nome:
+        return jsonify({'error': 'nome obrigatorio'}), 400
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute("""INSERT INTO sequencias (nome, passos)
+            VALUES (%s, %s) RETURNING id""",
+            (nome, json.dumps(passos)))
+        seq_id = c.fetchone()['id']
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True, 'id': seq_id})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<bot>/sequencia/<int:seq_id>', methods=['PUT'])
+@login_required
+def api_update_sequencia(bot, seq_id):
+    schema = _get_schema() or bot
+    data = request.get_json(silent=True) or {}
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        sets, vals = [], []
+        if 'nome' in data:
+            sets.append('nome = %s')
+            vals.append(data['nome'])
+        if 'passos' in data:
+            sets.append('passos = %s')
+            vals.append(json.dumps(data['passos']))
+        if 'ativo' in data:
+            sets.append('ativo = %s')
+            vals.append(data['ativo'])
+        sets.append('atualizado_em = NOW()')
+        vals.append(seq_id)
+        c.execute(f"UPDATE sequencias SET {', '.join(sets)}"
+                  f" WHERE id = %s", vals)
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<bot>/sequencia/<int:seq_id>', methods=['DELETE'])
+@login_required
+def api_delete_sequencia(bot, seq_id):
+    schema = _get_schema() or bot
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute('DELETE FROM sequencias WHERE id = %s', (seq_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<bot>/sequencia/<int:seq_id>/enroll',
+           methods=['POST'])
+@login_required
+def api_enroll_leads(bot, seq_id):
+    schema = _get_schema() or bot
+    data = request.get_json(silent=True) or {}
+    lead_ids = data.get('lead_ids', [])
+    if not lead_ids:
+        return jsonify({'error': 'nenhum lead'}), 400
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute('SELECT passos FROM sequencias WHERE id = %s',
+                  (seq_id,))
+        seq = c.fetchone()
+        if not seq:
+            conn.close()
+            return jsonify({'error': 'sequencia nao encontrada'}), 404
+        passos = seq['passos']
+        if isinstance(passos, str):
+            passos = json.loads(passos)
+        dia_0 = passos[0].get('dia', 0) if passos else 0
+        enrolled = 0
+        for lid in lead_ids:
+            try:
+                c.execute("""INSERT INTO sequencia_leads
+                    (sequencia_id, empresa_id, passo_atual,
+                     proximo_envio)
+                    VALUES (%s, %s, 0,
+                        NOW() + INTERVAL '%s days')
+                    ON CONFLICT (sequencia_id, empresa_id)
+                    DO NOTHING""",
+                    (seq_id, lid, dia_0))
+                enrolled += 1
+            except Exception:
+                conn.rollback()
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True, 'enrolled': enrolled})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<bot>/sequencia/<int:seq_id>/leads')
+@login_required
+def api_sequencia_leads(bot, seq_id):
+    schema = _get_schema() or bot
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute("""SELECT sl.*, e.nome_fantasia, e.email
+            FROM sequencia_leads sl
+            JOIN empresas e ON sl.empresa_id = e.id
+            WHERE sl.sequencia_id = %s
+            ORDER BY sl.proximo_envio ASC""", (seq_id,))
+        rows = [_serialize_row(dict(r)) for r in c.fetchall()]
+        conn.close()
+        return jsonify(rows)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<bot>/sequencias/processar', methods=['POST'])
+@login_required
+def api_processar_sequencias(bot):
+    schema = _get_schema() or bot
+    return _processar_sequencias_schema(schema)
+
+
+def _processar_sequencias_schema(schema):
+    """Processa envios pendentes de sequencias."""
+    ecfg = _get_email_config(schema)
+    has_smtp = ecfg.get('smtp_host') and ecfg.get('smtp_user')
+    has_resend = bool(ecfg.get('resend_api_key'))
+    if not has_smtp and not has_resend:
+        return jsonify({'error': 'Email nao configurado'}), 400
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute("""SELECT sl.id, sl.sequencia_id, sl.empresa_id,
+            sl.passo_atual, s.passos, s.nome AS seq_nome,
+            e.nome_fantasia, e.email
+            FROM sequencia_leads sl
+            JOIN sequencias s ON sl.sequencia_id = s.id
+            JOIN empresas e ON sl.empresa_id = e.id
+            WHERE sl.status = 'ativo'
+            AND sl.proximo_envio <= NOW()
+            AND e.email IS NOT NULL
+            AND s.ativo = TRUE
+            ORDER BY sl.proximo_envio ASC
+            LIMIT 50""")
+        pendentes = c.fetchall()
+        enviados = erros = 0
+        for p in pendentes:
+            passos = p['passos']
+            if isinstance(passos, str):
+                passos = json.loads(passos)
+            idx = p['passo_atual']
+            if idx >= len(passos):
+                c.execute("""UPDATE sequencia_leads
+                    SET status = 'concluido',
+                    atualizado_em = NOW()
+                    WHERE id = %s""", (p['id'],))
+                continue
+            passo = passos[idx]
+            nome = p['nome_fantasia'] or 'empresa'
+            link_agenda = _get_link_agenda(schema, p['empresa_id'])
+            assunto = (passo.get('assunto', '')
+                .replace('{{nome}}', nome)
+                .replace('{{link_agenda}}', link_agenda))
+            html = (passo.get('html_template', '')
+                .replace('{{nome}}', nome)
+                .replace('{{link_agenda}}', link_agenda))
+            try:
+                ok = _send_email(ecfg, p['email'], nome,
+                                 assunto, html)
+                if ok:
+                    enviados += 1
+                    next_idx = idx + 1
+                    if next_idx >= len(passos):
+                        c.execute("""UPDATE sequencia_leads
+                            SET passo_atual = %s,
+                            status = 'concluido',
+                            atualizado_em = NOW()
+                            WHERE id = %s""",
+                            (next_idx, p['id']))
+                    else:
+                        next_dia = passos[next_idx].get('dia', 0)
+                        dias_diff = next_dia - passo.get('dia', 0)
+                        c.execute("""UPDATE sequencia_leads
+                            SET passo_atual = %s,
+                            proximo_envio = NOW()
+                                + INTERVAL '%s days',
+                            atualizado_em = NOW()
+                            WHERE id = %s""",
+                            (next_idx, dias_diff, p['id']))
+                    c.execute("""UPDATE empresas
+                        SET email_enviado = NOW(),
+                        status = CASE WHEN status = 'novo'
+                            THEN 'contactada' ELSE status END
+                        WHERE id = %s""", (p['empresa_id'],))
+                    c.execute("""INSERT INTO atividades
+                        (empresa_id, tipo, descricao) VALUES
+                        (%s, 'sequencia', %s)""",
+                        (p['empresa_id'],
+                         f"Seq '{p['seq_nome']}' passo "
+                         f"{idx+1}: {assunto}"))
+                else:
+                    erros += 1
+            except Exception as e:
+                print(f'[seq] erro: {e}', flush=True)
+                erros += 1
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True,
+                        'enviados': enviados, 'erros': erros})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
@@ -1934,6 +2368,64 @@ def _get_agenda_token(schema, lead_id):
     conn.commit()
     conn.close()
     return token
+
+
+def _enriquecer_cnpj(schema, lead_id):
+    """Enriquece dados do lead via BrasilAPI (CNPJ)."""
+    import requests as http
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute('SELECT cnpj FROM empresas WHERE id = %s', (lead_id,))
+        row = c.fetchone()
+        if not row or not row.get('cnpj'):
+            conn.close()
+            return {'ok': False, 'error': 'Lead sem CNPJ'}
+        cnpj_digits = ''.join(ch for ch in row['cnpj'] if ch.isdigit())
+        if len(cnpj_digits) != 14:
+            conn.close()
+            return {'ok': False, 'error': 'CNPJ invalido'}
+        r = http.get(f'https://brasilapi.com.br/api/cnpj/v1/{cnpj_digits}', timeout=10)
+        if r.status_code != 200:
+            conn.close()
+            return {'ok': False, 'error': f'BrasilAPI retornou {r.status_code}'}
+        d = r.json()
+        razao = d.get('razao_social', '')
+        fantasia = d.get('nome_fantasia', '')
+        porte = d.get('porte', '')
+        natureza = d.get('descricao_natureza_juridica', '')
+        situacao = d.get('descricao_situacao_cadastral', '')
+        logr = d.get('logradouro', '')
+        num = d.get('numero', '')
+        compl = d.get('complemento', '')
+        bairro = d.get('bairro', '')
+        mun = d.get('municipio', '')
+        uf = d.get('uf', '')
+        endereco = f'{logr}, {num}'.strip(', ')
+        if compl:
+            endereco += f' - {compl}'
+        if bairro:
+            endereco += f', {bairro}'
+        c.execute("""UPDATE empresas SET
+            razao_social = COALESCE(NULLIF(razao_social,''), %s),
+            nome_fantasia = COALESCE(NULLIF(nome_fantasia,''), %s),
+            porte = %s, natureza_juridica = %s, situacao_cadastral = %s,
+            endereco = COALESCE(NULLIF(endereco,''), %s),
+            cidade = COALESCE(NULLIF(cidade,''), %s),
+            estado = COALESCE(NULLIF(estado,''), %s),
+            enriquecido = TRUE, enriquecido_em = NOW()
+            WHERE id = %s""",
+            (razao, fantasia, porte, natureza, situacao,
+             endereco, mun, uf, lead_id))
+        c.execute("""INSERT INTO atividades (empresa_id, tipo, descricao)
+            VALUES (%s, 'enriquecimento', %s)""",
+            (lead_id, f'CNPJ enriquecido: {razao} | {porte} | {situacao}'))
+        conn.commit()
+        conn.close()
+        return {'ok': True, 'razao_social': razao, 'porte': porte,
+                'cidade': mun, 'estado': uf, 'situacao': situacao}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
 
 
 def _get_link_agenda(schema, lead_id):
