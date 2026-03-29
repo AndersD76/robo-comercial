@@ -364,7 +364,7 @@ def get_stats(schema: str) -> dict:
     return z
 
 
-def get_leads(schema: str, limite: int = 500) -> list:
+def get_leads(schema: str, limite: int = 5000) -> list:
     if not DATABASE_URL or not schema:
         return []
     try:
@@ -620,7 +620,7 @@ def api_pipeline():
 @login_required
 def api_leads(bot):
     schema = _get_schema() or bot
-    limite = request.args.get('limite', 500, type=int)
+    limite = request.args.get('limite', 5000, type=int)
     return jsonify(get_leads(schema, limite))
 
 
