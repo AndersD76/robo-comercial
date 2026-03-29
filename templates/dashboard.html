@@ -129,14 +129,14 @@
 
     /* KPI row */
     .kpi-row { display:grid; grid-template-columns:repeat(3,1fr); border-bottom:1px solid var(--border); }
-    .kpi-box { padding:26px 16px; text-align:center; border-right:1px solid var(--border); background:var(--accent-dim); }
+    .kpi-box { padding:26px 16px; text-align:center; border-right:1px solid var(--border); background:var(--accent-dim); min-width:0; overflow:hidden; }
     .kpi-box:last-child { border-right:none; }
     .kpi-n { font-size:48px; font-weight:900; line-height:1; margin-bottom:7px; letter-spacing:-2px; color:var(--accent); }
     .kpi-l { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--sub); }
 
     /* Funnel */
-    .funnel-row { display:flex; padding:14px 16px; border-bottom:1px solid var(--border); }
-    .fstep { flex:1; text-align:center; padding:4px 2px; position:relative; }
+    .funnel-row { display:grid; grid-template-columns:repeat(4,1fr); padding:14px 16px; border-bottom:1px solid var(--border); }
+    .fstep { text-align:center; padding:4px 2px; position:relative; min-width:0; overflow:hidden; }
     .fstep + .fstep::before { content:'›'; position:absolute; left:-4px; top:50%; transform:translateY(-50%); color:var(--sub); font-size:20px; line-height:1; }
     .fstep .fn { font-size:22px; font-weight:800; line-height:1; display:block; margin-bottom:5px; letter-spacing:-.5px; color:var(--accent); }
     .fstep .ft { font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--sub); font-weight:600; }
@@ -166,6 +166,7 @@
       overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     }
     tbody td { padding:8px 6px; border-bottom:1px solid rgba(255,255,255,.05); color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    tbody td:last-child { overflow:visible; }
     tbody tr:last-child td { border-bottom:none; }
     tbody tr:hover { background:rgba(255,255,255,.04); }
 
@@ -1010,7 +1011,7 @@ function renderLeadsList(){
     <td style="white-space:nowrap">${statusChip(l.status,l.demo_status)}${l.email_enviado?' <span class="chip c-email" title="Email enviado"><i class="fa fa-envelope" style="font-size:9px"></i></span>':''}${l.wa_enviado?' <span class="chip" style="background:#22c55e;color:#1a1a2e;padding:2px 5px;font-size:10px" title="WhatsApp enviado"><i class="fab fa-whatsapp" style="font-size:9px"></i></span>':''}</td>
     <td style="color:var(--muted)">${l.score||0}</td>
     <td style="color:var(--muted);font-size:11px;white-space:nowrap">${dt}</td>
-    <td style="white-space:nowrap">
+    <td style="white-space:nowrap;overflow:visible;min-width:90px;text-align:right">
       <button onclick="editWA(findLead(${l.id}))" class="row-btn" title="Editar"><i class="fa fa-pen" style="font-size:10px"></i></button>
       <button onclick="openLead(findLead(${l.id}))" class="row-btn" title="Detalhes"><i class="fa fa-ellipsis" style="font-size:10px"></i></button>
       <button onclick="delWA(${l.id})" class="row-btn row-btn-del" title="Excluir"><i class="fa fa-trash" style="font-size:10px"></i></button>
