@@ -1011,8 +1011,8 @@ function renderLeadsList(){
     <td style="color:var(--muted)">${l.score||0}</td>
     <td style="color:var(--muted);font-size:11px;white-space:nowrap">${dt}</td>
     <td style="white-space:nowrap">
-      <button onclick="editWA(_waAllLeads.find(x=>x.id===${l.id}))" class="row-btn" title="Editar"><i class="fa fa-pen" style="font-size:10px"></i></button>
-      <button onclick="openLead(_waAllLeads.find(x=>x.id==${l.id})||_waAllLeads.find(x=>x.id==='${l.id}'))" class="row-btn" title="Detalhes"><i class="fa fa-ellipsis" style="font-size:10px"></i></button>
+      <button onclick="editWA(findLead(${l.id}))" class="row-btn" title="Editar"><i class="fa fa-pen" style="font-size:10px"></i></button>
+      <button onclick="openLead(findLead(${l.id}))" class="row-btn" title="Detalhes"><i class="fa fa-ellipsis" style="font-size:10px"></i></button>
       <button onclick="delWA(${l.id})" class="row-btn row-btn-del" title="Excluir"><i class="fa fa-trash" style="font-size:10px"></i></button>
     </td>
   </tr>`;}).join('');
@@ -1325,6 +1325,9 @@ function switchModalTab(tab,btn){
   if(tab==='tarefas') loadTarefas(_currentModalLead.id);
 }
 
+function findLead(id){
+  return _waAllLeads.find(x=>x.id==id);
+}
 function openLead(l){
   if(!l){alert('Lead não encontrado');return;}
   _currentModalLead=l;

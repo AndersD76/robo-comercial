@@ -1547,12 +1547,21 @@ def _send_email(ecfg, to_email, to_name, subject, html):
             msg['Subject'] = subject
             msg.attach(MIMEText(html, 'html', 'utf-8'))
             port = int(ecfg.get('smtp_port', 587))
-            with smtplib.SMTP(smtp_host, port, timeout=15) as s:
-                s.ehlo()
-                if port != 25:
-                    s.starttls()
-                s.login(smtp_user, smtp_pass)
-                s.sendmail(sender_email, to_email, msg.as_string())
+            if port == 465:
+                with smtplib.SMTP_SSL(smtp_host, port,
+                                      timeout=15) as s:
+                    s.login(smtp_user, smtp_pass)
+                    s.sendmail(sender_email, to_email,
+                               msg.as_string())
+            else:
+                with smtplib.SMTP(smtp_host, port,
+                                  timeout=15) as s:
+                    s.ehlo()
+                    if port != 25:
+                        s.starttls()
+                    s.login(smtp_user, smtp_pass)
+                    s.sendmail(sender_email, to_email,
+                               msg.as_string())
             return True
         except Exception as e:
             print(f'[SMTP] erro: {e}')
