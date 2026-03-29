@@ -1108,20 +1108,22 @@ def api_relatorios(bot):
         top_termos = [dict(r) for r in c.fetchall()]
 
         # Tempo médio por etapa (via atividades)
-        c.execute("""SELECT
-            dados->>'de' AS de_status,
-            dados->>'para' AS para_status,
-            AVG(EXTRACT(EPOCH FROM
-                (criado_em - LAG(criado_em) OVER
-                    (PARTITION BY empresa_id
-                     ORDER BY criado_em))
-            )) / 3600.0 AS avg_horas
-            FROM atividades
-            WHERE tipo = 'status_change'
-            GROUP BY dados->>'de', dados->>'para'
-            ORDER BY avg_horas""")
-        tempo_etapas = [{'de': r['de_status'],
-                         'para': r['para_status'],
+        c.execute("""WITH diffs AS (
+            SELECT dados->>'de' AS de_st,
+                   dados->>'para' AS para_st,
+                   criado_em - LAG(criado_em) OVER
+                       (PARTITION BY empresa_id
+                        ORDER BY criado_em) AS diff
+            FROM atividades WHERE tipo = 'status_change'
+        )
+        SELECT de_st, para_st,
+            AVG(EXTRACT(EPOCH FROM diff)) / 3600.0
+                AS avg_horas
+        FROM diffs WHERE diff IS NOT NULL
+        GROUP BY de_st, para_st
+        ORDER BY avg_horas""")
+        tempo_etapas = [{'de': r['de_st'],
+                         'para': r['para_st'],
                          'horas': round(r['avg_horas'] or 0, 1)}
                         for r in c.fetchall()]
 
