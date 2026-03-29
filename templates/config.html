@@ -134,7 +134,7 @@
     </div>
     <div class="field">
       <label>Descreva seu produto/serviço e cliente ideal</label>
-      <textarea id="descricao" rows="4" placeholder="Ex: Vendemos tombadores e coletores de grãos para cerealistas, cooperativas agrícolas e silos. Nosso cliente ideal é o gerente de operações ou compras de empresas que trabalham com recebimento e armazenagem de soja, milho e trigo no Centro-Oeste e Sul do Brasil.">{{ cfg.descricao or '' }}</textarea>
+      <textarea id="descricao" rows="4" placeholder="Ex: Vendemos tombadores e coletores de grãos para cerealistas, cooperativas agrícolas e silos. Nosso cliente ideal é o gerente de operações ou compras de empresas que trabalham com recebimento e armazenagem de soja, milho e trigo no Centro-Oeste e Sul do Brasil.">{{ cfg.descricao|default('',true)|e }}</textarea>
     </div>
   </div>
 
@@ -160,12 +160,12 @@
       Esta mensagem será enviada no primeiro contato com cada lead. A IA gera uma sugestão baseada no seu negócio — edite antes de salvar.
     </p>
     <div class="terms-header" style="margin-bottom:10px">
-      <span style="font-size:12px;color:var(--muted)">Variáveis: <code style="color:#22c55e">{{nome}}</code> = empresa, <code style="color:#22c55e">{{cal_link}}</code> = link de agendamento</span>
+      <span style="font-size:12px;color:var(--muted)">Variáveis: <code style="color:#22c55e">{% raw %}{{nome}}{% endraw %}</code> = empresa, <code style="color:#22c55e">{% raw %}{{cal_link}}{% endraw %}</code> = link de agendamento</span>
       <button class="btn-gen" id="btn-gen-msg" onclick="generateMsg()">
         <i class="fa fa-wand-magic-sparkles"></i> Gerar com IA
       </button>
     </div>
-    <textarea id="msg_inicial" rows="6" placeholder="Olá! Sou da equipe {{nome_empresa}}.&#10;&#10;Vi que a {{nome}} pode se interessar...&#10;&#10;Posso agendar uma conversa? {{cal_link}}">{{ cfg.msg_inicial or '' }}</textarea>
+    <textarea id="msg_inicial" rows="6" placeholder="Olá! Sou da equipe {nome_empresa}.&#10;&#10;Vi que a {nome} pode se interessar...&#10;&#10;Posso agendar uma conversa? {cal_link}">{{ cfg.msg_inicial|default('',true)|e }}</textarea>
   </div>
 
   <!-- CONFIG EMAIL -->
@@ -227,11 +227,11 @@
     </p>
     <div class="field">
       <label>Assunto padrão do email</label>
-      <input type="text" id="email_assunto_padrao" value="{{ cfg.email_assunto_padrao or '' }}" placeholder="Ex: {{nome}}, conheça nossa solução para seu negócio">
-      <small style="color:var(--muted);font-size:11px">Use <code style="color:#818cf8">{{nome}}</code> para o nome da empresa</small>
+      <input type="text" id="email_assunto_padrao" value="{{ cfg.email_assunto_padrao|default('',true)|e }}" placeholder="Ex: {nome}, conheça nossa solução para seu negócio">
+      <small style="color:var(--muted);font-size:11px">Use <code style="color:#818cf8">{% raw %}{{nome}}{% endraw %}</code> para o nome da empresa</small>
     </div>
     <div class="field">
-      <label>Template HTML do email <small>— Variáveis: {{nome}}, {{email}}, {{segmento}}, {{cidade}}, {{link_agenda}}</small></label>
+      <label>Template HTML do email <small>— Variáveis: {% raw %}{{nome}}, {{email}}, {{segmento}}, {{cidade}}, {{link_agenda}}{% endraw %}</small></label>
       <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
         <button class="btn-gen" id="btn-gen-email" onclick="generateEmail()">
           <i class="fa fa-wand-magic-sparkles"></i> Gerar com IA
@@ -245,7 +245,7 @@
         </button>
         <span id="cfg-html-filename" style="font-size:12px;color:var(--muted);align-self:center"></span>
       </div>
-      <textarea id="email_html_template" rows="12" placeholder="<html>&#10;<body>&#10;  <div style='font-family:sans-serif;max-width:600px;margin:0 auto'>&#10;    <h2>Olá {{nome}}!</h2>&#10;    <p>Sua mensagem aqui...</p>&#10;  </div>&#10;</body>&#10;</html>" style="font-family:'Courier New',monospace;font-size:12px">{{ cfg.email_html_template or '' }}</textarea>
+      <textarea id="email_html_template" rows="12" placeholder="<html>&#10;<body>&#10;  <div style='font-family:sans-serif;max-width:600px;margin:0 auto'>&#10;    <h2>Olá {nome}!</h2>&#10;    <p>Sua mensagem aqui...</p>&#10;  </div>&#10;</body>&#10;</html>" style="font-family:'Courier New',monospace;font-size:12px">{{ cfg.email_html_template|default('',true)|e }}</textarea>
       <div id="cfg-html-preview" style="display:none;margin-top:10px;background:#fff;border-radius:8px;padding:16px;max-height:400px;overflow:auto"></div>
     </div>
   </div>
