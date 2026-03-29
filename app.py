@@ -7,6 +7,7 @@ Landing page + cadastro + dashboard por empresa + LinkedIn + busca IA
 import hashlib
 import json
 import os
+import random
 import re
 import secrets
 import subprocess
@@ -19,6 +20,8 @@ from flask import (Flask, jsonify, redirect, render_template,
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'mv-saas-2025-change-in-prod')
+app.config['TEMPLATES_AUTO_RELOAD'] = True
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 if not DATABASE_URL:
