@@ -937,54 +937,77 @@ function lbCls(t=''){
 }
 
 let _waLeads=[];
+let _waAllLeads=[];
+let _waPage=1;
+const _waPerPage=50;
+
 function loadWA(){
   fetch(`/api/${BOT}/leads`).then(r=>r.json()).then(d=>{
-    _waLeads=d;
-    const tb=document.getElementById('wa-tb');
-    if(!d.length){ tb.innerHTML='<tr><td colspan="11"><div class="empty-state"><i class="fa fa-inbox"></i>Nenhum lead ainda</div></td></tr>'; return; }
-    tb.innerHTML=d.map((l,i)=>{
-      let dt='—';
-      if(l.encontrado_em){try{const d2=new Date(l.encontrado_em);dt=d2.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){}}
-      return `<tr>
-      <td><input type="checkbox" class="lead-chk" value="${l.id}" data-email="${l.email||''}"></td>
-      <td style="color:var(--muted);font-size:11px">${i+1}</td>
-      <td><b>${l.nome_fantasia||'—'}</b></td>
-      <td style="color:var(--muted);font-size:11px">${l.whatsapp||l.telefone||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
-      <td style="color:var(--muted);font-size:11px">${l.email||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
-      <td style="color:var(--muted);font-size:11px">${l.cnpj||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
-      <td style="color:var(--muted);font-size:11px">${l._decisor||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
-      <td style="white-space:nowrap">${statusChip(l.status,l.demo_status)}${l.email_enviado?' <span class="chip c-email" title="Email enviado"><i class="fa fa-envelope" style="font-size:9px"></i></span>':''}${l.wa_enviado?' <span class="chip" style="background:#22c55e;color:#1a1a2e;padding:2px 5px;font-size:10px" title="WhatsApp enviado"><i class="fab fa-whatsapp" style="font-size:9px"></i></span>':''}</td>
-      <td style="color:var(--muted)">${l.score||0}</td>
-      <td style="color:var(--muted);font-size:11px;white-space:nowrap">${dt}</td>
-      <td style="white-space:nowrap">
-        <button onclick="editWA(_waLeads.find(x=>x.id===${l.id}))" class="row-btn" title="Editar"><i class="fa fa-pen" style="font-size:10px"></i></button>
-        <button onclick="delWA(${l.id})" class="row-btn row-btn-del" title="Excluir"><i class="fa fa-trash" style="font-size:10px"></i></button>
-      </td>
-    </tr>`;}).join('');
-    document.getElementById('lead-count').textContent=d.length+' leads';
+    _waAllLeads=d;
+    _waPage=1;
+    renderLeadsList();
   }).catch(e=>{console.error('loadWA error:',e)});
 }
-function filterLeads(){
-  const q=document.getElementById('lead-search').value.toLowerCase();
-  const statusFilter=document.getElementById('filter-status').value;
-  const sourceFilter=document.getElementById('filter-source').value;
-  const rows=document.querySelectorAll('#wa-tb tr');
-  let vis=0;
-  _waLeads.forEach((l,i)=>{
-    const row=rows[i];
-    if(!row) return;
-    let show=true;
-    if(q && !(l.nome_fantasia||'').toLowerCase().includes(q) &&
-       !(l.email||'').toLowerCase().includes(q) &&
-       !(l.cnpj||'').toLowerCase().includes(q) &&
-       !(l.telefone||'').toLowerCase().includes(q) &&
-       !(l.cidade||'').toLowerCase().includes(q)) show=false;
-    if(statusFilter && l.status!==statusFilter) show=false;
-    if(sourceFilter && l.fonte!==sourceFilter) show=false;
-    row.style.display=show?'':'none';
-    if(show) vis++;
+
+function renderLeadsList(){
+  const filtered=getFilteredLeads();
+  const totalPages=Math.max(1,Math.ceil(filtered.length/_waPerPage));
+  if(_waPage>totalPages) _waPage=totalPages;
+  const start=(_waPage-1)*_waPerPage;
+  const page=filtered.slice(start,start+_waPerPage);
+  _waLeads=_waAllLeads; // mantém referência completa para edição/delete
+
+  const tb=document.getElementById('wa-tb');
+  if(!filtered.length){ tb.innerHTML='<tr><td colspan="11"><div class="empty-state"><i class="fa fa-inbox"></i>Nenhum lead ainda</div></td></tr>'; document.getElementById('lead-count').textContent='0 leads'; return; }
+
+  tb.innerHTML=page.map((l,i)=>{
+    let dt='—';
+    if(l.encontrado_em){try{const d2=new Date(l.encontrado_em);dt=d2.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){}}
+    const idx=start+i+1;
+    return `<tr>
+    <td><input type="checkbox" class="lead-chk" value="${l.id}" data-email="${l.email||''}"></td>
+    <td style="color:var(--muted);font-size:11px">${idx}</td>
+    <td><b>${l.nome_fantasia||'—'}</b></td>
+    <td style="color:var(--muted);font-size:11px">${l.whatsapp||l.telefone||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
+    <td style="color:var(--muted);font-size:11px">${l.email||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
+    <td style="color:var(--muted);font-size:11px">${l.cnpj||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
+    <td style="color:var(--muted);font-size:11px">${l._decisor||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
+    <td style="white-space:nowrap">${statusChip(l.status,l.demo_status)}${l.email_enviado?' <span class="chip c-email" title="Email enviado"><i class="fa fa-envelope" style="font-size:9px"></i></span>':''}${l.wa_enviado?' <span class="chip" style="background:#22c55e;color:#1a1a2e;padding:2px 5px;font-size:10px" title="WhatsApp enviado"><i class="fab fa-whatsapp" style="font-size:9px"></i></span>':''}</td>
+    <td style="color:var(--muted)">${l.score||0}</td>
+    <td style="color:var(--muted);font-size:11px;white-space:nowrap">${dt}</td>
+    <td style="white-space:nowrap">
+      <button onclick="editWA(_waAllLeads.find(x=>x.id===${l.id}))" class="row-btn" title="Editar"><i class="fa fa-pen" style="font-size:10px"></i></button>
+      <button onclick="delWA(${l.id})" class="row-btn row-btn-del" title="Excluir"><i class="fa fa-trash" style="font-size:10px"></i></button>
+    </td>
+  </tr>`;}).join('');
+
+  // Paginação
+  let pagHtml=`<tr><td colspan="11"><div style="display:flex;justify-content:center;align-items:center;gap:12px;padding:10px 0">
+    <button onclick="_waPage=1;renderLeadsList()" ${_waPage<=1?'disabled':''} style="background:none;border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px"><i class="fa fa-angles-left"></i></button>
+    <button onclick="_waPage--;renderLeadsList()" ${_waPage<=1?'disabled':''} style="background:none;border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px"><i class="fa fa-chevron-left"></i></button>
+    <span style="color:var(--muted);font-size:12px">Página ${_waPage} de ${totalPages} (${filtered.length} leads)</span>
+    <button onclick="_waPage++;renderLeadsList()" ${_waPage>=totalPages?'disabled':''} style="background:none;border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px"><i class="fa fa-chevron-right"></i></button>
+    <button onclick="_waPage=${totalPages};renderLeadsList()" ${_waPage>=totalPages?'disabled':''} style="background:none;border:1px solid rgba(255,255,255,.15);color:#fff;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px"><i class="fa fa-angles-right"></i></button>
+  </div></td></tr>`;
+  tb.innerHTML+=pagHtml;
+
+  document.getElementById('lead-count').textContent=filtered.length+' leads';
+}
+
+function getFilteredLeads(){
+  const q=(document.getElementById('lead-search')?.value||'').toLowerCase();
+  const statusF=document.getElementById('filter-status')?.value||'';
+  const sourceF=document.getElementById('filter-source')?.value||'';
+  return _waAllLeads.filter(l=>{
+    if(q && !(l.nome_fantasia||'').toLowerCase().includes(q) && !(l.email||'').toLowerCase().includes(q) && !(l.cnpj||'').toLowerCase().includes(q) && !(l.telefone||'').toLowerCase().includes(q)) return false;
+    if(statusF && l.status!==statusF) return false;
+    if(sourceF && l.fonte!==sourceF) return false;
+    return true;
   });
-  document.getElementById('lead-count').textContent=vis+'/'+_waLeads.length+' leads';
+}
+function filterLeads(){
+  _waPage=1;
+  renderLeadsList();
 }
 
 function exportCSV(){
