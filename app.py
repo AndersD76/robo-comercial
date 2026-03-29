@@ -1321,8 +1321,7 @@ def api_save_config(bot):
 
     conn = None
     try:
-        # Garante que colunas novas existem
-        _init_user_schema(schema)
+        print(f'[save_config/{schema}] Iniciando save...', flush=True)
         conn = _conn(schema)
         c = conn.cursor()
         c.execute('SELECT * FROM bot_config LIMIT 1')
@@ -1398,10 +1397,12 @@ def api_save_config(bot):
             except Exception:
                 pass
 
+        print(f'[save_config/{schema}] OK - salvou {len(termos)} termos', flush=True)
         return jsonify({'ok': True, 'termos': termos})
     except Exception as e:
         import traceback
         traceback.print_exc()
+        print(f'[save_config/{schema}] ERRO: {e}', flush=True)
         return jsonify({'error': str(e)}), 500
     finally:
         if conn:
