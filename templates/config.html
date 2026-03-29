@@ -478,11 +478,12 @@ async function saveConfig(redirect=true) {
         smtp_password: document.getElementById('smtp_password').value
       })
     })
+    if (!r.ok) { showToast('Erro HTTP ' + r.status, false); return }
     const d = await r.json()
     if (d.ok) {
       if (redirect) {
-        btn.innerHTML = '<i class="fa fa-check"></i> Salvo! Redirecionando...'
-        setTimeout(() => { window.location.href = '/dashboard' }, 800)
+        btn.innerHTML = '<i class="fa fa-check"></i> Salvo!'
+        window.location.href = '/dashboard'
         return
       } else {
         showToast('Configurações salvas!', true)
@@ -491,12 +492,10 @@ async function saveConfig(redirect=true) {
         return
       }
     } else {
-      showToast('Erro: ' + (d.error || 'falha ao salvar'), false)
-      console.error('Save failed:', d)
+      showToast('Erro: ' + (d.error || JSON.stringify(d)), false)
     }
   } catch(e) {
-    showToast('Erro de conexão: ' + e.message, false)
-    console.error('Save exception:', e)
+    showToast('Erro: ' + e.message, false)
   }
   btn.disabled = false
   btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'
