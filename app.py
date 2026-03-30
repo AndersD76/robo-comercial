@@ -591,6 +591,7 @@ def landing():
 @login_required
 def dashboard():
     user = get_current_user()
+    print(f'[dashboard] user_id={session.get("user_id")} schema={user.get("schema_name") if user else "NO_USER"}', flush=True)
     if not user or not user.get('schema_name'):
         return redirect(url_for('config_page'))
     schema = user['schema_name']
