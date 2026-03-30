@@ -1521,7 +1521,7 @@ def _get_email_config(schema: str) -> dict:
         'smtp_port': cfg.get('smtp_port') or 587,
         'smtp_user': cfg.get('smtp_user') or '',
         'smtp_password': cfg.get('smtp_password') or '',
-        'resend_api_key': cfg.get('resend_api_key') or '',
+        'resend_api_key': os.environ.get('RESEND_API_KEY', '') or cfg.get('resend_api_key') or '',
     }
 
 
@@ -1608,7 +1608,7 @@ def api_send_emails(bot):
     has_smtp = ecfg.get('smtp_host') and ecfg.get('smtp_user')
     has_resend = bool(ecfg.get('resend_api_key'))
     if not has_smtp and not has_resend:
-        return jsonify({'error': 'Configure SMTP ou Resend em Configurações'}), 400
+        return jsonify({'error': 'Email não configurado. Verifique a variável RESEND_API_KEY ou configure SMTP.'}), 400
     if not ecfg['sender_email']:
         return jsonify({'error': 'Configure seu email remetente em Configurações'}), 400
 
@@ -1687,7 +1687,7 @@ def api_email_campanha(bot):
     has_smtp = ecfg.get('smtp_host') and ecfg.get('smtp_user')
     has_resend = bool(ecfg.get('resend_api_key'))
     if not has_smtp and not has_resend:
-        return jsonify({'error': 'Configure SMTP ou Resend em Configurações'}), 400
+        return jsonify({'error': 'Email não configurado. Verifique a variável RESEND_API_KEY ou configure SMTP.'}), 400
     if not ecfg['sender_email']:
         return jsonify({'error': 'Configure seu email remetente em Configurações'}), 400
 
