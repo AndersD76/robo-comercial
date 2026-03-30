@@ -259,7 +259,7 @@ try {
   }
 } catch(e) { terms = []; }
 
-// Carregar msg_inicial e email_html_template via JSON (evita Jinja interpretar {{}})
+// Carregar msg_inicial e email_html_template via JSON
 try {
   var _msgEl = document.getElementById('cfg-msg-inicial');
   if (_msgEl) { var _v = JSON.parse(_msgEl.textContent); if (_v) document.getElementById('msg_inicial').value = _v; }
