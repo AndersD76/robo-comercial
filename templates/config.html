@@ -184,11 +184,6 @@
         <input type="text" id="email_remetente_nome" value="{{ cfg.email_remetente_nome or '' }}" placeholder="Ex: João da Empresa XYZ">
       </div>
     </div>
-    <input type="hidden" id="resend_api_key" value="">
-    <input type="hidden" id="smtp_host" value="">
-    <input type="hidden" id="smtp_port" value="587">
-    <input type="hidden" id="smtp_user" value="">
-    <input type="hidden" id="smtp_password" value="">
   </div>
 
   <!-- TEMPLATE EMAIL -->
@@ -437,21 +432,17 @@ async function saveConfig(redirect) {
     btn.disabled = true
     btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Salvando...'
     dbg.textContent = '2. Fazendo fetch...'
+    var val = function(id) { var el = document.getElementById(id); return el ? el.value : ''; }
     var payload = {
-      empresa_nome: document.getElementById('empresa_nome').value,
-      website: document.getElementById('website').value,
-      descricao: document.getElementById('descricao').value,
+      empresa_nome: val('empresa_nome'),
+      website: val('website'),
+      descricao: val('descricao'),
       termos_busca: Array.isArray(terms) ? terms.filter(Boolean) : [],
-      msg_inicial: document.getElementById('msg_inicial').value,
-      email_assunto_padrao: document.getElementById('email_assunto_padrao').value,
-      email_html_template: document.getElementById('email_html_template').value,
-      resend_api_key: document.getElementById('resend_api_key').value,
-      email_remetente: document.getElementById('email_remetente').value,
-      email_remetente_nome: document.getElementById('email_remetente_nome').value,
-      smtp_host: document.getElementById('smtp_host').value,
-      smtp_port: parseInt(document.getElementById('smtp_port').value) || 587,
-      smtp_user: document.getElementById('smtp_user').value,
-      smtp_password: document.getElementById('smtp_password').value
+      msg_inicial: val('msg_inicial'),
+      email_assunto_padrao: val('email_assunto_padrao'),
+      email_html_template: val('email_html_template'),
+      email_remetente: val('email_remetente'),
+      email_remetente_nome: val('email_remetente_nome')
     }
     var r = await fetch('/api/' + BOT + '/config', {
       method: 'POST',
