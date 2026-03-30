@@ -1526,14 +1526,35 @@ def _get_email_config(schema: str) -> dict:
 
 
 def _send_email(ecfg, to_email, to_name, subject, html):
-    """Envia email via SMTP direto, Resend ou Brevo."""
+    """Envia email via Resend API (prioridade) ou SMTP direto."""
     sender_email = ecfg.get('sender_email', '')
     sender_name = ecfg.get('sender_name', '')
-    print(f'[EMAIL] to={to_email} smtp={ecfg.get("smtp_host")}:{ecfg.get("smtp_port")} user={ecfg.get("smtp_user")} from={sender_email}', flush=True)
+    print(f'[EMAIL] to={to_email} from={sender_email}', flush=True)
     if not sender_email:
         return False
 
-    # Opção 1: SMTP direto (qualquer email)
+    # Opção 1: Resend API (prioridade — SMTP bloqueado no Railway)
+    resend_key = ecfg.get('resend_api_key', '')
+    if resend_key:
+        try:
+            import requests as http
+            r = http.post('https://api.resend.com/emails',
+                          headers={'Authorization': f'Bearer {resend_key}',
+                                   'Content-Type': 'application/json'},
+                          json={'from': f'{sender_name} <{sender_email}>',
+                                'to': [to_email],
+                                'subject': subject,
+                                'html': html},
+                          timeout=15)
+            if r.status_code in (200, 201):
+                print(f'[RESEND] OK enviado para {to_email}', flush=True)
+                return True
+            else:
+                print(f'[RESEND] erro {r.status_code}: {r.text}', flush=True)
+        except Exception as e:
+            print(f'[RESEND] erro: {e}', flush=True)
+
+    # Opção 2: SMTP direto (fallback — funciona fora do Railway)
     smtp_host = ecfg.get('smtp_host', '')
     smtp_user = ecfg.get('smtp_user', '')
     smtp_pass = ecfg.get('smtp_password', '')
@@ -1547,7 +1568,6 @@ def _send_email(ecfg, to_email, to_name, subject, html):
             msg['To'] = to_email
             msg['Subject'] = subject
             msg.attach(MIMEText(html, 'html', 'utf-8'))
-            # Tenta porta configurada, fallback 587
             port = int(ecfg.get('smtp_port', 587))
             ports_to_try = [port]
             if port == 465:
@@ -1555,49 +1575,24 @@ def _send_email(ecfg, to_email, to_name, subject, html):
             for p in ports_to_try:
                 try:
                     if p == 465:
-                        with smtplib.SMTP_SSL(
-                                smtp_host, p,
-                                timeout=15) as s:
+                        with smtplib.SMTP_SSL(smtp_host, p, timeout=15) as s:
                             s.login(smtp_user, smtp_pass)
-                            s.sendmail(
-                                sender_email, to_email,
-                                msg.as_string())
+                            s.sendmail(sender_email, to_email, msg.as_string())
                     else:
-                        with smtplib.SMTP(
-                                smtp_host, p,
-                                timeout=15) as s:
+                        with smtplib.SMTP(smtp_host, p, timeout=15) as s:
                             s.ehlo()
                             s.starttls()
                             s.login(smtp_user, smtp_pass)
-                            s.sendmail(
-                                sender_email, to_email,
-                                msg.as_string())
-                    print(f'[SMTP] OK porta {p}',
-                          flush=True)
+                            s.sendmail(sender_email, to_email, msg.as_string())
+                    print(f'[SMTP] OK porta {p}', flush=True)
                     return True
                 except Exception as e:
-                    print(f'[SMTP] porta {p} erro: {e}',
-                          flush=True)
+                    print(f'[SMTP] porta {p} erro: {e}', flush=True)
                     continue
-            return False
         except Exception as e:
             print(f'[SMTP] erro geral: {e}', flush=True)
-            return False
 
-    # Opção 2: Resend API
-    resend_key = ecfg.get('resend_api_key', '')
-    if resend_key:
-        import requests as http
-        r = http.post('https://api.resend.com/emails',
-                      headers={'Authorization': f'Bearer {resend_key}',
-                               'Content-Type': 'application/json'},
-                      json={'from': f'{sender_name} <{sender_email}>',
-                            'to': [to_email],
-                            'subject': subject,
-                            'html': html},
-                      timeout=15)
-        return r.status_code in (200, 201)
-
+    print('[EMAIL] nenhum método de envio disponível', flush=True)
     return False
 
 
