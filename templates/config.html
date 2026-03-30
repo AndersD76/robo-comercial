@@ -455,11 +455,11 @@ async function saveConfig(redirect) {
     var d = JSON.parse(txt)
     if (d.ok) {
       dbg.style.color = '#4ade80'
-      dbg.textContent = '5. OK! Redirecionando...'
+      dbg.textContent = '5. Salvo com sucesso!'
+      btn.innerHTML = '<i class="fa fa-check"></i> Salvo!'
       if (redirect) {
-        window.location.href = '/dashboard'
+        setTimeout(function() { window.location.replace('/dashboard'); }, 300)
       } else {
-        btn.innerHTML = '<i class="fa fa-check"></i> Salvo!'
         setTimeout(function() { btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'; btn.disabled = false }, 1500)
       }
     } else {
@@ -469,6 +469,7 @@ async function saveConfig(redirect) {
     }
   } catch(e) {
     dbg.textContent = 'EXCEPTION: ' + e.message + ' | ' + e.stack
+    console.error('saveConfig error:', e)
     btn.disabled = false
     btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'
   }

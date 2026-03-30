@@ -1877,7 +1877,7 @@ def api_save_config(bot):
                 pass
 
         print(f'[save_config/{schema}] OK - salvou {len(termos)} termos', flush=True)
-        return jsonify({'ok': True, 'termos': termos})
+        return jsonify({'ok': True, 'redirect': '/dashboard', 'termos': termos})
     except Exception as e:
         import traceback
         traceback.print_exc()
