@@ -467,7 +467,21 @@ def get_bot_config(schema: str) -> dict:
 
 def _get_schema():
     user = get_current_user()
-    return user['schema_name'] if user and user.get('schema_name') else None
+    if not user:
+        return None
+    schema = user.get('schema_name')
+    if not schema:
+        schema = f'emp_{user["id"]}'
+        try:
+            conn = _conn()
+            c = conn.cursor()
+            c.execute('UPDATE users SET schema_name=%s WHERE id=%s',
+                      (schema, user['id']))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+    return schema
 
 
 def _proc_running(schema: str, canal: str) -> bool:

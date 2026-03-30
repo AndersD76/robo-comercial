@@ -451,9 +451,7 @@ async function saveConfig(redirect) {
     dbg.textContent = '3. Status: ' + r.status
     var txt = await r.text()
     dbg.textContent = '4. Resposta: ' + txt.substring(0, 100)
-    var d = {}
-    try { d = JSON.parse(txt) } catch(pe) { d = {parse_error: pe.message, raw: txt.substring(0,200)} }
-    alert('Resposta do servidor: status=' + r.status + ' ok=' + d.ok + ' erro=' + (d.error||'nenhum'))
+    var d = JSON.parse(txt)
     if (d.ok) {
       dbg.style.color = '#4ade80'
       dbg.textContent = 'Salvo! Indo pro dashboard...'
