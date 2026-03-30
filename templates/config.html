@@ -432,17 +432,16 @@ async function saveConfig(redirect) {
     btn.disabled = true
     btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Salvando...'
     dbg.textContent = '2. Fazendo fetch...'
-    var val = function(id) { var el = document.getElementById(id); return el ? el.value : ''; }
     var payload = {
-      empresa_nome: val('empresa_nome'),
-      website: val('website'),
-      descricao: val('descricao'),
+      empresa_nome: document.getElementById('empresa_nome').value,
+      website: document.getElementById('website').value,
+      descricao: document.getElementById('descricao').value,
       termos_busca: Array.isArray(terms) ? terms.filter(Boolean) : [],
-      msg_inicial: val('msg_inicial'),
-      email_assunto_padrao: val('email_assunto_padrao'),
-      email_html_template: val('email_html_template'),
-      email_remetente: val('email_remetente'),
-      email_remetente_nome: val('email_remetente_nome')
+      msg_inicial: document.getElementById('msg_inicial').value,
+      email_assunto_padrao: document.getElementById('email_assunto_padrao').value,
+      email_html_template: document.getElementById('email_html_template').value,
+      email_remetente: document.getElementById('email_remetente').value,
+      email_remetente_nome: document.getElementById('email_remetente_nome').value
     }
     var r = await fetch('/api/' + BOT + '/config', {
       method: 'POST',
@@ -453,29 +452,24 @@ async function saveConfig(redirect) {
     var txt = await r.text()
     dbg.textContent = '4. Resposta: ' + txt.substring(0, 100)
     var d = JSON.parse(txt)
-    dbg.textContent = '3. Status=' + r.status + ' txt=' + txt.substring(0,80)
-    if (r.ok && d.ok) {
+    if (d.ok) {
       dbg.style.color = '#4ade80'
-      dbg.textContent = '4. SALVO! Indo pro dashboard...'
-      btn.innerHTML = '<i class="fa fa-check"></i> Salvo!'
+      dbg.textContent = '5. OK! Redirecionando...'
       if (redirect) {
-        window.location = '/dashboard'
+        window.location.href = '/dashboard'
       } else {
+        btn.innerHTML = '<i class="fa fa-check"></i> Salvo!'
         setTimeout(function() { btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'; btn.disabled = false }, 1500)
       }
-      return
+    } else {
+      dbg.textContent = '5. ERRO: ' + JSON.stringify(d)
+      btn.disabled = false
+      btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'
     }
-    dbg.style.color = '#f87171'
-    dbg.textContent = 'ERRO: ' + txt.substring(0,200)
+  } catch(e) {
+    dbg.textContent = 'EXCEPTION: ' + e.message + ' | ' + e.stack
     btn.disabled = false
     btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'
-  } catch(e) {
-    dbg.style.display = 'block'
-    dbg.style.color = '#f87171'
-    dbg.textContent = 'JS ERRO: ' + e.message
-    console.error('saveConfig:', e)
-    var btn = document.getElementById('btn-save')
-    if(btn){btn.disabled = false; btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'}
   }
 }
 
