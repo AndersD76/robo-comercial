@@ -723,9 +723,12 @@
           </div>
 
           <div style="margin-bottom:16px">
-            <label style="font-size:13px;font-weight:600;color:var(--muted2);display:block;margin-bottom:6px">Mensagem padrão</label>
-            <textarea id="wa-msg-template" rows="4" placeholder="Olá! Vi que a {{nome}} pode se interessar em nossos produtos. Podemos agendar uma conversa?" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;resize:vertical"></textarea>
-            <small style="color:var(--muted);font-size:11px">Use <code style="color:#22c55e">{{nome}}</code> para o nome da empresa</small>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <label style="font-size:13px;font-weight:600;color:var(--muted2)">Mensagem configurada</label>
+              <a href="/configurar" style="font-size:11px;color:#818cf8;text-decoration:none">Editar em Configurações</a>
+            </div>
+            <div id="wa-msg-preview" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--muted2);font-size:13px;min-height:60px;white-space:pre-wrap">Carregando...</div>
+            <textarea id="wa-msg-template" style="display:none"></textarea>
           </div>
 
           <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -1987,9 +1990,11 @@ let _emailCfg = {}
 function loadEmailConfig() {
   fetch(`/api/${BOT}/config`).then(r=>r.json()).then(cfg=>{
     _emailCfg = cfg
-    // Preencher WhatsApp msg se vazio
+    // Preencher WhatsApp msg da config
     var waMsg = document.getElementById('wa-msg-template');
-    if (waMsg && !waMsg.value.trim() && cfg.msg_inicial) waMsg.value = cfg.msg_inicial;
+    if (waMsg && cfg.msg_inicial) waMsg.value = cfg.msg_inicial;
+    var waPrev = document.getElementById('wa-msg-preview');
+    if (waPrev) waPrev.textContent = cfg.msg_inicial || 'Não configurada — vá em Configurações';
     const from = cfg.email_remetente_nome
       ? `${cfg.email_remetente_nome} &lt;contato@turbovenda.com.br&gt;`
       : '<span style="color:#f87171">não configurado — <a href="/configurar" style="color:#818cf8">configurar</a></span>'
