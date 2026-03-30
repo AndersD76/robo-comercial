@@ -453,25 +453,29 @@ async function saveConfig(redirect) {
     var txt = await r.text()
     dbg.textContent = '4. Resposta: ' + txt.substring(0, 100)
     var d = JSON.parse(txt)
-    if (d.ok) {
+    dbg.textContent = '3. Status=' + r.status + ' txt=' + txt.substring(0,80)
+    if (r.ok && d.ok) {
       dbg.style.color = '#4ade80'
-      dbg.textContent = '5. Salvo com sucesso!'
+      dbg.textContent = '4. SALVO! Indo pro dashboard...'
       btn.innerHTML = '<i class="fa fa-check"></i> Salvo!'
       if (redirect) {
-        setTimeout(function() { window.location.replace('/dashboard'); }, 300)
+        window.location = '/dashboard'
       } else {
         setTimeout(function() { btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'; btn.disabled = false }, 1500)
       }
-    } else {
-      dbg.textContent = '5. ERRO: ' + JSON.stringify(d)
-      btn.disabled = false
-      btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'
+      return
     }
-  } catch(e) {
-    dbg.textContent = 'EXCEPTION: ' + e.message + ' | ' + e.stack
-    console.error('saveConfig error:', e)
+    dbg.style.color = '#f87171'
+    dbg.textContent = 'ERRO: ' + txt.substring(0,200)
     btn.disabled = false
     btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'
+  } catch(e) {
+    dbg.style.display = 'block'
+    dbg.style.color = '#f87171'
+    dbg.textContent = 'JS ERRO: ' + e.message
+    console.error('saveConfig:', e)
+    var btn = document.getElementById('btn-save')
+    if(btn){btn.disabled = false; btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'}
   }
 }
 
