@@ -509,12 +509,18 @@ def login():
             conn.close()
             if user and user['password_hash'] == _hash_pw(pw):
                 session['user_id'] = user['id']
-                # Rodar migrations no schema do usuário
-                if user.get('schema_name'):
-                    try:
-                        _init_user_schema(user['schema_name'])
-                    except Exception:
-                        pass
+                schema = user.get('schema_name') or f'emp_{user["id"]}'
+                if not user.get('schema_name'):
+                    c2 = _conn()
+                    cc = c2.cursor()
+                    cc.execute('UPDATE users SET schema_name=%s WHERE id=%s',
+                               (schema, user['id']))
+                    c2.commit()
+                    c2.close()
+                try:
+                    _init_user_schema(schema)
+                except Exception:
+                    pass
                 return redirect(url_for('dashboard'))
             error = 'Email ou senha incorretos'
         except Exception as e:
@@ -604,30 +610,28 @@ def landing():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    user = get_current_user()
-    if not user:
-        return redirect(url_for('config_page'))
-    schema = user.get('schema_name')
-    if not schema:
-        # Derive schema from user id
-        schema = f'emp_{user["id"]}'
+    uid = session.get('user_id')
+    schema = f'emp_{uid}'
+    user = get_current_user() or {'id': uid, 'schema_name': schema,
+                                   'empresa_nome': '', 'email': ''}
+    if not user.get('schema_name'):
+        user['schema_name'] = schema
         try:
             conn = _conn()
             c = conn.cursor()
-            c.execute('UPDATE users SET schema_name=%s WHERE id=%s', (schema, user['id']))
+            c.execute('UPDATE users SET schema_name=%s WHERE id=%s',
+                      (schema, uid))
             conn.commit()
             conn.close()
         except Exception:
             pass
-        user['schema_name'] = schema
-        _init_user_schema(schema)
     schema = user['schema_name']
     stats = get_stats(schema)
     return render_template('dashboard.html',
                            bot=schema,
                            user=user,
                            stats=stats,
-                           name=user['empresa_nome'] or 'Minha Empresa',
+                           name=user.get('empresa_nome') or 'Minha Empresa',
                            label='Leads',
                            color='#6366f1',
                            color_dim='rgba(99,102,241,.08)',
