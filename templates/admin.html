@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — TurboVenda</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+    :root {
+      --bg:      #060b18;
+      --surface: #0d1526;
+      --surf2:   rgba(255,255,255,.08);
+      --border:  rgba(255,255,255,.10);
+      --border2: rgba(255,255,255,.18);
+      --text:    #f0f6fc;
+      --sub:     #9eb3cc;
+      --muted:   #6e8299;
+      --accent:  #6366f1;
+      --accent-dim: rgba(99,102,241,.15);
+      --green:   #22c55e;
+      --red:     #ef4444;
+      --yellow:  #eab308;
+      --orange:  #f97316;
+    }
+
+    body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+    /* ════ HEADER ════ */
+    header {
+      background:rgba(10,16,30,.95); backdrop-filter:blur(12px);
+      height:56px; display:flex; align-items:center; justify-content:space-between;
+      padding:0 28px; position:sticky; top:0; z-index:200;
+      border-bottom:1px solid var(--border);
+    }
+    .hdr-left { display:flex; align-items:center; gap:14px; }
+    .hdr-brand { font-size:18px; font-weight:800; color:var(--accent); letter-spacing:-.3px; }
+    .hdr-badge { font-size:10px; font-weight:700; background:var(--accent); color:#fff; padding:2px 8px; border-radius:6px; letter-spacing:.5px; }
+    .hdr-right a { color:var(--sub); font-size:13px; text-decoration:none; padding:6px 14px; border-radius:8px; border:1px solid var(--border); transition:all .15s; }
+    .hdr-right a:hover { color:var(--text); background:var(--surf2); border-color:var(--border2); }
+
+    /* ════ MAIN ════ */
+    main { max-width:1440px; margin:0 auto; padding:24px 20px 80px; }
+
+    /* ════ KPI ROW ════ */
+    .kpi-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; margin-bottom:28px; }
+    .kpi {
+      background:var(--surface); border:1px solid var(--border); border-radius:14px;
+      padding:20px; display:flex; flex-direction:column; gap:6px;
+    }
+    .kpi-label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:1px; color:var(--muted); }
+    .kpi-value { font-size:28px; font-weight:800; color:var(--text); letter-spacing:-1px; }
+    .kpi-sub { font-size:12px; color:var(--sub); }
+
+    /* ════ SECTION ════ */
+    .sec-title {
+      font-size:11px; font-weight:700; letter-spacing:1.4px;
+      text-transform:uppercase; color:var(--sub);
+      margin-bottom:14px; display:flex; align-items:center; gap:8px;
+    }
+    .sec-title::after { content:''; flex:1; height:1px; background:var(--border); }
+
+    /* ════ TOOLBAR ════ */
+    .toolbar { display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+    .toolbar input {
+      background:var(--surface); border:1px solid var(--border); border-radius:8px;
+      padding:8px 14px; color:var(--text); font-size:13px; flex:1; min-width:200px;
+      outline:none; transition:border-color .2s;
+    }
+    .toolbar input:focus { border-color:var(--accent); }
+    .toolbar select {
+      background:var(--surface); border:1px solid var(--border); border-radius:8px;
+      padding:8px 14px; color:var(--text); font-size:13px; outline:none; cursor:pointer;
+    }
+    .toolbar select option { background:var(--surface); color:var(--text); }
+
+    /* ════ TABLE ════ */
+    .tbl-wrap {
+      background:var(--surface); border:1px solid var(--border); border-radius:14px;
+      overflow-x:auto; margin-bottom:28px;
+    }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th {
+      text-align:left; padding:12px 14px; font-size:11px; font-weight:700;
+      text-transform:uppercase; letter-spacing:.8px; color:var(--muted);
+      border-bottom:1px solid var(--border); white-space:nowrap;
+    }
+    td {
+      padding:10px 14px; border-bottom:1px solid rgba(255,255,255,.04);
+      white-space:nowrap; color:var(--sub);
+    }
+    tr:last-child td { border-bottom:none; }
+    tr:hover td { background:rgba(255,255,255,.02); }
+
+    /* Badges */
+    .badge {
+      display:inline-block; padding:3px 10px; border-radius:6px;
+      font-size:11px; font-weight:600; letter-spacing:.3px;
+    }
+    .badge-green { background:rgba(34,197,94,.12); color:#4ade80; }
+    .badge-red { background:rgba(239,68,68,.12); color:#f87171; }
+    .badge-blue { background:rgba(99,102,241,.12); color:#818cf8; }
+    .badge-yellow { background:rgba(234,179,8,.12); color:#facc15; }
+    .badge-orange { background:rgba(249,115,22,.12); color:#fb923c; }
+    .badge-purple { background:rgba(168,85,247,.12); color:#c084fc; }
+
+    /* Buttons */
+    .btn {
+      display:inline-flex; align-items:center; gap:5px;
+      padding:5px 12px; border-radius:7px; font-size:12px; font-weight:600;
+      border:1px solid var(--border); background:transparent; color:var(--sub);
+      cursor:pointer; transition:all .15s; white-space:nowrap;
+    }
+    .btn:hover { background:var(--surf2); color:var(--text); border-color:var(--border2); }
+    .btn-accent { background:var(--accent-dim); color:#818cf8; border-color:rgba(99,102,241,.3); }
+    .btn-accent:hover { background:rgba(99,102,241,.25); }
+    .btn-danger { color:#f87171; border-color:rgba(239,68,68,.25); }
+    .btn-danger:hover { background:rgba(239,68,68,.12); }
+
+    .actions { display:flex; gap:6px; }
+
+    /* ════ TABS ════ */
+    .tabs { display:flex; gap:4px; margin-bottom:20px; }
+    .tab {
+      padding:8px 18px; border-radius:8px; font-size:13px; font-weight:600;
+      color:var(--muted); cursor:pointer; transition:all .15s; border:1px solid transparent;
+    }
+    .tab:hover { color:var(--sub); background:var(--surf2); }
+    .tab.active { color:var(--accent); background:var(--accent-dim); border-color:rgba(99,102,241,.2); }
+    .tab-content { display:none; }
+    .tab-content.active { display:block; }
+
+    /* ════ MODAL ════ */
+    .modal-overlay {
+      display:none; position:fixed; inset:0; background:rgba(0,0,0,.6);
+      backdrop-filter:blur(4px); z-index:500; align-items:center; justify-content:center;
+    }
+    .modal-overlay.active { display:flex; }
+    .modal {
+      background:var(--surface); border:1px solid var(--border); border-radius:16px;
+      padding:28px; min-width:400px; max-width:500px; width:90%;
+    }
+    .modal h3 { font-size:16px; font-weight:700; margin-bottom:16px; }
+    .modal-field { margin-bottom:14px; }
+    .modal-field label { display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:.5px; }
+    .modal-field span { font-size:14px; color:var(--text); }
+    .modal-field select {
+      width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px;
+      padding:8px 12px; color:var(--text); font-size:13px;
+    }
+    .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:20px; }
+
+    /* ════ TOAST ════ */
+    .toast {
+      position:fixed; bottom:24px; right:24px; padding:12px 20px;
+      border-radius:10px; font-size:13px; font-weight:600;
+      background:#1a2332; border:1px solid var(--border); color:var(--text);
+      z-index:600; transform:translateY(100px); opacity:0; transition:all .3s;
+    }
+    .toast.show { transform:translateY(0); opacity:1; }
+    .toast.success { border-color:rgba(34,197,94,.3); color:#4ade80; }
+    .toast.error { border-color:rgba(239,68,68,.3); color:#f87171; }
+
+    /* ════ LOGIN ════ */
+    .login-wrap {
+      display:flex; align-items:center; justify-content:center; min-height:100vh;
+    }
+    .login-box {
+      background:var(--surface); border:1px solid var(--border); border-radius:16px;
+      padding:40px; width:380px; text-align:center;
+    }
+    .login-box h1 { font-size:22px; font-weight:800; color:var(--accent); margin-bottom:6px; }
+    .login-box p { font-size:13px; color:var(--muted); margin-bottom:24px; }
+    .login-box input {
+      width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px;
+      padding:12px 16px; color:var(--text); font-size:14px; margin-bottom:16px; outline:none;
+    }
+    .login-box input:focus { border-color:var(--accent); }
+    .login-box button {
+      width:100%; padding:12px; border:none; border-radius:8px;
+      background:var(--accent); color:#fff; font-size:14px; font-weight:700;
+      cursor:pointer; transition:opacity .2s;
+    }
+    .login-box button:hover { opacity:.85; }
+    .login-error { color:var(--red); font-size:13px; margin-bottom:12px; }
+
+    /* ════ RESPONSIVE ════ */
+    @media (max-width:768px) {
+      .kpi-row { grid-template-columns:1fr 1fr; }
+      main { padding:16px 12px 60px; }
+    }
+  </style>
+</head>
+<body>
+
+{% if not session.get('admin_auth') %}
+<!-- ════════════════ LOGIN ════════════════ -->
+<div class="login-wrap">
+  <form class="login-box" method="POST" action="/admin">
+    <h1>TurboVenda</h1>
+    <p>Painel Administrativo</p>
+    {% if error %}
+    <div class="login-error">{{ error }}</div>
+    {% endif %}
+    <input type="password" name="admin_key" placeholder="Senha de administrador" autofocus required>
+    <button type="submit"><i class="fas fa-lock"></i>&nbsp; Entrar</button>
+  </form>
+</div>
+
+{% else %}
+<!-- ════════════════ DASHBOARD ════════════════ -->
+<header>
+  <div class="hdr-left">
+    <span class="hdr-brand">TurboVenda</span>
+    <span class="hdr-badge">ADMIN</span>
+  </div>
+  <div class="hdr-right">
+    <a href="/admin/logout"><i class="fas fa-sign-out-alt"></i> Sair</a>
+  </div>
+</header>
+
+<main>
+  <!-- KPIs -->
+  <div class="sec-title">Metricas Gerais</div>
+  <div class="kpi-row" id="kpi-row">
+    <div class="kpi"><div class="kpi-label">Usuarios</div><div class="kpi-value" id="kpi-users">--</div></div>
+    <div class="kpi"><div class="kpi-label">Ativos</div><div class="kpi-value" id="kpi-active">--</div></div>
+    <div class="kpi"><div class="kpi-label">Total Leads</div><div class="kpi-value" id="kpi-leads">--</div></div>
+    <div class="kpi"><div class="kpi-label">Emails Enviados</div><div class="kpi-value" id="kpi-emails">--</div></div>
+    <div class="kpi"><div class="kpi-label">Pagamentos</div><div class="kpi-value" id="kpi-payments">--</div></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('users')"><i class="fas fa-users"></i>&nbsp; Usuarios</div>
+    <div class="tab" onclick="switchTab('payments')"><i class="fas fa-credit-card"></i>&nbsp; Pagamentos</div>
+  </div>
+
+  <!-- Users Tab -->
+  <div class="tab-content active" id="tab-users">
+    <div class="toolbar">
+      <input type="text" id="search-input" placeholder="Buscar por email, empresa..." oninput="filterUsers()">
+      <select id="filter-plano" onchange="filterUsers()">
+        <option value="">Todos os planos</option>
+        <option value="trial">Trial</option>
+        <option value="starter">Starter</option>
+        <option value="pro">Pro</option>
+        <option value="enterprise">Enterprise</option>
+      </select>
+      <select id="filter-ativo" onchange="filterUsers()">
+        <option value="">Todos</option>
+        <option value="true">Ativos</option>
+        <option value="false">Inativos</option>
+      </select>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th><th>Email</th><th>Empresa</th><th>Plano</th><th>Expira</th>
+            <th>Ativo</th><th>Criado em</th><th>Leads</th><th>Acoes</th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Payments Tab -->
+  <div class="tab-content" id="tab-payments">
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th><th>Usuario</th><th>MP Payment ID</th><th>Status</th>
+            <th>Valor</th><th>Plano</th><th>Data</th>
+          </tr>
+        </thead>
+        <tbody id="payments-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- Modal: User Details / Change Plan -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+let allUsers = [];
+
+// ── Tabs ──
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((el, i) => {
+    el.classList.toggle('active', (tab === 'users' && i === 0) || (tab === 'payments' && i === 1));
+  });
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  if (tab === 'payments') loadPayments();
+}
+
+// ── Toast ──
+function toast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  setTimeout(() => t.className = 'toast', 3000);
+}
+
+// ── Modal ──
+function openModal(html) {
+  document.getElementById('modal-content').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('active');
+}
+
+// ── Format helpers ──
+function fmtDate(s) {
+  if (!s || s === 'None') return '--';
+  const d = new Date(s);
+  return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+}
+function fmtNum(n) {
+  if (n === null || n === undefined) return '0';
+  return Number(n).toLocaleString('pt-BR');
+}
+function planBadge(p) {
+  const colors = {trial:'badge-yellow',starter:'badge-blue',pro:'badge-purple',enterprise:'badge-orange'};
+  return '<span class="badge ' + (colors[p] || 'badge-blue') + '">' + (p || 'trial') + '</span>';
+}
+function ativoBadge(a) {
+  return a ? '<span class="badge badge-green">Sim</span>' : '<span class="badge badge-red">Nao</span>';
+}
+
+// ── Load Stats ──
+async function loadStats() {
+  try {
+    const r = await fetch('/admin/api/stats');
+    const d = await r.json();
+    document.getElementById('kpi-users').textContent = fmtNum(d.total_users);
+    document.getElementById('kpi-active').textContent = fmtNum(d.active_users);
+    document.getElementById('kpi-leads').textContent = fmtNum(d.total_leads);
+    document.getElementById('kpi-emails').textContent = fmtNum(d.total_emails);
+    document.getElementById('kpi-payments').textContent = fmtNum(d.total_payments);
+  } catch(e) { console.error('Stats error:', e); }
+}
+
+// ── Load Users ──
+async function loadUsers() {
+  try {
+    const r = await fetch('/admin/api/users');
+    allUsers = await r.json();
+    renderUsers(allUsers);
+  } catch(e) { console.error('Users error:', e); }
+}
+
+function renderUsers(users) {
+  const tbody = document.getElementById('users-tbody');
+  if (!users.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted)">Nenhum usuario encontrado</td></tr>';
+    return;
+  }
+  tbody.innerHTML = users.map(u => `
+    <tr>
+      <td style="color:var(--muted)">#${u.id}</td>
+      <td style="color:var(--text);font-weight:500">${u.email}</td>
+      <td>${u.empresa_nome || '--'}</td>
+      <td>${planBadge(u.plano)}</td>
+      <td style="font-size:12px">${fmtDate(u.plano_expira)}</td>
+      <td>${ativoBadge(u.ativo)}</td>
+      <td style="font-size:12px">${fmtDate(u.criado_em)}</td>
+      <td style="font-weight:600;color:var(--accent)">${fmtNum(u.lead_count)}</td>
+      <td>
+        <div class="actions">
+          <button class="btn" onclick="toggleAtivo(${u.id},${u.ativo})" title="${u.ativo?'Desativar':'Ativar'}">
+            <i class="fas fa-${u.ativo?'ban':'check'}"></i>
+          </button>
+          <button class="btn btn-accent" onclick="showChangePlan(${u.id},'${u.plano||'trial'}')" title="Trocar plano">
+            <i class="fas fa-exchange-alt"></i>
+          </button>
+          <button class="btn" onclick="showUserDetails(${u.id})" title="Detalhes">
+            <i class="fas fa-eye"></i>
+          </button>
+          <button class="btn btn-danger" onclick="impersonate(${u.id})" title="Impersonar">
+            <i class="fas fa-user-secret"></i>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function filterUsers() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  const plano = document.getElementById('filter-plano').value;
+  const ativo = document.getElementById('filter-ativo').value;
+  let filtered = allUsers;
+  if (q) filtered = filtered.filter(u =>
+    (u.email||'').toLowerCase().includes(q) ||
+    (u.empresa_nome||'').toLowerCase().includes(q)
+  );
+  if (plano) filtered = filtered.filter(u => (u.plano||'trial') === plano);
+  if (ativo) filtered = filtered.filter(u => String(u.ativo) === ativo);
+  renderUsers(filtered);
+}
+
+// ── Toggle Ativo ──
+async function toggleAtivo(id, current) {
+  const action = current ? 'desativar' : 'ativar';
+  if (!confirm(`Deseja ${action} o usuario #${id}?`)) return;
+  try {
+    const r = await fetch(`/admin/api/users/${id}/toggle`, {method:'POST'});
+    const d = await r.json();
+    if (d.ok) { toast(`Usuario ${action}do com sucesso`); loadUsers(); loadStats(); }
+    else toast(d.error || 'Erro', 'error');
+  } catch(e) { toast('Erro de conexao', 'error'); }
+}
+
+// ── Change Plan ──
+function showChangePlan(id, current) {
+  openModal(`
+    <h3><i class="fas fa-exchange-alt" style="color:var(--accent)"></i> Trocar Plano</h3>
+    <div class="modal-field">
+      <label>Usuario</label>
+      <span>#${id}</span>
+    </div>
+    <div class="modal-field">
+      <label>Novo Plano</label>
+      <select id="new-plan">
+        <option value="trial" ${current==='trial'?'selected':''}>Trial</option>
+        <option value="starter" ${current==='starter'?'selected':''}>Starter</option>
+        <option value="pro" ${current==='pro'?'selected':''}>Pro</option>
+        <option value="enterprise" ${current==='enterprise'?'selected':''}>Enterprise</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-accent" onclick="changePlan(${id})">Salvar</button>
+    </div>
+  `);
+}
+async function changePlan(id) {
+  const plano = document.getElementById('new-plan').value;
+  try {
+    const r = await fetch(`/admin/api/users/${id}/plano`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({plano})
+    });
+    const d = await r.json();
+    if (d.ok) { toast('Plano atualizado'); closeModal(); loadUsers(); loadStats(); }
+    else toast(d.error || 'Erro', 'error');
+  } catch(e) { toast('Erro de conexao', 'error'); }
+}
+
+// ── User Details ──
+function showUserDetails(id) {
+  const u = allUsers.find(x => x.id === id);
+  if (!u) return;
+  openModal(`
+    <h3><i class="fas fa-user" style="color:var(--accent)"></i> Detalhes do Usuario</h3>
+    <div class="modal-field"><label>ID</label><span>#${u.id}</span></div>
+    <div class="modal-field"><label>Email</label><span>${u.email}</span></div>
+    <div class="modal-field"><label>Empresa</label><span>${u.empresa_nome || '--'}</span></div>
+    <div class="modal-field"><label>Website</label><span>${u.website || '--'}</span></div>
+    <div class="modal-field"><label>Plano</label><span>${planBadge(u.plano)}</span></div>
+    <div class="modal-field"><label>Plano Expira</label><span>${fmtDate(u.plano_expira)}</span></div>
+    <div class="modal-field"><label>Ativo</label><span>${ativoBadge(u.ativo)}</span></div>
+    <div class="modal-field"><label>Criado em</label><span>${fmtDate(u.criado_em)}</span></div>
+    <div class="modal-field"><label>Schema</label><span>${u.schema_name || '--'}</span></div>
+    <div class="modal-field"><label>Total Leads</label><span style="font-weight:700;color:var(--accent)">${fmtNum(u.lead_count)}</span></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Fechar</button>
+      <button class="btn btn-danger" onclick="impersonate(${u.id})"><i class="fas fa-user-secret"></i> Impersonar</button>
+    </div>
+  `);
+}
+
+// ── Impersonate ──
+async function impersonate(id) {
+  if (!confirm(`Logar como usuario #${id}? Voce sera redirecionado ao dashboard dele.`)) return;
+  try {
+    const r = await fetch(`/admin/api/users/${id}/impersonate`, {method:'POST'});
+    const d = await r.json();
+    if (d.ok) window.location.href = '/dashboard';
+    else toast(d.error || 'Erro', 'error');
+  } catch(e) { toast('Erro de conexao', 'error'); }
+}
+
+// ── Load Payments ──
+async function loadPayments() {
+  try {
+    const r = await fetch('/admin/api/payments');
+    const data = await r.json();
+    const tbody = document.getElementById('payments-tbody');
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted)">Nenhum pagamento encontrado</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.map(p => {
+      const stBadge = p.status === 'approved' ? 'badge-green' : (p.status === 'pending' ? 'badge-yellow' : 'badge-red');
+      return `<tr>
+        <td style="color:var(--muted)">#${p.id}</td>
+        <td style="color:var(--text)">${p.email || '#' + p.user_id}</td>
+        <td style="font-size:12px">${p.mp_payment_id || '--'}</td>
+        <td><span class="badge ${stBadge}">${p.status || '--'}</span></td>
+        <td style="font-weight:600">R$ ${Number(p.valor||0).toFixed(2)}</td>
+        <td>${planBadge(p.plano)}</td>
+        <td style="font-size:12px">${fmtDate(p.criado_em)}</td>
+      </tr>`;
+    }).join('');
+  } catch(e) { console.error('Payments error:', e); }
+}
+
+// ── Init ──
+loadStats();
+loadUsers();
+</script>
+{% endif %}
+
+</body>
+</html>

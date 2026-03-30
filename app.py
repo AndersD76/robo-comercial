@@ -3182,6 +3182,215 @@ def api_meu_plano():
 
 
 # =============================================================================
+# ADMIN PANEL
+# =============================================================================
+
+def admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('admin_auth'):
+            if request.path.startswith('/admin/api/'):
+                return jsonify({'error': 'unauthorized'}), 401
+            return redirect(url_for('admin_login'))
+        return f(*args, **kwargs)
+    return decorated
+
+
+@app.route('/admin', methods=['GET', 'POST'])
+def admin_login():
+    error = None
+    if request.method == 'POST':
+        key = request.form.get('admin_key', '')
+        admin_key = os.environ.get('ADMIN_KEY', 'trocar123')
+        if key == admin_key:
+            session['admin_auth'] = True
+            return redirect(url_for('admin_dashboard'))
+        error = 'Senha incorreta'
+    if session.get('admin_auth'):
+        return redirect(url_for('admin_dashboard'))
+    return render_template('admin.html', error=error)
+
+
+@app.route('/admin/dashboard')
+@admin_required
+def admin_dashboard():
+    return render_template('admin.html')
+
+
+@app.route('/admin/logout')
+def admin_logout():
+    session.pop('admin_auth', None)
+    return redirect(url_for('admin_login'))
+
+
+@app.route('/admin/api/stats')
+@admin_required
+def admin_api_stats():
+    try:
+        conn = _conn()
+        c = conn.cursor()
+        c.execute('SELECT COUNT(*) AS total FROM users')
+        total_users = c.fetchone()['total']
+        c.execute('SELECT COUNT(*) AS total FROM users WHERE ativo = TRUE')
+        active_users = c.fetchone()['total']
+        c.execute('SELECT COUNT(*) AS total FROM pagamentos')
+        total_payments = c.fetchone()['total']
+
+        # Count leads and emails across all user schemas
+        total_leads = 0
+        total_emails = 0
+        c.execute('SELECT id, schema_name FROM users WHERE schema_name IS NOT NULL')
+        users = c.fetchall()
+        for u in users:
+            schema = u['schema_name']
+            try:
+                c.execute(
+                    'SELECT COUNT(*) AS cnt FROM {}.empresas'.format(schema))
+                total_leads += c.fetchone()['cnt']
+            except Exception:
+                conn.rollback()
+            try:
+                c.execute(
+                    "SELECT COUNT(*) AS cnt FROM {}.empresas "
+                    "WHERE email_enviado IS NOT NULL".format(schema))
+                total_emails += c.fetchone()['cnt']
+            except Exception:
+                conn.rollback()
+        conn.close()
+        return jsonify({
+            'total_users': total_users,
+            'active_users': active_users,
+            'total_leads': total_leads,
+            'total_emails': total_emails,
+            'total_payments': total_payments,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/api/users')
+@admin_required
+def admin_api_users_list():
+    try:
+        conn = _conn()
+        c = conn.cursor()
+        c.execute(
+            'SELECT id, email, empresa_nome, website, schema_name, '
+            'plano, plano_expira, ativo, criado_em '
+            'FROM users ORDER BY id')
+        users = c.fetchall()
+        result = []
+        for u in users:
+            row = dict(u)
+            # Count leads for this user
+            schema = row.get('schema_name')
+            lead_count = 0
+            if schema:
+                try:
+                    c.execute(
+                        'SELECT COUNT(*) AS cnt FROM {}.empresas'.format(
+                            schema))
+                    lead_count = c.fetchone()['cnt']
+                except Exception:
+                    conn.rollback()
+            row['lead_count'] = lead_count
+            _serialize_row(row)
+            result.append(row)
+        conn.close()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/api/users/<int:uid>/toggle', methods=['POST'])
+@admin_required
+def admin_api_toggle_user(uid):
+    try:
+        conn = _conn()
+        c = conn.cursor()
+        c.execute('UPDATE users SET ativo = NOT ativo WHERE id = %s '
+                  'RETURNING ativo', (uid,))
+        row = c.fetchone()
+        if not row:
+            conn.close()
+            return jsonify({'error': 'Usuario nao encontrado'}), 404
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True, 'ativo': row['ativo']})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/api/users/<int:uid>/plano', methods=['POST'])
+@admin_required
+def admin_api_change_plan(uid):
+    try:
+        data = request.get_json(force=True)
+        plano = data.get('plano', 'trial')
+        if plano not in ('trial', 'starter', 'pro', 'enterprise'):
+            return jsonify({'error': 'Plano invalido'}), 400
+        conn = _conn()
+        c = conn.cursor()
+        c.execute('UPDATE users SET plano = %s WHERE id = %s '
+                  'RETURNING id', (plano, uid))
+        row = c.fetchone()
+        if not row:
+            conn.close()
+            return jsonify({'error': 'Usuario nao encontrado'}), 404
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True, 'plano': plano})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/api/users/<int:uid>/impersonate', methods=['POST'])
+@admin_required
+def admin_api_impersonate(uid):
+    try:
+        conn = _conn()
+        c = conn.cursor()
+        c.execute('SELECT id, schema_name FROM users WHERE id = %s', (uid,))
+        user = c.fetchone()
+        conn.close()
+        if not user:
+            return jsonify({'error': 'Usuario nao encontrado'}), 404
+        session['user_id'] = user['id']
+        schema = user.get('schema_name') or f'emp_{user["id"]}'
+        try:
+            _init_user_schema(schema)
+        except Exception:
+            pass
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/api/payments')
+@admin_required
+def admin_api_payments():
+    try:
+        conn = _conn()
+        c = conn.cursor()
+        c.execute(
+            'SELECT p.id, p.user_id, p.mp_payment_id, p.status, '
+            'p.valor, p.plano, p.criado_em, u.email '
+            'FROM pagamentos p '
+            'LEFT JOIN users u ON u.id = p.user_id '
+            'ORDER BY p.criado_em DESC LIMIT 100')
+        rows = c.fetchall()
+        conn.close()
+        result = []
+        for r in rows:
+            row = dict(r)
+            _serialize_row(row)
+            result.append(row)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# =============================================================================
 # ENTRY POINT
 # =============================================================================
 
