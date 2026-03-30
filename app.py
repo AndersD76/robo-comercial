@@ -591,9 +591,22 @@ def landing():
 @login_required
 def dashboard():
     user = get_current_user()
-    print(f'[dashboard] user_id={session.get("user_id")} schema={user.get("schema_name") if user else "NO_USER"}', flush=True)
-    if not user or not user.get('schema_name'):
+    if not user:
         return redirect(url_for('config_page'))
+    schema = user.get('schema_name')
+    if not schema:
+        # Derive schema from user id
+        schema = f'emp_{user["id"]}'
+        try:
+            conn = _conn()
+            c = conn.cursor()
+            c.execute('UPDATE users SET schema_name=%s WHERE id=%s', (schema, user['id']))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+        user['schema_name'] = schema
+        _init_user_schema(schema)
     schema = user['schema_name']
     stats = get_stats(schema)
     return render_template('dashboard.html',
