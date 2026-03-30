@@ -1544,16 +1544,18 @@ def api_bulk_action(bot):
 def _get_email_config(schema: str) -> dict:
     """Lê config de email do user (bot_config)."""
     cfg = get_bot_config(schema) if schema else {}
+    user = get_current_user() or {}
     return {
-        'sender_email': (cfg.get('email_remetente') or
-                         os.environ.get('EMAIL_FROM', '')),
+        'sender_email': os.environ.get('EMAIL_FROM',
+                                       'contato@turbovenda.com.br'),
         'sender_name': (cfg.get('email_remetente_nome') or
                         cfg.get('empresa_nome') or ''),
+        'reply_to': user.get('email') or '',
         'smtp_host': cfg.get('smtp_host') or '',
         'smtp_port': cfg.get('smtp_port') or 587,
         'smtp_user': cfg.get('smtp_user') or '',
         'smtp_password': cfg.get('smtp_password') or '',
-        'resend_api_key': os.environ.get('RESEND_API_KEY', '') or cfg.get('resend_api_key') or '',
+        'resend_api_key': os.environ.get('RESEND_API_KEY', '') or '',
     }
 
 
@@ -1570,13 +1572,17 @@ def _send_email(ecfg, to_email, to_name, subject, html):
     if resend_key:
         try:
             import requests as http
+            payload = {'from': f'{sender_name} <{sender_email}>',
+                       'to': [to_email],
+                       'subject': subject,
+                       'html': html}
+            reply_to = ecfg.get('reply_to', '')
+            if reply_to:
+                payload['reply_to'] = [reply_to]
             r = http.post('https://api.resend.com/emails',
                           headers={'Authorization': f'Bearer {resend_key}',
                                    'Content-Type': 'application/json'},
-                          json={'from': f'{sender_name} <{sender_email}>',
-                                'to': [to_email],
-                                'subject': subject,
-                                'html': html},
+                          json=payload,
                           timeout=15)
             if r.status_code in (200, 201):
                 print(f'[RESEND] OK enviado para {to_email}', flush=True)
@@ -2382,28 +2388,31 @@ O email deve parecer que foi feito pelo mesmo designer do site.
         msg = client.messages.create(
             model='claude-haiku-4-5-20251001',
             max_tokens=2000,
-            messages=[{'role': 'user', 'content': f"""Você é designer de emails e copywriter B2B.
+            messages=[{'role': 'user', 'content': f"""Você é copywriter de prospecção B2B.
 
 Empresa vendedora: {empresa}
 O que ela vende: {descricao}
 {contexto}
-Crie um template HTML de email profissional para prospecção B2B.
+Crie um email HTML CURTO de prospecção (cold email).
 
-Regras:
-- HTML completo, inline CSS (compatível com clientes de email)
-- Max-width 600px, centrado, fundo branco
-- Use EXATAMENTE as cores da identidade visual da empresa vendedora
-- Seções: header com nome da empresa, saudação, proposta de valor (2-3 bullets), call-to-action (botão), footer
+REGRAS OBRIGATÓRIAS:
+- MÁXIMO 5 linhas de texto. Seja CURTO e DIRETO como uma mensagem de WhatsApp.
+- Tom informal, humano, como se fosse um vendedor conversando. Use emoji com moderação (1-2 no máximo).
+- NÃO use bullet points, listas, seções, headers ou footers corporativos
+- NÃO use frases genéricas como "desafios constantes", "solução ideal", "líder de mercado"
+- HTML simples: só um div com font-family sans-serif, sem cores, sem botões elaborados
 - Use {{{{nome}}}} para o nome da empresa prospectada
-- Use {{{{email}}}} para o email do lead
-- Use {{{{segmento}}}} para o segmento do lead
-- Use {{{{cidade}}}} para a cidade do lead
-- O botão CTA deve apontar para # (o link será substituído depois)
-- Tom profissional, direto, sem ser genérico
-- NÃO use imagens externas
-- O conteúdo deve refletir o contexto real da empresa, não ser genérico
+- Use {{{{cal_link}}}} para o link de agendamento (coloque como texto clicável, não botão)
+- Estrutura: saudação → 1 frase sobre o benefício principal → pergunta → link
+- O email deve parecer escrito por uma PESSOA, não por uma empresa
 
-Responda SOMENTE com o HTML, sem explicações ou markdown."""}]
+EXEMPLO de tom ideal:
+"Oi {{{{nome}}}}! 👋
+Percebemos que vocês trabalham com X e queremos compartilhar algo que pode resolver Y.
+Seria interessante uma conversa rápida?
+Confira aqui: {{{{cal_link}}}}"
+
+Responda SOMENTE com o HTML, sem explicações."""}]
         )
         html = msg.content[0].text.strip()
         # Remove possíveis markdown code fences

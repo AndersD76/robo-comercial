@@ -165,25 +165,20 @@
         <i class="fa fa-wand-magic-sparkles"></i> Gerar com IA
       </button>
     </div>
-    <textarea id="msg_inicial" rows="6" placeholder="Olá! Sou da equipe {nome_empresa}.&#10;&#10;Vi que a {nome} pode se interessar...&#10;&#10;Posso agendar uma conversa? {cal_link}">{{ cfg.msg_inicial|default('',true)|e }}</textarea>
+    <textarea id="msg_inicial" rows="6" placeholder="Olá! Sou da equipe {nome_empresa}.&#10;&#10;Vi que a {nome} pode se interessar...&#10;&#10;Posso agendar uma conversa? {cal_link}"></textarea>
   </div>
 
   <!-- CONFIG EMAIL -->
   <div class="card">
     <div class="card-title"><i class="fa fa-at"></i> Configuração de Email</div>
     <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
-      Configure seu email remetente para enviar campanhas de prospecção.
+      Emails são enviados como <b style="color:var(--text)">contato@turbovenda.com.br</b>. Respostas dos leads vão para o email da sua conta.
     </p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="field">
-        <label>Email remetente</label>
-        <input type="email" id="email_remetente" value="{{ cfg.email_remetente or '' }}" placeholder="contato@suaempresa.com.br">
-      </div>
-      <div class="field">
-        <label>Nome do remetente</label>
-        <input type="text" id="email_remetente_nome" value="{{ cfg.email_remetente_nome or '' }}" placeholder="Ex: João da Empresa XYZ">
-      </div>
+    <div class="field">
+      <label>Nome do remetente <small>(aparece no "De:" do email)</small></label>
+      <input type="text" id="email_remetente_nome" value="{{ cfg.email_remetente_nome or '' }}" placeholder="Ex: João da Empresa XYZ">
     </div>
+    <input type="hidden" id="email_remetente" value="contato@turbovenda.com.br">
   </div>
 
   <!-- TEMPLATE EMAIL -->
@@ -212,7 +207,7 @@
         </button>
         <span id="cfg-html-filename" style="font-size:12px;color:var(--muted);align-self:center"></span>
       </div>
-      <textarea id="email_html_template" rows="12" placeholder="<html>&#10;<body>&#10;  <div style='font-family:sans-serif;max-width:600px;margin:0 auto'>&#10;    <h2>Olá {nome}!</h2>&#10;    <p>Sua mensagem aqui...</p>&#10;  </div>&#10;</body>&#10;</html>" style="font-family:'Courier New',monospace;font-size:12px">{{ cfg.email_html_template|default('',true)|e }}</textarea>
+      <textarea id="email_html_template" rows="12" placeholder="<html>&#10;<body>&#10;  <div style='font-family:sans-serif;max-width:600px;margin:0 auto'>&#10;    <h2>Olá {nome}!</h2>&#10;    <p>Sua mensagem aqui...</p>&#10;  </div>&#10;</body>&#10;</html>" style="font-family:'Courier New',monospace;font-size:12px"></textarea>
       <div id="cfg-html-preview" style="display:none;margin-top:10px;background:#fff;border-radius:8px;padding:16px;max-height:400px;overflow:auto"></div>
     </div>
   </div>
@@ -247,6 +242,8 @@
 
 <div class="toast" id="toast"></div>
 <script id="terms-data" type="application/json">{{ (cfg.termos_busca or []) | tojson }}</script>
+<script id="cfg-msg-inicial" type="application/json">{{ (cfg.msg_inicial or '') | tojson }}</script>
+<script id="cfg-email-tpl" type="application/json">{{ (cfg.email_html_template or '') | tojson }}</script>
 
 <script>
 const BOT = '{{ user.schema_name if user and user.schema_name else "" }}';
@@ -261,6 +258,16 @@ try {
     if (Array.isArray(_raw)) terms = _raw;
   }
 } catch(e) { terms = []; }
+
+// Carregar msg_inicial e email_html_template via JSON (evita Jinja interpretar {{}})
+try {
+  var _msgEl = document.getElementById('cfg-msg-inicial');
+  if (_msgEl) { var _v = JSON.parse(_msgEl.textContent); if (_v) document.getElementById('msg_inicial').value = _v; }
+} catch(e) {}
+try {
+  var _tplEl = document.getElementById('cfg-email-tpl');
+  if (_tplEl) { var _v = JSON.parse(_tplEl.textContent); if (_v) document.getElementById('email_html_template').value = _v; }
+} catch(e) {}
 
 function renderTerms() {
   const list = document.getElementById('terms-list')

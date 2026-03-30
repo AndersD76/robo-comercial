@@ -1987,8 +1987,11 @@ let _emailCfg = {}
 function loadEmailConfig() {
   fetch(`/api/${BOT}/config`).then(r=>r.json()).then(cfg=>{
     _emailCfg = cfg
-    const from = cfg.email_remetente
-      ? `${cfg.email_remetente_nome||cfg.empresa_nome||''} <${cfg.email_remetente}>`
+    // Preencher WhatsApp msg se vazio
+    var waMsg = document.getElementById('wa-msg-template');
+    if (waMsg && !waMsg.value.trim() && cfg.msg_inicial) waMsg.value = cfg.msg_inicial;
+    const from = cfg.email_remetente_nome
+      ? `${cfg.email_remetente_nome} &lt;contato@turbovenda.com.br&gt;`
       : '<span style="color:#f87171">não configurado — <a href="/configurar" style="color:#818cf8">configurar</a></span>'
     document.getElementById('email-cfg-from').innerHTML = from
     document.getElementById('email-cfg-assunto').textContent = cfg.email_assunto_padrao || 'não configurado'
