@@ -2300,51 +2300,43 @@ def api_generate_msg(bot):
         import anthropic
         client = anthropic.Anthropic(api_key=api_key)
         if tipo == 'followup':
-            prompt = f"""Você é um vendedor B2B profissional escrevendo um follow-up corporativo por email.
+            prompt = f"""Você é vendedor B2B da empresa "{empresa}".
 
-Empresa vendedora: {empresa}
-Contexto: {descricao}
+LEIA COM ATENÇÃO o que a empresa vende:
+{descricao}
 
-Escreva um follow-up CURTO e CORPORATIVO (4-5 linhas).
+Agora escreva um follow-up CURTO por email (4-5 linhas). Use as informações acima para criar algo ESPECÍFICO sobre o produto/serviço real.
 
 REGRAS:
-- Tom profissional e respeitoso, linguagem corporativa
-- MÁXIMO 5 linhas — executivos não leem emails longos
-- Referencie o contato anterior de forma natural
-- Destaque UM benefício concreto e específico (use números se possível)
-- Finalize com call-to-action claro e link de agendamento
-- Use {{{{nome}}}} para o nome da empresa prospectada
-- Use {{{{link_agenda}}}} para o link de agendamento
-- NÃO use frases vazias como "solução ideal", "é essencial", "desafios constantes"
-- NÃO use bullet points ou formatação elaborada
-- Pode usar 1 emoji discreto
-
-BOM EXEMPLO:
-"{{{{nome}}}}, bom dia! Enviei uma mensagem na semana passada sobre como reduzir em 40% o tempo de gestão de TI. Empresas como [setor] já estão usando essa abordagem. Podemos agendar 15 minutos para apresentar? {{{{link_agenda}}}}"
+- Tom corporativo e profissional
+- Extraia da descrição acima o PRINCIPAL benefício e mencione-o de forma concreta
+- Referencie um contato anterior naturalmente
+- Finalize com CTA + {{{{link_agenda}}}}
+- Use {{{{nome}}}} para o nome do prospecto
+- PROIBIDO: "é essencial", "solução ideal", "desafios constantes", repetir a descrição inteira
+- Pode usar 1 emoji
 
 Responda SOMENTE com a mensagem."""
         else:
-            prompt = f"""Você é um vendedor B2B profissional fazendo prospecção via WhatsApp.
+            prompt = f"""Você é vendedor B2B da empresa "{empresa}".
 
-Empresa: {empresa}
-O que vende: {descricao}
+LEIA COM ATENÇÃO o que a empresa vende — use essas informações para criar a mensagem:
+{descricao}
+
+Agora escreva UMA mensagem de WhatsApp de prospecção. Use os detalhes reais do produto/serviço acima.
 
 REGRAS:
-- Tom CORPORATIVO mas acessível — profissional, não robótico
-- MÁXIMO 5 linhas — WhatsApp longo ninguém lê
-- Comece com saudação profissional usando {{{{nome}}}}
-- Mencione UM benefício ESPECÍFICO e CONCRETO (use números/dados se possível)
-- NÃO repita a descrição do produto literalmente — traduza em benefício para o cliente
-- NÃO use clichês: "sabemos que", "é essencial", "solução ideal", "em tempo real", "desafios constantes"
-- Finalize com call-to-action e link: {{{{cal_link}}}}
+- Tom CORPORATIVO e profissional
+- MÁXIMO 4 linhas — WhatsApp longo ninguém lê
+- Extraia da descrição acima o PRINCIPAL diferencial e transforme em benefício para o cliente
+- NÃO copie a descrição literalmente — sintetize em 1 frase de impacto
+- Use {{{{nome}}}} para o prospecto, {{{{cal_link}}}} para link de agenda
+- PROIBIDO: "sabemos que", "é essencial", "solução ideal", "desafios constantes"
+- PROIBIDO: assinatura (Abraço, Equipe X, etc)
 - Pode usar 1-2 emojis profissionais
-- NÃO coloque assinatura longa (nome empresa + cargo + telefone)
 
-BOM EXEMPLO:
-"Bom dia, {{{{nome}}}}! Temos ajudado empresas do seu segmento a reduzir em 60% as paradas não planejadas de TI. Posso mostrar como em 15 minutos? Agenda aqui: {{{{cal_link}}}} 📅"
-
-RUIM (NÃO FAÇA):
-"Olá {{{{nome}}}}! 👋 Sabemos que controlar a saúde dos PCs é essencial. O PC Monitor monitora em tempo real o desempenho, segurança e produtividade dos seus computadores, evitando paradas não previstas. Podemos conversar? Clique aqui: {{{{cal_link}}}} ⏰"
+EXEMPLO DE ESTRUTURA (adapte ao produto real descrito acima):
+"Bom dia, {{{{nome}}}}! [1 frase específica sobre o benefício real do produto]. Posso mostrar como funciona em 15 min? {{{{cal_link}}}} 📅"
 
 Responda SOMENTE com a mensagem, nada mais."""
         msg = client.messages.create(
@@ -2433,42 +2425,31 @@ O email deve parecer que foi feito pelo mesmo designer do site.
         msg = client.messages.create(
             model='claude-haiku-4-5-20251001',
             max_tokens=3000,
-            messages=[{'role': 'user', 'content': f"""Você é designer de email marketing B2B profissional.
+            messages=[{'role': 'user', 'content': f"""Você é designer de email marketing B2B da empresa "{empresa}".
 
-Empresa vendedora: {empresa}
-O que ela vende: {descricao}
+LEIA COM ATENÇÃO o que a empresa vende — use essas informações reais no email:
+{descricao}
 {contexto}
-Crie um email HTML de prospecção corporativo com DESIGN PROFISSIONAL.
+Crie um email HTML de prospecção CORPORATIVO com DESIGN PROFISSIONAL, baseado no produto/serviço descrito acima.
 
-DESIGN OBRIGATÓRIO:
-- Layout limpo e moderno, com boa hierarquia visual
-- Fundo branco (#ffffff) com container centralizado (max-width: 600px)
-- Header discreto com nome da empresa vendedora (sem logo, só texto estilizado)
-- Corpo com padding generoso (30-40px lateral)
-- Botão CTA destacado (border-radius: 6px, padding: 12px 28px, cor de destaque)
-- Footer sutil com texto pequeno e cinza
-- Fontes: font-family: 'Segoe UI', Arial, sans-serif
-- Cores: use tons profissionais (azul, cinza escuro). Se tiver identidade visual, use as cores da empresa.
-- Espaçamento entre elementos: 16-24px
-- Responsivo (width: 100%, max-width fixo)
+DESIGN:
+- Layout limpo, moderno, container centralizado (max-width: 600px)
+- Fundo branco, header discreto com "{empresa}" estilizado
+- Padding generoso (30-40px lateral), espaçamento 16-24px entre blocos
+- Botão CTA destacado (border-radius: 6px, padding: 12px 28px, cor profissional)
+- Footer sutil cinza pequeno
+- Fontes: 'Segoe UI', Arial, sans-serif
+- Cores profissionais (azul/cinza escuro ou da identidade visual se disponível)
 
-CONTEÚDO:
-- Tom CORPORATIVO e PROFISSIONAL — linguagem de negócios
-- MÁXIMO 6 linhas de texto no corpo
-- Destaque UM benefício concreto e específico (use dados/números se possível)
-- NÃO repita a descrição do produto literalmente
-- NÃO use clichês: "sabemos que", "é essencial", "solução ideal", "desafios constantes"
-- Use {{{{nome}}}} para o nome da empresa prospectada
-- Botão CTA com link {{{{cal_link}}}} (texto: "Agendar Conversa" ou similar)
-- Assinatura profissional simples (nome empresa, sem dados pessoais)
+CONTEÚDO (extraia da descrição do produto acima):
+- Tom CORPORATIVO e PROFISSIONAL
+- MÁXIMO 5-6 linhas de texto
+- Extraia o PRINCIPAL diferencial do produto descrito acima e transforme em benefício concreto para o cliente
+- NÃO copie a descrição literalmente — sintetize o valor em 2-3 frases de impacto
+- Use {{{{nome}}}} para nome do prospecto, {{{{cal_link}}}} no botão CTA ("Agendar Conversa")
+- PROIBIDO: "sabemos que", "é essencial", "solução ideal", "desafios constantes"
 
-ESTRUTURA:
-1. Header com nome da empresa
-2. Saudação "Prezados, {{{{nome}}}}" ou "{{{{nome}}}}, bom dia!"
-3. 2-3 frases sobre o benefício (específico, com número se possível)
-4. 1 frase de transição
-5. Botão CTA
-6. Footer discreto
+ESTRUTURA: Header → Saudação {{{{nome}}}} → 2-3 frases do benefício real → Botão CTA → Footer
 
 Responda SOMENTE com o HTML completo, sem explicações ou markdown."""}]
         )
