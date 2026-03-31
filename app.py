@@ -165,68 +165,6 @@ def _init_user_schema(schema: str):
         demo_status TEXT, email_enviado TIMESTAMP,
         observacoes TEXT
     )""")
-    # Migrations
-    for stmt in [
-        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS observacoes TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS msg_inicial TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_assunto_padrao TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_html_template TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_remetente TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_remetente_nome TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS resend_api_key TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_host TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_port INTEGER DEFAULT 587",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_user TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS serper_api_key TEXT",
-        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS wa_enviado TIMESTAMP",
-        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS agenda_token TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_inicio INTEGER DEFAULT 9",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_fim INTEGER DEFAULT 18",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS duracao_reuniao INTEGER DEFAULT 30",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS dias_semana TEXT DEFAULT '1,2,3,4,5'",
-        """CREATE TABLE IF NOT EXISTS agenda (
-            id BIGSERIAL PRIMARY KEY,
-            empresa_id BIGINT REFERENCES empresas(id) ON DELETE SET NULL,
-            titulo TEXT NOT NULL,
-            descricao TEXT,
-            data_inicio TIMESTAMP NOT NULL,
-            data_fim TIMESTAMP,
-            tipo TEXT DEFAULT 'reuniao',
-            local TEXT,
-            concluido BOOLEAN DEFAULT FALSE,
-            criado_em TIMESTAMP DEFAULT NOW()
-        )""",
-        # Enriquecimento
-        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS enriquecido BOOLEAN DEFAULT FALSE",
-        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS enriquecido_em TIMESTAMP",
-        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS natureza_juridica TEXT",
-        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS situacao_cadastral TEXT",
-        # Sequencias
-        """CREATE TABLE IF NOT EXISTS sequencias (
-            id BIGSERIAL PRIMARY KEY,
-            nome TEXT NOT NULL,
-            passos JSONB DEFAULT '[]',
-            ativo BOOLEAN DEFAULT TRUE,
-            criado_em TIMESTAMP DEFAULT NOW(),
-            atualizado_em TIMESTAMP DEFAULT NOW()
-        )""",
-        """CREATE TABLE IF NOT EXISTS sequencia_leads (
-            id BIGSERIAL PRIMARY KEY,
-            sequencia_id BIGINT REFERENCES sequencias(id) ON DELETE CASCADE,
-            empresa_id BIGINT REFERENCES empresas(id) ON DELETE CASCADE,
-            passo_atual INTEGER DEFAULT 0,
-            proximo_envio TIMESTAMP,
-            status TEXT DEFAULT 'ativo',
-            iniciado_em TIMESTAMP DEFAULT NOW(),
-            atualizado_em TIMESTAMP DEFAULT NOW(),
-            UNIQUE(sequencia_id, empresa_id)
-        )""",
-    ]:
-        try:
-            c.execute(stmt)
-        except Exception:
-            conn.rollback()
     conn.commit()
     c.execute("""CREATE TABLE IF NOT EXISTS contatos (
         id BIGSERIAL PRIMARY KEY, empresa_id BIGINT REFERENCES empresas(id),
@@ -290,6 +228,16 @@ def _init_user_schema(schema: str):
         msg_inicial TEXT,
         email_assunto_padrao TEXT,
         email_html_template TEXT,
+        email_remetente TEXT,
+        email_remetente_nome TEXT,
+        resend_api_key TEXT,
+        smtp_host TEXT, smtp_port INTEGER DEFAULT 587,
+        smtp_user TEXT, smtp_password TEXT,
+        serper_api_key TEXT,
+        horario_inicio INTEGER DEFAULT 9,
+        horario_fim INTEGER DEFAULT 18,
+        duracao_reuniao INTEGER DEFAULT 30,
+        dias_semana TEXT DEFAULT '1,2,3,4,5',
         atualizado_em TIMESTAMP DEFAULT NOW()
     )""")
     c.execute("""CREATE TABLE IF NOT EXISTS agenda (
@@ -304,7 +252,53 @@ def _init_user_schema(schema: str):
         concluido BOOLEAN DEFAULT FALSE,
         criado_em TIMESTAMP DEFAULT NOW()
     )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS sequencias (
+        id BIGSERIAL PRIMARY KEY,
+        nome TEXT NOT NULL,
+        passos JSONB DEFAULT '[]',
+        ativo BOOLEAN DEFAULT TRUE,
+        criado_em TIMESTAMP DEFAULT NOW(),
+        atualizado_em TIMESTAMP DEFAULT NOW()
+    )""")
+    c.execute("""CREATE TABLE IF NOT EXISTS sequencia_leads (
+        id BIGSERIAL PRIMARY KEY,
+        sequencia_id BIGINT REFERENCES sequencias(id) ON DELETE CASCADE,
+        empresa_id BIGINT REFERENCES empresas(id) ON DELETE CASCADE,
+        passo_atual INTEGER DEFAULT 0,
+        proximo_envio TIMESTAMP,
+        status TEXT DEFAULT 'ativo',
+        iniciado_em TIMESTAMP DEFAULT NOW(),
+        atualizado_em TIMESTAMP DEFAULT NOW(),
+        UNIQUE(sequencia_id, empresa_id)
+    )""")
     c.execute("INSERT INTO execucao (id) VALUES (1) ON CONFLICT DO NOTHING")
+    conn.commit()
+    # Migrations para schemas antigos
+    for stmt in [
+        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS observacoes TEXT",
+        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS wa_enviado TIMESTAMP",
+        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS agenda_token TEXT",
+        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS enriquecido BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS enriquecido_em TIMESTAMP",
+        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS natureza_juridica TEXT",
+        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS situacao_cadastral TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_remetente TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_remetente_nome TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS resend_api_key TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_host TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_port INTEGER DEFAULT 587",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_user TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS serper_api_key TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_inicio INTEGER DEFAULT 9",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_fim INTEGER DEFAULT 18",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS duracao_reuniao INTEGER DEFAULT 30",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS dias_semana TEXT DEFAULT '1,2,3,4,5'",
+    ]:
+        try:
+            c.execute(stmt)
+        except Exception:
+            conn.rollback()
     conn.commit()
     conn.close()
 
