@@ -84,6 +84,8 @@ def _init_public_schema_safe():
                 c.execute(stmt)
             except Exception:
                 conn.rollback()
+        # Set suporte@pcmonitor.com.br as pro
+        c.execute("UPDATE users SET plano = 'pro' WHERE email = 'suporte@pcmonitor.com.br' AND plano != 'pro'")
         conn.commit()
         conn.close()
     except Exception as e:
@@ -1397,10 +1399,20 @@ def _processar_sequencias_schema(schema):
             link_agenda = _get_link_agenda(schema, p['empresa_id'])
             assunto = (passo.get('assunto', '')
                 .replace('{{nome}}', nome)
-                .replace('{{link_agenda}}', link_agenda))
-            html = (passo.get('html_template', '')
+                .replace('{nome}', nome)
+                .replace('{{link_agenda}}', link_agenda)
+                .replace('{link_agenda}', link_agenda))
+            raw_msg = passo.get('mensagem') or passo.get('html_template') or ''
+            raw_msg = (raw_msg
                 .replace('{{nome}}', nome)
-                .replace('{{link_agenda}}', link_agenda))
+                .replace('{nome}', nome)
+                .replace('{{link_agenda}}', link_agenda)
+                .replace('{link_agenda}', link_agenda))
+            # Auto-wrap plain text in HTML
+            if '<html' not in raw_msg.lower() and '<body' not in raw_msg.lower():
+                html = '<div style="font-family:sans-serif;font-size:14px;color:#333">' + raw_msg.replace('\n', '<br>') + '</div>'
+            else:
+                html = raw_msg
             try:
                 ok = _send_email(ecfg, p['email'], nome,
                                  assunto, html)
@@ -2283,13 +2295,29 @@ def api_generate_msg(bot):
     api_key = os.environ.get('ANTHROPIC_API_KEY', '')
     if not api_key:
         return jsonify({'error': 'ANTHROPIC_API_KEY não configurado'}), 400
+    tipo = data.get('tipo', 'whatsapp')
     try:
         import anthropic
         client = anthropic.Anthropic(api_key=api_key)
-        msg = client.messages.create(
-            model='claude-haiku-4-5-20251001',
-            max_tokens=600,
-            messages=[{'role': 'user', 'content': f"""Você é copywriter especialista em prospecção B2B via WhatsApp.
+        if tipo == 'followup':
+            prompt = f"""Você é copywriter especialista em follow-up B2B por email.
+
+Empresa vendedora: {empresa}
+Contexto: {descricao}
+
+Crie UMA mensagem curta de follow-up por email.
+
+Regras:
+- Máximo 5 linhas, tom informal e direto
+- NÃO use bullet points, headers ou formatação corporativa
+- Seja humano, como se fosse um vendedor conversando
+- Use {{{{nome}}}} para o nome da empresa prospectada
+- Use {{{{link_agenda}}}} para o link de agendamento
+- Pode usar 1-2 emojis, sem exagero
+
+Responda SOMENTE com a mensagem, sem explicações."""
+        else:
+            prompt = f"""Você é copywriter especialista em prospecção B2B via WhatsApp.
 
 Empresa vendedora: {empresa}
 O que ela vende: {descricao}
@@ -2305,7 +2333,11 @@ Regras:
 - Use {{{{cal_link}}}} para o link de agendamento
 - Pode usar 1-2 emojis, sem exagero
 
-Responda SOMENTE com a mensagem, sem explicações."""}]
+Responda SOMENTE com a mensagem, sem explicações."""
+        msg = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=600,
+            messages=[{'role': 'user', 'content': prompt}]
         )
         return jsonify({'ok': True, 'mensagem': msg.content[0].text.strip()})
     except Exception as e:

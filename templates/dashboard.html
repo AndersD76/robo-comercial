@@ -2358,7 +2358,7 @@ async function deleteSeq(id){
 }
 function openSeqEditor(seqId){
   const seq=seqId?_seqData.find(s=>s.id===seqId):null;
-  const passos=seq?(typeof seq.passos==='string'?JSON.parse(seq.passos):seq.passos||[]):[{dia:0,assunto:'',html_template:''}];
+  const passos=seq?(typeof seq.passos==='string'?JSON.parse(seq.passos):seq.passos||[]):[{dia:0,assunto:'',mensagem:''}];
   let h=`<div class="modal" style="max-width:600px;padding:24px">
     <h3 style="margin:0 0 16px;color:#e2e8f0">${seq?'Editar':'Nova'} Sequência</h3>
     <div class="field"><label>Nome da sequência</label>
@@ -2377,16 +2377,35 @@ function openSeqEditor(seqId){
   document.getElementById('overlay').style.display='flex';
 }
 function _seqPassoHtml(i,p){
-  return `<div class="seq-passo" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:12px;margin-bottom:8px">
-    <div style="display:flex;gap:8px;margin-bottom:6px">
-      <div style="flex:0 0 80px"><label style="font-size:10px;color:var(--muted)">Dia</label>
-        <input type="number" class="sp-dia" value="${p.dia}" min="0" style="width:100%"></div>
+  const msg = p.mensagem || p.html_template || '';
+  return `<div class="seq-passo" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:14px;margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span style="background:rgba(244,114,182,.15);color:#f472b6;font-weight:700;font-size:11px;padding:3px 10px;border-radius:6px">Passo ${i+1}</span>
+      <div style="flex:0 0 70px"><label style="font-size:10px;color:var(--muted)">Enviar no dia</label>
+        <input type="number" class="sp-dia" value="${p.dia}" min="0" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px"></div>
       <div style="flex:1"><label style="font-size:10px;color:var(--muted)">Assunto</label>
-        <input class="sp-assunto" value="${(p.assunto||'').replace(/"/g,'&quot;')}" placeholder="Assunto do email" style="width:100%"></div>
-      <button onclick="this.closest('.seq-passo').remove()" style="background:none;border:none;color:#f87171;cursor:pointer;align-self:flex-end;padding:6px"><i class="fa fa-times"></i></button>
+        <input class="sp-assunto" value="${(p.assunto||'').replace(/"/g,'&quot;')}" placeholder="Ex: Acompanhamento - {nome}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px"></div>
+      <button onclick="this.closest('.seq-passo').remove()" style="background:none;border:none;color:#f87171;cursor:pointer;align-self:flex-end;padding:6px" title="Remover"><i class="fa fa-trash" style="font-size:11px"></i></button>
     </div>
-    <label style="font-size:10px;color:var(--muted)">Template HTML</label>
-    <textarea class="sp-html" rows="3" style="width:100%;font-size:11px" placeholder="HTML do email...">${(p.html_template||'').replace(/</g,'&lt;')}</textarea></div>`;
+    <label style="font-size:10px;color:var(--muted)">Mensagem do email</label>
+    <textarea class="sp-msg" rows="3" style="width:100%;font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-family:inherit;resize:vertical" placeholder="Olá {nome}, gostaria de retomar o contato...">${msg.replace(/</g,'&lt;')}</textarea>
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <button onclick="gerarMsgPasso(this)" class="btn-cfg" style="font-size:10px;padding:4px 10px"><i class="fa fa-wand-magic-sparkles"></i> Gerar com IA</button>
+      <small style="color:var(--muted);font-size:10px;align-self:center">Use {nome} para o nome da empresa</small>
+    </div></div>`;
+}
+async function gerarMsgPasso(btn){
+  const passo=btn.closest('.seq-passo');
+  const dia=passo.querySelector('.sp-dia').value;
+  const assunto=passo.querySelector('.sp-assunto').value;
+  btn.disabled=true;btn.innerHTML='<i class="fa fa-spinner fa-spin"></i> Gerando...';
+  try{
+    const r=await fetch(`/api/${BOT}/config/generate-msg`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({empresa_nome:document.querySelector('.hdr-name')?.textContent||'',descricao:'follow-up dia '+dia+' assunto: '+assunto,tipo:'followup'})});
+    const d=await r.json();
+    if(d.ok&&d.mensagem) passo.querySelector('.sp-msg').value=d.mensagem;
+  }catch(e){}
+  btn.disabled=false;btn.innerHTML='<i class="fa fa-wand-magic-sparkles"></i> Gerar com IA';
 }
 function addSeqPasso(){
   const box=document.getElementById('seq-passos');
@@ -2402,7 +2421,7 @@ async function saveSeq(seqId){
     passos.push({
       dia:parseInt(el.querySelector('.sp-dia').value)||0,
       assunto:el.querySelector('.sp-assunto').value,
-      html_template:el.querySelector('.sp-html').value
+      mensagem:el.querySelector('.sp-msg').value
     });
   });
   const url=seqId?`/api/${BOT}/sequencia/${seqId}`:`/api/${BOT}/sequencias`;
