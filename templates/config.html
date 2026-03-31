@@ -469,7 +469,9 @@ async function saveConfig(redirect) {
         setTimeout(function() { btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'; btn.disabled = false }, 1500)
       }
     } else {
-      dbg.textContent = 'ERRO: status=' + r.status + ' | ' + txt.substring(0,300)
+      var errMsg = d.error || 'Erro ao salvar'
+      dbg.textContent = errMsg
+      showToast(errMsg, false)
       btn.disabled = false
       btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'
     }

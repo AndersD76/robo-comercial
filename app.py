@@ -1842,11 +1842,40 @@ def api_save_config(bot):
     smtp_password = data.get('smtp_password', '')
     serper_api_key = data.get('serper_api_key', '')
 
+    # Validação de campos obrigatórios
+    erros = []
+    if not empresa_nome.strip():
+        erros.append('Nome da empresa')
+    if not descricao.strip():
+        erros.append('Descrição do produto/serviço')
+    if erros:
+        return jsonify({'error': f'Preencha os campos obrigatórios: {", ".join(erros)}'}), 400
+
     conn = None
     try:
         print(f'[save_config/{schema}] Iniciando save...', flush=True)
         conn = _conn(schema)
         c = conn.cursor()
+        # Garantir colunas existem (schemas antigos)
+        for col_stmt in [
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_remetente TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_remetente_nome TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS resend_api_key TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_host TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_port INTEGER DEFAULT 587",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_user TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS serper_api_key TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_inicio INTEGER DEFAULT 9",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_fim INTEGER DEFAULT 18",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS duracao_reuniao INTEGER DEFAULT 30",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS dias_semana TEXT DEFAULT '1,2,3,4,5'",
+        ]:
+            try:
+                c.execute(col_stmt)
+            except Exception:
+                conn.rollback()
+        conn.commit()
         c.execute('SELECT * FROM bot_config LIMIT 1')
         exists = c.fetchone()
 
