@@ -2300,40 +2300,53 @@ def api_generate_msg(bot):
         import anthropic
         client = anthropic.Anthropic(api_key=api_key)
         if tipo == 'followup':
-            prompt = f"""Você é copywriter especialista em follow-up B2B por email.
+            prompt = f"""Você é um vendedor B2B profissional escrevendo um follow-up corporativo por email.
 
 Empresa vendedora: {empresa}
 Contexto: {descricao}
 
-Crie UMA mensagem curta de follow-up por email.
+Escreva um follow-up CURTO e CORPORATIVO (4-5 linhas).
 
-Regras:
-- Máximo 5 linhas, tom informal e direto
-- NÃO use bullet points, headers ou formatação corporativa
-- Seja humano, como se fosse um vendedor conversando
+REGRAS:
+- Tom profissional e respeitoso, linguagem corporativa
+- MÁXIMO 5 linhas — executivos não leem emails longos
+- Referencie o contato anterior de forma natural
+- Destaque UM benefício concreto e específico (use números se possível)
+- Finalize com call-to-action claro e link de agendamento
 - Use {{{{nome}}}} para o nome da empresa prospectada
 - Use {{{{link_agenda}}}} para o link de agendamento
-- Pode usar 1-2 emojis, sem exagero
+- NÃO use frases vazias como "solução ideal", "é essencial", "desafios constantes"
+- NÃO use bullet points ou formatação elaborada
+- Pode usar 1 emoji discreto
 
-Responda SOMENTE com a mensagem, sem explicações."""
+BOM EXEMPLO:
+"{{{{nome}}}}, bom dia! Enviei uma mensagem na semana passada sobre como reduzir em 40% o tempo de gestão de TI. Empresas como [setor] já estão usando essa abordagem. Podemos agendar 15 minutos para apresentar? {{{{link_agenda}}}}"
+
+Responda SOMENTE com a mensagem."""
         else:
-            prompt = f"""Você é copywriter especialista em prospecção B2B via WhatsApp.
+            prompt = f"""Você é um vendedor B2B profissional fazendo prospecção via WhatsApp.
 
-Empresa vendedora: {empresa}
-O que ela vende: {descricao}
+Empresa: {empresa}
+O que vende: {descricao}
 
-Crie UMA mensagem de primeiro contato via WhatsApp para prospectar clientes.
+REGRAS:
+- Tom CORPORATIVO mas acessível — profissional, não robótico
+- MÁXIMO 5 linhas — WhatsApp longo ninguém lê
+- Comece com saudação profissional usando {{{{nome}}}}
+- Mencione UM benefício ESPECÍFICO e CONCRETO (use números/dados se possível)
+- NÃO repita a descrição do produto literalmente — traduza em benefício para o cliente
+- NÃO use clichês: "sabemos que", "é essencial", "solução ideal", "em tempo real", "desafios constantes"
+- Finalize com call-to-action e link: {{{{cal_link}}}}
+- Pode usar 1-2 emojis profissionais
+- NÃO coloque assinatura longa (nome empresa + cargo + telefone)
 
-Regras:
-- Máximo 6 linhas (WhatsApp precisa ser curto)
-- Tom profissional mas acessível, sem ser invasivo
-- Mencione o benefício principal do produto/serviço
-- Inclua call-to-action claro
-- Use {{{{nome}}}} para o nome da empresa prospectada
-- Use {{{{cal_link}}}} para o link de agendamento
-- Pode usar 1-2 emojis, sem exagero
+BOM EXEMPLO:
+"Bom dia, {{{{nome}}}}! Temos ajudado empresas do seu segmento a reduzir em 60% as paradas não planejadas de TI. Posso mostrar como em 15 minutos? Agenda aqui: {{{{cal_link}}}} 📅"
 
-Responda SOMENTE com a mensagem, sem explicações."""
+RUIM (NÃO FAÇA):
+"Olá {{{{nome}}}}! 👋 Sabemos que controlar a saúde dos PCs é essencial. O PC Monitor monitora em tempo real o desempenho, segurança e produtividade dos seus computadores, evitando paradas não previstas. Podemos conversar? Clique aqui: {{{{cal_link}}}} ⏰"
+
+Responda SOMENTE com a mensagem, nada mais."""
         msg = client.messages.create(
             model='claude-haiku-4-5-20251001',
             max_tokens=600,
@@ -2419,32 +2432,45 @@ O email deve parecer que foi feito pelo mesmo designer do site.
 
         msg = client.messages.create(
             model='claude-haiku-4-5-20251001',
-            max_tokens=2000,
-            messages=[{'role': 'user', 'content': f"""Você é copywriter de prospecção B2B.
+            max_tokens=3000,
+            messages=[{'role': 'user', 'content': f"""Você é designer de email marketing B2B profissional.
 
 Empresa vendedora: {empresa}
 O que ela vende: {descricao}
 {contexto}
-Crie um email HTML CURTO de prospecção (cold email).
+Crie um email HTML de prospecção corporativo com DESIGN PROFISSIONAL.
 
-REGRAS OBRIGATÓRIAS:
-- MÁXIMO 5 linhas de texto. Seja CURTO e DIRETO como uma mensagem de WhatsApp.
-- Tom informal, humano, como se fosse um vendedor conversando. Use emoji com moderação (1-2 no máximo).
-- NÃO use bullet points, listas, seções, headers ou footers corporativos
-- NÃO use frases genéricas como "desafios constantes", "solução ideal", "líder de mercado"
-- HTML simples: só um div com font-family sans-serif, sem cores, sem botões elaborados
+DESIGN OBRIGATÓRIO:
+- Layout limpo e moderno, com boa hierarquia visual
+- Fundo branco (#ffffff) com container centralizado (max-width: 600px)
+- Header discreto com nome da empresa vendedora (sem logo, só texto estilizado)
+- Corpo com padding generoso (30-40px lateral)
+- Botão CTA destacado (border-radius: 6px, padding: 12px 28px, cor de destaque)
+- Footer sutil com texto pequeno e cinza
+- Fontes: font-family: 'Segoe UI', Arial, sans-serif
+- Cores: use tons profissionais (azul, cinza escuro). Se tiver identidade visual, use as cores da empresa.
+- Espaçamento entre elementos: 16-24px
+- Responsivo (width: 100%, max-width fixo)
+
+CONTEÚDO:
+- Tom CORPORATIVO e PROFISSIONAL — linguagem de negócios
+- MÁXIMO 6 linhas de texto no corpo
+- Destaque UM benefício concreto e específico (use dados/números se possível)
+- NÃO repita a descrição do produto literalmente
+- NÃO use clichês: "sabemos que", "é essencial", "solução ideal", "desafios constantes"
 - Use {{{{nome}}}} para o nome da empresa prospectada
-- Use {{{{cal_link}}}} para o link de agendamento (coloque como texto clicável, não botão)
-- Estrutura: saudação → 1 frase sobre o benefício principal → pergunta → link
-- O email deve parecer escrito por uma PESSOA, não por uma empresa
+- Botão CTA com link {{{{cal_link}}}} (texto: "Agendar Conversa" ou similar)
+- Assinatura profissional simples (nome empresa, sem dados pessoais)
 
-EXEMPLO de tom ideal:
-"Oi {{{{nome}}}}! 👋
-Percebemos que vocês trabalham com X e queremos compartilhar algo que pode resolver Y.
-Seria interessante uma conversa rápida?
-Confira aqui: {{{{cal_link}}}}"
+ESTRUTURA:
+1. Header com nome da empresa
+2. Saudação "Prezados, {{{{nome}}}}" ou "{{{{nome}}}}, bom dia!"
+3. 2-3 frases sobre o benefício (específico, com número se possível)
+4. 1 frase de transição
+5. Botão CTA
+6. Footer discreto
 
-Responda SOMENTE com o HTML, sem explicações."""}]
+Responda SOMENTE com o HTML completo, sem explicações ou markdown."""}]
         )
         html = msg.content[0].text.strip()
         # Remove possíveis markdown code fences
@@ -2453,7 +2479,7 @@ Responda SOMENTE com o HTML, sem explicações."""}]
         if html.endswith('```'):
             html = html.rsplit('```', 1)[0]
         return jsonify({'ok': True, 'html': html.strip(),
-                        'assunto': f'{empresa} — uma solução para {{{{nome}}}}'})
+                        'assunto': f'{empresa} | Proposta para {{{{nome}}}}'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
