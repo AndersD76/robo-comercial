@@ -337,6 +337,44 @@ def get_current_user():
         return None
 
 
+PLAN_LEAD_LIMITS = {
+    'trial': 50,
+    'starter': 500,
+    'pro': None,       # ilimitado
+    'enterprise': None  # ilimitado
+}
+
+
+def _check_lead_limit(schema, uid=None):
+    """Retorna (ok, msg). ok=True se pode inserir, False se atingiu limite."""
+    uid = uid or session.get('user_id')
+    if not uid:
+        return True, ''
+    try:
+        conn = _conn()
+        c = conn.cursor()
+        c.execute('SELECT plano FROM users WHERE id = %s', (uid,))
+        row = c.fetchone()
+        conn.close()
+        plano = (row['plano'] if row else 'trial') or 'trial'
+    except Exception:
+        plano = 'trial'
+    limite = PLAN_LEAD_LIMITS.get(plano)
+    if limite is None:
+        return True, ''
+    try:
+        conn2 = _conn(schema)
+        c2 = conn2.cursor()
+        c2.execute('SELECT COUNT(*) AS total FROM empresas')
+        total = c2.fetchone()['total']
+        conn2.close()
+    except Exception:
+        return True, ''
+    if total >= limite:
+        return False, f'Limite de {limite} leads atingido no plano {plano}. Faça upgrade para continuar.'
+    return True, ''
+
+
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -783,6 +821,9 @@ def api_bot_console(bot):
 @login_required
 def api_add_lead(bot):
     schema = _get_schema() or bot
+    ok, msg = _check_lead_limit(schema)
+    if not ok:
+        return jsonify({'error': msg, 'limit_reached': True}), 403
     data = request.get_json(silent=True) or {}
     nome = (data.get('nome_fantasia') or '').strip()
     if not nome:
@@ -2161,6 +2202,10 @@ def public_list_leads():
 @token_required
 def public_create_lead():
     schema = request.token_user['schema_name']
+    uid = request.token_user.get('user_id') or request.token_user.get('id')
+    ok, msg = _check_lead_limit(schema, uid=uid)
+    if not ok:
+        return jsonify({'error': msg, 'limit_reached': True}), 403
     data = request.get_json(silent=True) or {}
     nome = (data.get('nome_fantasia') or '').strip()
     if not nome:
@@ -3236,10 +3281,25 @@ def api_meu_plano():
         if isinstance(expira, str):
             expira = datetime.fromisoformat(expira)
         ativo = expira > datetime.now()
+    # Info de limite de leads
+    limite = PLAN_LEAD_LIMITS.get(plano)
+    total_leads = 0
+    try:
+        schema = _get_schema()
+        if schema:
+            conn2 = _conn(schema)
+            c2 = conn2.cursor()
+            c2.execute('SELECT COUNT(*) AS total FROM empresas')
+            total_leads = c2.fetchone()['total']
+            conn2.close()
+    except Exception:
+        pass
     return jsonify({
         'plano': plano,
         'ativo': ativo,
         'expira': str(expira) if expira else None,
+        'limite_leads': limite,
+        'total_leads': total_leads,
     })
 
 

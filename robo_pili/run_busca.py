@@ -252,7 +252,45 @@ def get_contagem_diaria(schema: str, tipo: str) -> int:
         return 0
 
 
+PLAN_LEAD_LIMITS = {
+    'trial': 50,
+    'starter': 500,
+    'pro': None,
+    'enterprise': None
+}
+
+
+def _check_lead_limit_busca(schema: str) -> bool:
+    """Retorna True se pode inserir, False se atingiu limite."""
+    try:
+        # Acessar public schema para pegar plano do user
+        conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+        c = conn.cursor()
+        # schema = emp_N -> user_id = N
+        uid = schema.replace('emp_', '')
+        c.execute('SELECT plano FROM public.users WHERE id = %s', (uid,))
+        row = c.fetchone()
+        conn.close()
+        plano = (row['plano'] if row else 'trial') or 'trial'
+        limite = PLAN_LEAD_LIMITS.get(plano)
+        if limite is None:
+            return True
+        conn2 = _conn(schema)
+        c2 = conn2.cursor()
+        c2.execute('SELECT COUNT(*) AS total FROM empresas')
+        total = c2.fetchone()['total']
+        conn2.close()
+        return total < limite
+    except Exception:
+        return True
+
+
 def salvar_empresa(schema: str, dados: dict):
+    # Verificar limite do plano
+    if not _check_lead_limit_busca(schema):
+        print(f'[{schema}] ✗ Limite de leads atingido no plano trial', flush=True)
+        return None
+
     conn = _conn(schema)
     c = conn.cursor()
     try:
@@ -942,6 +980,13 @@ async def main_loop(schema: str):
             termo_pagina.clear()
             termo_sem_novos.clear()
             termos_ativos = termos
+
+        # Verificar limite de leads antes de gastar buscas
+        if not _check_lead_limit_busca(schema):
+            print(f'[{schema}] ⚠ Limite de leads do plano atingido. Robô pausado. Faça upgrade para continuar.', flush=True)
+            log_db(schema, 'limite', 'Limite de leads do plano atingido')
+            await asyncio.sleep(300)  # Espera 5min e verifica de novo
+            continue
 
         print(f'\n[{schema}] ━━━ Ciclo #{ciclo} | buscas hoje: {get_contagem_diaria(schema, "buscas")} | termos ativos: {len(termos_ativos)}/{len(termos)} ━━━', flush=True)
 

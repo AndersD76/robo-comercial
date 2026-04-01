@@ -2489,9 +2489,14 @@ async function loadPlano(){
     if(d.plano==='trial'){
       btn.style.display='flex';
       badge.style.display='inline-block';
-      badge.textContent='TRIAL';
-      badge.style.background='rgba(251,191,36,.15)';
-      badge.style.color='#fbbf24';
+      const lim=d.limite_leads||50;
+      const used=d.total_leads||0;
+      badge.textContent=`TRIAL ${used}/${lim}`;
+      badge.style.background=used>=lim?'rgba(239,68,68,.2)':'rgba(251,191,36,.15)';
+      badge.style.color=used>=lim?'#ef4444':'#fbbf24';
+      if(used>=lim){
+        badge.title='Limite de leads atingido! Faça upgrade para continuar.';
+      }
     }else{
       btn.style.display='none';
       badge.style.display='inline-block';
