@@ -783,10 +783,6 @@ class Buscador:
                 ('DDG', self._buscar_ddg_http),
                 ('Bing', self._buscar_bing_http),
                 ('Brave', self._buscar_brave_http),
-                ('GuiaMais', self._buscar_guiamais),
-                ('TeleListas', self._buscar_telelistas),
-                ('EncontreAqui', self._buscar_encontreaqui),
-                ('GoogleMaps', self._buscar_google_maps),
                 ('Yandex', self._buscar_yandex_http),
                 ('Google', self._buscar_google_http),
             ]
@@ -839,6 +835,8 @@ class Buscador:
                 )
             pw_fns.append(('DDG PW', self.buscar_duckduckgo))
             pw_fns.append(('Bing PW', self.buscar_bing))
+            pw_fns.append(('GuiaMais PW', self._buscar_guiamais_pw))
+            pw_fns.append(('GoogleMaps PW', self._buscar_google_maps_pw))
 
             for nome_pw, fn_pw in pw_fns:
                 if len(resultados) >= 3:
@@ -1025,56 +1023,59 @@ class Buscador:
     # GOOGLE MAPS SCRAPING (sem API key - via busca web)
     # =========================================================================
 
-    async def _buscar_google_maps(self, termo, max_resultados=15):
-        """Busca empresas via Google Maps scraping HTTP."""
+    async def _buscar_google_maps_pw(self, termo, max_resultados=15):
+        """Busca empresas via Google Maps usando Playwright."""
         resultados = []
+        if not self.page:
+            return []
         try:
-            # Busca no Google com foco em mapas/locais
             termo_maps = f'{termo} telefone email'
             url = (
                 f'https://www.google.com.br/search'
                 f'?q={quote_plus(termo_maps)}&hl=pt-BR&gl=br'
                 f'&tbm=lcl&num={max_resultados}'
             )
-            async with httpx.AsyncClient(
-                headers=self._HTTP_HEADERS,
-                cookies={'CONSENT': 'PENDING+987'},
-                follow_redirects=True,
-                timeout=15.0,
-            ) as client:
-                resp = await client.get(url)
-                html = resp.text
+            try:
+                await self.context.add_cookies([
+                    {'name': 'CONSENT', 'value': 'PENDING+987',
+                     'domain': '.google.com.br', 'path': '/'},
+                ])
+            except Exception:
+                pass
+            await self.page.goto(url, wait_until='domcontentloaded', timeout=30000)
+            await asyncio.sleep(random.uniform(3, 6))
 
-            if 'sorry' in html.lower()[:500]:
+            pg_url = self.page.url
+            if 'sorry' in pg_url or 'captcha' in pg_url.lower():
                 return []
 
-            # Extrai dados de negócios locais
-            # Padrão: nome, endereço, telefone nos cards do Maps
-            blocos = re.findall(
-                r'<div[^>]*class="[^"]*VkpGBb[^"]*"[^>]*>(.*?)</div>\s*</div>\s*</div>',
-                html, re.DOTALL
-            )
-            if not blocos:
-                # Fallback: qualquer bloco com telefone
-                blocos = re.findall(
-                    r'<div[^>]*>((?:[^<]*(?:\(\d{2}\)\s*\d{4,5}|\d{2}\s*\d{4,5})[-.\s]\d{4}[^<]*))</div>',
-                    html, re.DOTALL
-                )
+            dados = await self.page.evaluate("""() => {
+                const items = [];
+                // Google local results: .VkpGBb blocks or div[data-hveid] with local info
+                const blocks = document.querySelectorAll('.VkpGBb, .cXedhc, div[jscontroller] .rllt__details');
+                blocks.forEach(block => {
+                    const nameEl = block.querySelector('.OSrXXb, .dbg0pd, a[data-rc_q]');
+                    const nome = nameEl ? nameEl.textContent.trim() : '';
+                    const text = block.textContent || '';
+                    // Find external links (not google)
+                    let site = '';
+                    block.querySelectorAll('a[href]').forEach(a => {
+                        if (a.href && !a.href.includes('google.com') && !a.href.includes('gstatic') && a.href.startsWith('http')) {
+                            if (!site) site = a.href;
+                        }
+                    });
+                    if (nome && nome.length > 2) {
+                        items.push({nome, site, text: text.slice(0, 500)});
+                    }
+                });
+                return items.slice(0, 20);
+            }""")
 
-            for bloco in blocos[:max_resultados]:
-                texto = re.sub(r'<[^>]+>', ' ', bloco).strip()
+            for d in (dados or []):
+                nome = d.get('nome', '')
+                site = d.get('site', '')
+                texto = d.get('text', '')
                 telefones = self._extrair_telefones(texto)
-                # Extrai nome (primeiro texto significativo)
-                nomes = re.findall(r'>([^<]{5,60})<', bloco)
-                nome = nomes[0].strip() if nomes else ''
-                # Extrai site/link
-                links = re.findall(r'href="(https?://[^"]+)"', bloco)
-                site = ''
-                for link in links:
-                    if 'google' not in link and 'gstatic' not in link:
-                        site = link
-                        break
-
                 if nome and (telefones or site):
                     dominio = ''
                     if site:
@@ -1091,171 +1092,60 @@ class Buscador:
                         'fonte': 'google_maps',
                     })
         except Exception as e:
-            print(f'  [ERRO] Google Maps: {e}')
+            print(f'  [ERRO] Google Maps PW: {e}')
         return resultados
 
     # =========================================================================
-    # DIRETÓRIOS EMPRESARIAIS (TeleListas, Encontre Aqui, Lista Online)
+    # DIRETÓRIOS EMPRESARIAIS (GuiaMais via Playwright)
     # =========================================================================
 
-    async def _buscar_telelistas(self, termo, max_resultados=20):
-        """Busca no TeleListas.net — diretório empresarial BR gratuito."""
+    async def _buscar_guiamais_pw(self, termo, max_resultados=20):
+        """Busca no GuiaMais.com.br via Playwright (SPA, precisa JS)."""
         resultados = []
-        try:
-            # Remove site:.com.br e formata para telelistas
-            termo_limpo = re.sub(r'site:\S+\s*', '', termo).strip()
-            # Extrai cidade/estado se presente
-            cidade_match = re.search(
-                r'(\w+)\s+(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)',
-                termo_limpo, re.IGNORECASE
-            )
-            if cidade_match:
-                busca = re.sub(
-                    r'\s+(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\b',
-                    '', termo_limpo, flags=re.IGNORECASE
-                ).strip()
-            else:
-                busca = termo_limpo
-
-            url = f'https://www.telelistas.net/busca?q={quote_plus(busca)}'
-            async with httpx.AsyncClient(
-                headers=self._HTTP_HEADERS,
-                follow_redirects=True,
-                timeout=15.0,
-            ) as client:
-                resp = await client.get(url)
-                html = resp.text
-
-            if resp.status_code != 200 or len(html) < 2000:
-                return []
-
-            # TeleListas: cards com nome, telefone, endereço
-            cards = re.findall(
-                r'<div[^>]*class="[^"]*card[^"]*"[^>]*>(.*?)</div>\s*</div>',
-                html, re.DOTALL
-            )
-            if not cards:
-                # Fallback: links com dados de empresa
-                cards = re.findall(
-                    r'<a[^>]+href="(/[^"]+)"[^>]*>(.*?)</a>',
-                    html, re.DOTALL
-                )
-
-            for card in cards[:max_resultados]:
-                if isinstance(card, tuple):
-                    href, card_html = card
-                    card = card_html
-                else:
-                    href = ''
-
-                texto = re.sub(r'<[^>]+>', ' ', card).strip()
-                telefones = self._extrair_telefones(texto)
-                nomes = re.findall(r'>([^<]{4,80})<', card)
-                nome = ''
-                for n in nomes:
-                    n = n.strip()
-                    if len(n) > 4 and not n.startswith('(') and not re.match(r'^\d', n):
-                        nome = n
-                        break
-
-                if nome and telefones:
-                    resultados.append({
-                        'url': f'https://www.telelistas.net{href}' if href.startswith('/') else href,
-                        'dominio': 'telelistas.net',
-                        'titulo': nome[:200],
-                        'snippet': texto[:500],
-                        'telefones': telefones,
-                        'fonte': 'telelistas',
-                    })
-        except Exception as e:
-            print(f'  [ERRO] TeleListas: {e}')
-        return resultados
-
-    async def _buscar_encontreaqui(self, termo, max_resultados=20):
-        """Busca no EncontreAqui.com.br — diretório empresarial."""
-        resultados = []
+        if not self.page:
+            return []
         try:
             termo_limpo = re.sub(r'site:\S+\s*', '', termo).strip()
-            url = f'https://www.encontreaqui.com.br/busca?q={quote_plus(termo_limpo)}'
-            async with httpx.AsyncClient(
-                headers=self._HTTP_HEADERS,
-                follow_redirects=True,
-                timeout=15.0,
-            ) as client:
-                resp = await client.get(url)
-                html = resp.text
-
-            if resp.status_code != 200 or len(html) < 1000:
-                return []
-
-            # Extrai links e dados de empresas
-            links = re.findall(
-                r'<a[^>]+href="(https?://[^"]+encontreaqui[^"]*)"[^>]*>(.*?)</a>',
-                html, re.DOTALL
-            )
-            for href, titulo_html in links[:max_resultados]:
-                titulo = re.sub(r'<[^>]+>', '', titulo_html).strip()
-                if len(titulo) < 4:
-                    continue
-                texto = titulo
-                telefones = self._extrair_telefones(texto)
-                resultados.append({
-                    'url': href,
-                    'dominio': 'encontreaqui.com.br',
-                    'titulo': titulo[:200],
-                    'snippet': texto[:500],
-                    'telefones': telefones,
-                    'fonte': 'encontreaqui',
-                })
-        except Exception as e:
-            print(f'  [ERRO] EncontreAqui: {e}')
-        return resultados
-
-    async def _buscar_guiamais(self, termo, max_resultados=20):
-        """Busca no GuiaMais.com.br — Páginas Amarelas BR."""
-        resultados = []
-        try:
-            termo_limpo = re.sub(r'site:\S+\s*', '', termo).strip()
-            # GuiaMais URL: /busca/termo/cidade-estado
             url = f'https://www.guiamais.com.br/busca/{quote_plus(termo_limpo)}'
-            async with httpx.AsyncClient(
-                headers=self._HTTP_HEADERS,
-                follow_redirects=True,
-                timeout=15.0,
-            ) as client:
-                resp = await client.get(url)
-                html = resp.text
+            await self.page.goto(url, wait_until='networkidle', timeout=30000)
+            await asyncio.sleep(random.uniform(2, 4))
 
-            if resp.status_code != 200 or len(html) < 2000:
-                return []
+            dados = await self.page.evaluate("""() => {
+                const items = [];
+                // Try multiple selectors for GuiaMais result cards
+                const cards = document.querySelectorAll(
+                    '.advertiserContent, .cm-result-item, [class*="result-item"], .result-card'
+                );
+                cards.forEach(card => {
+                    const titleEl = card.querySelector(
+                        '.aTitle, h2, h3, [class*="title"], a[class*="name"]'
+                    );
+                    const nome = titleEl ? titleEl.textContent.trim() : '';
+                    const text = card.textContent || '';
+                    // External site link
+                    let site = '';
+                    card.querySelectorAll('a[href]').forEach(a => {
+                        if (a.href && !a.href.includes('guiamais') && a.href.startsWith('http')) {
+                            if (!site) site = a.href;
+                        }
+                    });
+                    const addrEl = card.querySelector(
+                        '.advAddress, [class*="address"], [class*="endereco"]'
+                    );
+                    const endereco = addrEl ? addrEl.textContent.trim() : '';
+                    if (nome && nome.length > 3) {
+                        items.push({nome, site, text: text.slice(0, 500), endereco});
+                    }
+                });
+                return items.slice(0, 20);
+            }""")
 
-            # GuiaMais: resultados em cards com classe "result"
-            cards = re.findall(
-                r'<div[^>]*class="[^"]*cm-result-item[^"]*"[^>]*>(.*?)</article>',
-                html, re.DOTALL
-            )
-            if not cards:
-                cards = re.findall(
-                    r'<div[^>]*class="[^"]*result[^"]*"[^>]*>(.*?)</div>\s*</div>\s*</div>',
-                    html, re.DOTALL
-                )
-
-            for card in cards[:max_resultados]:
-                texto = re.sub(r'<[^>]+>', ' ', card).strip()
+            for d in (dados or []):
+                nome = d.get('nome', '')
+                site = d.get('site', '')
+                texto = d.get('text', '')
+                endereco = d.get('endereco', '')
                 telefones = self._extrair_telefones(texto)
-
-                # Extrai nome
-                nome_match = re.search(r'<h\d[^>]*>(.*?)</h\d>', card)
-                nome = re.sub(r'<[^>]+>', '', nome_match.group(1)).strip() if nome_match else ''
-
-                # Extrai site
-                site_match = re.findall(r'href="(https?://(?!guiamais)[^"]+)"', card)
-                site = site_match[0] if site_match else ''
-
-                # Extrai endereço
-                addr_match = re.search(r'(?:Endere[cç]o|Rua|Av\.?|Rod\.?)[^<]*', texto)
-                endereco = addr_match.group(0).strip() if addr_match else ''
-
                 if nome and (telefones or site):
                     dominio = ''
                     if site:
@@ -1272,5 +1162,5 @@ class Buscador:
                         'fonte': 'guiamais',
                     })
         except Exception as e:
-            print(f'  [ERRO] GuiaMais: {e}')
+            print(f'  [ERRO] GuiaMais PW: {e}')
         return resultados
