@@ -8,6 +8,7 @@ import re
 import os
 import random
 import asyncio
+import time
 from urllib.parse import quote_plus, urlparse, unquote
 
 import httpx
@@ -122,7 +123,8 @@ class Buscador:
                     await asyncio.sleep(random.uniform(3, 5))
                     pg_url = self.page.url
                     if 'sorry' in pg_url or 'captcha' in pg_url.lower():
-                        print('  [AVISO] Google CAPTCHA em ambos — pulando para Bing')
+                        print('  [AVISO] Google CAPTCHA em ambos — pulando')
+                        Buscador._google_pw_bloqueado_ate = time.time() + 300
                         return []
                 except Exception:
                     return []
@@ -335,14 +337,16 @@ class Buscador:
         }
 
     async def _buscar_bing_http(self, termo, max_resultados=20):
-        """Busca Bing via HTTP puro (sem Playwright) - funciona de datacenter."""
+        """Busca Bing via HTTP puro — com detecção de bloqueio."""
         resultados = []
         try:
             start = getattr(self, '_search_start', 0)
-            first = start + 1  # Bing usa first=1,11,21...
+            first = start + 1
             url = (
-                f'https://www.bing.com/search?q={quote_plus(termo)}'
-                f'&count={max_resultados}&cc=BR&setlang=pt-BR'
+                f'https://www.bing.com/search'
+                f'?q={quote_plus(termo)}'
+                f'&count={max_resultados}'
+                f'&cc=BR&setlang=pt-BR'
                 f'&first={first}'
             )
             async with httpx.AsyncClient(
@@ -353,37 +357,159 @@ class Buscador:
                 resp = await client.get(url)
                 html = resp.text
 
+            # Detecção de bloqueio
+            if resp.status_code != 200:
+                print(
+                    f'  [AVISO] Bing HTTP: '
+                    f'status {resp.status_code}'
+                )
+                return []
+            if len(html) < 5000:
+                print(
+                    '  [AVISO] Bing HTTP: '
+                    'resposta muito curta (bloqueado?)'
+                )
+                return []
+            if 'captcha' in html.lower()[:2000]:
+                print(
+                    '  [AVISO] Bing HTTP: '
+                    'CAPTCHA detectado'
+                )
+                return []
+
             blocos = re.findall(
-                r'<li[^>]*class="b_algo"[^>]*>(.*?)</li>',
+                r'<li[^>]*class="b_algo"[^>]*>'
+                r'(.*?)</li>',
                 html, re.DOTALL
             )
             for bloco in blocos:
-                m_link = re.search(r'<h2[^>]*><a[^>]+href="(https?://[^"]+)"', bloco)
+                m_link = re.search(
+                    r'<h2[^>]*><a[^>]+href='
+                    r'"(https?://[^"]+)"',
+                    bloco
+                )
                 if not m_link:
                     continue
                 url_r = m_link.group(1)
-                m_titulo = re.search(r'<a[^>]*>(.*?)</a>', bloco, re.DOTALL)
-                titulo = re.sub(r'<[^>]+>', '', m_titulo.group(1)).strip() if m_titulo else ''
-                m_snip = re.search(r'<p[^>]*>(.*?)</p>', bloco, re.DOTALL)
-                snippet = re.sub(r'<[^>]+>', '', m_snip.group(1)).strip() if m_snip else ''
+                m_titulo = re.search(
+                    r'<a[^>]*>(.*?)</a>',
+                    bloco, re.DOTALL
+                )
+                titulo = (
+                    re.sub(r'<[^>]+>', '', m_titulo.group(1))
+                    .strip() if m_titulo else ''
+                )
+                m_snip = re.search(
+                    r'<p[^>]*>(.*?)</p>',
+                    bloco, re.DOTALL
+                )
+                snippet = (
+                    re.sub(r'<[^>]+>', '', m_snip.group(1))
+                    .strip() if m_snip else ''
+                )
 
                 try:
                     dominio = urlparse(url_r).netloc.lower()
                 except Exception:
                     continue
-                if any(s in dominio for s in self.sites_ignorar):
+                if any(
+                    s in dominio
+                    for s in self.sites_ignorar
+                ):
                     continue
                 if len(titulo) < 4:
                     continue
 
-                telefones = self._extrair_telefones(snippet + ' ' + titulo)
+                telefones = self._extrair_telefones(
+                    snippet + ' ' + titulo
+                )
                 resultados.append({
-                    'url': url_r, 'dominio': dominio,
-                    'titulo': titulo[:200], 'snippet': snippet[:500],
-                    'telefones': telefones, 'fonte': 'bing_http',
+                    'url': url_r,
+                    'dominio': dominio,
+                    'titulo': titulo[:200],
+                    'snippet': snippet[:500],
+                    'telefones': telefones,
+                    'fonte': 'bing_http',
                 })
         except Exception as e:
             print(f'  [ERRO] Bing HTTP: {e}')
+        return resultados
+
+    async def _buscar_yandex_http(self, termo, max_resultados=15):
+        """Busca Yandex via HTTP — alternativa rara de bloquear."""
+        resultados = []
+        try:
+            url = (
+                f'https://yandex.com/search/'
+                f'?text={quote_plus(termo)}'
+                f'&lr=10379&lang=pt'
+            )
+            headers = {
+                **self._HTTP_HEADERS,
+                'Referer': 'https://yandex.com/',
+            }
+            async with httpx.AsyncClient(
+                headers=headers,
+                follow_redirects=True,
+                timeout=15.0,
+            ) as client:
+                resp = await client.get(url)
+                html = resp.text
+
+            if resp.status_code != 200 or len(html) < 3000:
+                return []
+            if 'captcha' in html.lower()[:2000]:
+                print(
+                    '  [AVISO] Yandex HTTP: '
+                    'CAPTCHA detectado'
+                )
+                return []
+
+            # Yandex: links em <a class="Link" ou
+            # <a class="OrganicTitle-Link"
+            links = re.findall(
+                r'<a[^>]*class="[^"]*'
+                r'(?:OrganicTitle|organic__url|Link)[^"]*"'
+                r'[^>]*href="(https?://[^"]+)"'
+                r'[^>]*>(.*?)</a>',
+                html, re.DOTALL
+            )
+            if not links:
+                # Fallback: qualquer link com título
+                links = re.findall(
+                    r'<a[^>]+href="(https?://(?!yandex)'
+                    r'[^"]+)"[^>]*>'
+                    r'<span[^>]*>(.*?)</span></a>',
+                    html, re.DOTALL
+                )
+
+            for href, titulo_html in links[:max_resultados]:
+                titulo = re.sub(
+                    r'<[^>]+>', '', titulo_html
+                ).strip()
+                if not titulo or len(titulo) < 4:
+                    continue
+                try:
+                    dominio = urlparse(href).netloc.lower()
+                except Exception:
+                    continue
+                if any(
+                    s in dominio
+                    for s in self.sites_ignorar
+                ):
+                    continue
+                if 'yandex' in dominio:
+                    continue
+                resultados.append({
+                    'url': href,
+                    'dominio': dominio,
+                    'titulo': titulo[:200],
+                    'snippet': '',
+                    'telefones': [],
+                    'fonte': 'yandex_http',
+                })
+        except Exception as e:
+            print(f'  [ERRO] Yandex HTTP: {e}')
         return resultados
 
     async def _buscar_ddg_http(self, termo, max_resultados=15):
@@ -626,6 +752,7 @@ class Buscador:
 
     _motor_idx = 0
     _falhas_consecutivas = 0
+    _google_pw_bloqueado_ate = 0  # timestamp até quando pular Google PW
 
     async def buscar_leads(self, termo=None, max_resultados=20, start=0):
         """Busca leads: Serper API primeiro, HTTP fallback, Playwright último."""
@@ -650,15 +777,23 @@ class Buscador:
                     resultados.append(r)
             print(f"  Serper API: {len(resultados)} resultados")
 
-        # === FASE 2: HTTP scraping — tenta TODOS antes de ir pro Playwright ===
+        # === FASE 2: HTTP scraping — rotação entre motores ===
         if len(resultados) < 5:
-            # Bing primeiro (funciona melhor de datacenter), depois os outros
             motores = [
-                ('Bing', self._buscar_bing_http),
-                ('Google', self._buscar_google_http),
-                ('Brave', self._buscar_brave_http),
                 ('DDG', self._buscar_ddg_http),
+                ('Bing', self._buscar_bing_http),
+                ('Brave', self._buscar_brave_http),
+                ('GuiaMais', self._buscar_guiamais),
+                ('TeleListas', self._buscar_telelistas),
+                ('EncontreAqui', self._buscar_encontreaqui),
+                ('GoogleMaps', self._buscar_google_maps),
+                ('Yandex', self._buscar_yandex_http),
+                ('Google', self._buscar_google_http),
             ]
+            # Rotaciona: cada ciclo começa por motor diferente
+            idx = Buscador._motor_idx % len(motores)
+            Buscador._motor_idx += 1
+            motores = motores[idx:] + motores[:idx]
             for nome_motor, fn_busca in motores:
                 if len(resultados) >= 5:
                     break
@@ -671,17 +806,40 @@ class Buscador:
                             resultados.append(r)
                             added += 1
                     if added:
-                        print(f"  {nome_motor} HTTP: +{added} resultados")
+                        print(
+                            f"  {nome_motor} HTTP: "
+                            f"+{added} resultados"
+                        )
+                    else:
+                        print(
+                            f"  {nome_motor} HTTP: "
+                            f"0 resultados (bloqueado?)"
+                        )
                 except Exception as e:
                     print(f"  [ERRO] {nome_motor}: {e}")
 
-        # === FASE 3: Playwright só se HTTP falhou total ===
+        # === FASE 3: Playwright se HTTP insuficiente ===
         if len(resultados) < 3 and self.page:
             print("  HTTP insuficiente - Playwright...")
-            pw_fns = [
-                ('Google PW', self.buscar_google),
-                ('Bing PW', self.buscar_bing),
-            ]
+
+            pw_fns = []
+            # Pula Google PW se CAPTCHA recente (5 min)
+            if time.time() > Buscador._google_pw_bloqueado_ate:
+                pw_fns.append(
+                    ('Google PW', self.buscar_google)
+                )
+            else:
+                restante = int(
+                    Buscador._google_pw_bloqueado_ate
+                    - time.time()
+                )
+                print(
+                    f"  Google PW: skip "
+                    f"(CAPTCHA cooldown {restante}s)"
+                )
+            pw_fns.append(('DDG PW', self.buscar_duckduckgo))
+            pw_fns.append(('Bing PW', self.buscar_bing))
+
             for nome_pw, fn_pw in pw_fns:
                 if len(resultados) >= 3:
                     break
@@ -695,15 +853,22 @@ class Buscador:
                             added += 1
                     if added:
                         print(f"  {nome_pw}: +{added}")
+                    else:
+                        print(f"  {nome_pw}: 0 resultados")
                 except Exception as e:
                     print(f"  [ERRO] {nome_pw}: {e}")
 
-        # Se nada funcionou, não trava — só loga
+        # Backoff progressivo se nada funcionou
         if not resultados:
             Buscador._falhas_consecutivas += 1
-            if Buscador._falhas_consecutivas >= 5:
-                wait = min(15 * Buscador._falhas_consecutivas, 120)
-                print(f"  Motores bloqueados — aguardando {wait}s")
+            if Buscador._falhas_consecutivas >= 3:
+                wait = min(
+                    20 * Buscador._falhas_consecutivas, 180
+                )
+                print(
+                    f"  Motores bloqueados — "
+                    f"aguardando {wait}s"
+                )
                 await asyncio.sleep(wait)
         else:
             Buscador._falhas_consecutivas = 0
@@ -740,9 +905,15 @@ class Buscador:
                     urls_vistas.add(lead['url'])
                     todos_leads.append(lead)
 
-            # Delay entre buscas
+            # Delay adaptativo entre buscas
             if i < len(termos) - 1:
-                delay = random.uniform(INTERVALO_BUSCA_MIN, INTERVALO_BUSCA_MAX)
+                base = random.uniform(
+                    INTERVALO_BUSCA_MIN,
+                    INTERVALO_BUSCA_MAX
+                )
+                # Se houve falhas, aumenta delay
+                mult = 1 + Buscador._falhas_consecutivas
+                delay = min(base * mult, 120)
                 print(f"  Aguardando {delay:.0f}s...")
                 await asyncio.sleep(delay)
 
@@ -849,3 +1020,257 @@ class Buscador:
                 break
 
         return score
+
+    # =========================================================================
+    # GOOGLE MAPS SCRAPING (sem API key - via busca web)
+    # =========================================================================
+
+    async def _buscar_google_maps(self, termo, max_resultados=15):
+        """Busca empresas via Google Maps scraping HTTP."""
+        resultados = []
+        try:
+            # Busca no Google com foco em mapas/locais
+            termo_maps = f'{termo} telefone email'
+            url = (
+                f'https://www.google.com.br/search'
+                f'?q={quote_plus(termo_maps)}&hl=pt-BR&gl=br'
+                f'&tbm=lcl&num={max_resultados}'
+            )
+            async with httpx.AsyncClient(
+                headers=self._HTTP_HEADERS,
+                cookies={'CONSENT': 'PENDING+987'},
+                follow_redirects=True,
+                timeout=15.0,
+            ) as client:
+                resp = await client.get(url)
+                html = resp.text
+
+            if 'sorry' in html.lower()[:500]:
+                return []
+
+            # Extrai dados de negócios locais
+            # Padrão: nome, endereço, telefone nos cards do Maps
+            blocos = re.findall(
+                r'<div[^>]*class="[^"]*VkpGBb[^"]*"[^>]*>(.*?)</div>\s*</div>\s*</div>',
+                html, re.DOTALL
+            )
+            if not blocos:
+                # Fallback: qualquer bloco com telefone
+                blocos = re.findall(
+                    r'<div[^>]*>((?:[^<]*(?:\(\d{2}\)\s*\d{4,5}|\d{2}\s*\d{4,5})[-.\s]\d{4}[^<]*))</div>',
+                    html, re.DOTALL
+                )
+
+            for bloco in blocos[:max_resultados]:
+                texto = re.sub(r'<[^>]+>', ' ', bloco).strip()
+                telefones = self._extrair_telefones(texto)
+                # Extrai nome (primeiro texto significativo)
+                nomes = re.findall(r'>([^<]{5,60})<', bloco)
+                nome = nomes[0].strip() if nomes else ''
+                # Extrai site/link
+                links = re.findall(r'href="(https?://[^"]+)"', bloco)
+                site = ''
+                for link in links:
+                    if 'google' not in link and 'gstatic' not in link:
+                        site = link
+                        break
+
+                if nome and (telefones or site):
+                    dominio = ''
+                    if site:
+                        try:
+                            dominio = urlparse(site).netloc.lower()
+                        except Exception:
+                            pass
+                    resultados.append({
+                        'url': site or f'https://www.google.com/maps?q={quote_plus(nome)}',
+                        'dominio': dominio,
+                        'titulo': nome[:200],
+                        'snippet': texto[:500],
+                        'telefones': telefones,
+                        'fonte': 'google_maps',
+                    })
+        except Exception as e:
+            print(f'  [ERRO] Google Maps: {e}')
+        return resultados
+
+    # =========================================================================
+    # DIRETÓRIOS EMPRESARIAIS (TeleListas, Encontre Aqui, Lista Online)
+    # =========================================================================
+
+    async def _buscar_telelistas(self, termo, max_resultados=20):
+        """Busca no TeleListas.net — diretório empresarial BR gratuito."""
+        resultados = []
+        try:
+            # Remove site:.com.br e formata para telelistas
+            termo_limpo = re.sub(r'site:\S+\s*', '', termo).strip()
+            # Extrai cidade/estado se presente
+            cidade_match = re.search(
+                r'(\w+)\s+(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)',
+                termo_limpo, re.IGNORECASE
+            )
+            if cidade_match:
+                busca = re.sub(
+                    r'\s+(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\b',
+                    '', termo_limpo, flags=re.IGNORECASE
+                ).strip()
+            else:
+                busca = termo_limpo
+
+            url = f'https://www.telelistas.net/busca?q={quote_plus(busca)}'
+            async with httpx.AsyncClient(
+                headers=self._HTTP_HEADERS,
+                follow_redirects=True,
+                timeout=15.0,
+            ) as client:
+                resp = await client.get(url)
+                html = resp.text
+
+            if resp.status_code != 200 or len(html) < 2000:
+                return []
+
+            # TeleListas: cards com nome, telefone, endereço
+            cards = re.findall(
+                r'<div[^>]*class="[^"]*card[^"]*"[^>]*>(.*?)</div>\s*</div>',
+                html, re.DOTALL
+            )
+            if not cards:
+                # Fallback: links com dados de empresa
+                cards = re.findall(
+                    r'<a[^>]+href="(/[^"]+)"[^>]*>(.*?)</a>',
+                    html, re.DOTALL
+                )
+
+            for card in cards[:max_resultados]:
+                if isinstance(card, tuple):
+                    href, card_html = card
+                    card = card_html
+                else:
+                    href = ''
+
+                texto = re.sub(r'<[^>]+>', ' ', card).strip()
+                telefones = self._extrair_telefones(texto)
+                nomes = re.findall(r'>([^<]{4,80})<', card)
+                nome = ''
+                for n in nomes:
+                    n = n.strip()
+                    if len(n) > 4 and not n.startswith('(') and not re.match(r'^\d', n):
+                        nome = n
+                        break
+
+                if nome and telefones:
+                    resultados.append({
+                        'url': f'https://www.telelistas.net{href}' if href.startswith('/') else href,
+                        'dominio': 'telelistas.net',
+                        'titulo': nome[:200],
+                        'snippet': texto[:500],
+                        'telefones': telefones,
+                        'fonte': 'telelistas',
+                    })
+        except Exception as e:
+            print(f'  [ERRO] TeleListas: {e}')
+        return resultados
+
+    async def _buscar_encontreaqui(self, termo, max_resultados=20):
+        """Busca no EncontreAqui.com.br — diretório empresarial."""
+        resultados = []
+        try:
+            termo_limpo = re.sub(r'site:\S+\s*', '', termo).strip()
+            url = f'https://www.encontreaqui.com.br/busca?q={quote_plus(termo_limpo)}'
+            async with httpx.AsyncClient(
+                headers=self._HTTP_HEADERS,
+                follow_redirects=True,
+                timeout=15.0,
+            ) as client:
+                resp = await client.get(url)
+                html = resp.text
+
+            if resp.status_code != 200 or len(html) < 1000:
+                return []
+
+            # Extrai links e dados de empresas
+            links = re.findall(
+                r'<a[^>]+href="(https?://[^"]+encontreaqui[^"]*)"[^>]*>(.*?)</a>',
+                html, re.DOTALL
+            )
+            for href, titulo_html in links[:max_resultados]:
+                titulo = re.sub(r'<[^>]+>', '', titulo_html).strip()
+                if len(titulo) < 4:
+                    continue
+                texto = titulo
+                telefones = self._extrair_telefones(texto)
+                resultados.append({
+                    'url': href,
+                    'dominio': 'encontreaqui.com.br',
+                    'titulo': titulo[:200],
+                    'snippet': texto[:500],
+                    'telefones': telefones,
+                    'fonte': 'encontreaqui',
+                })
+        except Exception as e:
+            print(f'  [ERRO] EncontreAqui: {e}')
+        return resultados
+
+    async def _buscar_guiamais(self, termo, max_resultados=20):
+        """Busca no GuiaMais.com.br — Páginas Amarelas BR."""
+        resultados = []
+        try:
+            termo_limpo = re.sub(r'site:\S+\s*', '', termo).strip()
+            # GuiaMais URL: /busca/termo/cidade-estado
+            url = f'https://www.guiamais.com.br/busca/{quote_plus(termo_limpo)}'
+            async with httpx.AsyncClient(
+                headers=self._HTTP_HEADERS,
+                follow_redirects=True,
+                timeout=15.0,
+            ) as client:
+                resp = await client.get(url)
+                html = resp.text
+
+            if resp.status_code != 200 or len(html) < 2000:
+                return []
+
+            # GuiaMais: resultados em cards com classe "result"
+            cards = re.findall(
+                r'<div[^>]*class="[^"]*cm-result-item[^"]*"[^>]*>(.*?)</article>',
+                html, re.DOTALL
+            )
+            if not cards:
+                cards = re.findall(
+                    r'<div[^>]*class="[^"]*result[^"]*"[^>]*>(.*?)</div>\s*</div>\s*</div>',
+                    html, re.DOTALL
+                )
+
+            for card in cards[:max_resultados]:
+                texto = re.sub(r'<[^>]+>', ' ', card).strip()
+                telefones = self._extrair_telefones(texto)
+
+                # Extrai nome
+                nome_match = re.search(r'<h\d[^>]*>(.*?)</h\d>', card)
+                nome = re.sub(r'<[^>]+>', '', nome_match.group(1)).strip() if nome_match else ''
+
+                # Extrai site
+                site_match = re.findall(r'href="(https?://(?!guiamais)[^"]+)"', card)
+                site = site_match[0] if site_match else ''
+
+                # Extrai endereço
+                addr_match = re.search(r'(?:Endere[cç]o|Rua|Av\.?|Rod\.?)[^<]*', texto)
+                endereco = addr_match.group(0).strip() if addr_match else ''
+
+                if nome and (telefones or site):
+                    dominio = ''
+                    if site:
+                        try:
+                            dominio = urlparse(site).netloc.lower()
+                        except Exception:
+                            pass
+                    resultados.append({
+                        'url': site or f'https://www.guiamais.com.br/busca/{quote_plus(nome)}',
+                        'dominio': dominio or 'guiamais.com.br',
+                        'titulo': nome[:200],
+                        'snippet': (endereco + ' ' + texto)[:500],
+                        'telefones': telefones,
+                        'fonte': 'guiamais',
+                    })
+        except Exception as e:
+            print(f'  [ERRO] GuiaMais: {e}')
+        return resultados
