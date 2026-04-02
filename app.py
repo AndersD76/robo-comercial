@@ -2804,14 +2804,17 @@ def api_lead_link_agenda(bot, lead_id):
 MP_ACCESS_TOKEN = os.environ.get('MP_ACCESS_TOKEN', '')
 MP_PUBLIC_KEY = os.environ.get('MP_PUBLIC_KEY', '')
 MP_PLANOS = {
+    'starter': {
+        'nome': 'TurboVenda Starter',
+        'valor': 97.00,
+        'descricao': 'Até 500 leads + Busca IA + Email + Pipeline',
+    },
     'pro': {
         'nome': 'TurboVenda Pro',
-        'valor': 299.00,
-        'descricao': 'CRM + Prospecção IA + Email + WhatsApp ilimitado',
+        'valor': 297.00,
+        'descricao': 'Leads ilimitados + IA 24/7 + Email + WhatsApp + Sequências',
     },
 }
-# Trial: grátis, limite 50 leads
-TRIAL_LEAD_LIMIT = 50
 
 
 @app.route('/api/planos')
