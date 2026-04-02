@@ -6,6 +6,8 @@
   <title>Criar conta grátis — TurboVenda | Prospecção B2B com IA</title>
   <meta name="description" content="Crie sua conta grátis no TurboVenda. Comece a prospectar leads B2B automaticamente com inteligência artificial. 50 leads grátis.">
   <meta name="robots" content="index, follow">
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-NGSNSF3SPM"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-NGSNSF3SPM');</script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
@@ -87,7 +89,7 @@
       <label>Senha <small>*mínimo 6 caracteres</small></label>
       <input type="password" name="senha" placeholder="••••••••" required minlength="6" autocomplete="new-password">
     </div>
-    <button type="submit" class="btn">
+    <button type="submit" class="btn" onclick="if(typeof gtag==='function')gtag('event','sign_up',{method:'email'})">
       <i class="fa fa-rocket"></i> Criar minha conta grátis
     </button>
   </form>

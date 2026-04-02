@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ name }} — TurboVenda</title>
+  <meta name="robots" content="noindex, nofollow">
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-NGSNSF3SPM"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-NGSNSF3SPM');</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -2570,6 +2573,7 @@ function upgradeProPlano(){
   </div>`;
   ov.style.display='flex';
   selectPlan('pro');
+  if(typeof gtag==='function')gtag('event','begin_checkout',{currency:'BRL',value:297});
 }
 function selectPlan(p){
   _selectedPlan=p;
@@ -2622,6 +2626,7 @@ async function pagarCartao(){
     const d=await r.json();
     if(d.ok){
       document.getElementById('card-result').innerHTML=`<span style="color:#22c55e"><i class="fa fa-check-circle"></i> Pagamento aprovado! Plano ${_selectedPlan} ativado.</span>`;
+      if(typeof gtag==='function')gtag('event','purchase',{currency:'BRL',value:_selectedPlan==='pro'?297:97,transaction_id:'card_'+Date.now(),items:[{item_name:_selectedPlan}]});
       setTimeout(()=>{location.reload()},2000);
     }else{
       document.getElementById('card-result').innerHTML=`<span style="color:#f87171">${d.error||'Pagamento recusado'}</span>`;

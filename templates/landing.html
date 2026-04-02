@@ -587,6 +587,13 @@
     entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible') })
   }, {threshold: 0.1})
   document.querySelectorAll('.fade-in').forEach(el => obs.observe(el))
+
+  // GA4: rastrear cliques em CTAs
+  document.querySelectorAll('a[href="/cadastro"]').forEach(a => {
+    a.addEventListener('click', () => {
+      if(typeof gtag==='function') gtag('event','generate_lead',{event_category:'cta',event_label:a.textContent.trim()});
+    });
+  });
 </script>
 </body>
 </html>
