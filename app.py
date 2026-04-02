@@ -638,9 +638,242 @@ def logout():
 # ROUTES — PÁGINAS
 # =============================================================================
 
+BLOG_POSTS = [
+    {
+        'slug': 'como-prospectar-clientes-b2b',
+        'titulo': 'Como Prospectar Clientes B2B em 2026: Guia Completo',
+        'desc': 'Aprenda as melhores estratégias de prospecção B2B: outbound, inbound, automação com IA e ferramentas para gerar leads qualificados.',
+        'keywords': 'prospecção B2B, como prospectar clientes, geração de leads B2B, vendas B2B',
+        'data': '2026-03-15',
+        'tempo': '8 min',
+        'conteudo': """
+<p>A prospecção B2B é o processo de identificar e abordar potenciais clientes empresariais. Em 2026, as empresas que prosperam são as que combinam <strong>tecnologia com personalização</strong>.</p>
+
+<h2>O que é prospecção B2B?</h2>
+<p>Prospecção B2B (Business-to-Business) é a busca ativa por empresas que podem se beneficiar do seu produto ou serviço. Diferente do B2C, o ciclo de vendas é mais longo, envolve múltiplos decisores e exige abordagens mais consultivas.</p>
+
+<h2>As 5 melhores estratégias de prospecção B2B</h2>
+
+<h3>1. Prospecção Outbound com IA</h3>
+<p>A prospecção outbound evoluiu. Em vez de ligar para listas frias, ferramentas de IA como o <strong>TurboVenda</strong> identificam empresas que se encaixam no seu perfil ideal de cliente (ICP) automaticamente, coletando dados como telefone, e-mail, CNPJ e porte da empresa.</p>
+
+<h3>2. E-mail Marketing B2B Personalizado</h3>
+<p>E-mails genéricos têm taxa de abertura de 5%. E-mails personalizados com o nome da empresa, setor e dor específica chegam a <strong>35% de abertura</strong>. A chave é usar dados do lead para criar mensagens relevantes.</p>
+
+<h3>3. LinkedIn como canal de prospecção</h3>
+<p>O LinkedIn concentra 80% dos leads B2B gerados em redes sociais. Conecte-se com decisores, publique conteúdo de valor e use mensagens diretas para iniciar conversas.</p>
+
+<h3>4. Indicações e parcerias estratégicas</h3>
+<p>Clientes satisfeitos são sua melhor fonte de novos leads. Crie um programa de indicação estruturado com incentivos claros.</p>
+
+<h3>5. Marketing de conteúdo (Inbound)</h3>
+<p>Blog posts, webinars e materiais ricos atraem leads que já estão pesquisando soluções. O custo por lead do inbound é 62% menor que o outbound tradicional.</p>
+
+<h2>Como automatizar a prospecção B2B</h2>
+<p>A automação elimina tarefas repetitivas e permite que sua equipe foque no que importa: vender. Um CRM com prospecção automática como o TurboVenda faz o trabalho de pesquisar empresas, coletar contatos e até enviar a primeira abordagem — tudo no piloto automático.</p>
+
+<h2>Métricas essenciais de prospecção</h2>
+<ul>
+<li><strong>Taxa de resposta:</strong> quantos leads respondem sua abordagem (meta: &gt;10%)</li>
+<li><strong>Taxa de conversão:</strong> quantos viram oportunidades reais (meta: &gt;3%)</li>
+<li><strong>Custo por lead (CPL):</strong> quanto você gasta para gerar cada lead</li>
+<li><strong>Tempo médio de ciclo:</strong> dias entre primeiro contato e fechamento</li>
+</ul>
+
+<h2>Conclusão</h2>
+<p>A prospecção B2B em 2026 exige um mix de tecnologia e toque humano. Automatize a pesquisa e a abordagem inicial, mas mantenha a personalização nas interações. Ferramentas como o TurboVenda permitem que mesmo equipes pequenas prospectem como grandes empresas.</p>
+"""
+    },
+    {
+        'slug': 'automacao-comercial-guia-completo',
+        'titulo': 'Automação Comercial: Como Vender Mais Gastando Menos',
+        'desc': 'Descubra como a automação comercial com IA pode multiplicar suas vendas B2B. Guia prático com exemplos reais e ferramentas.',
+        'keywords': 'automação comercial, automação de vendas, CRM automático, robô de vendas',
+        'data': '2026-03-20',
+        'tempo': '7 min',
+        'conteudo': """
+<p>A automação comercial não é mais luxo de grandes empresas. Com as ferramentas certas, qualquer equipe de vendas pode automatizar tarefas repetitivas e focar no fechamento.</p>
+
+<h2>O que é automação comercial?</h2>
+<p>É o uso de tecnologia para executar tarefas de vendas automaticamente: desde a busca por leads até o envio de e-mails de follow-up, passando pela organização do pipeline.</p>
+
+<h2>O que você pode automatizar hoje</h2>
+
+<h3>Prospecção de leads</h3>
+<p>Em vez de pesquisar manualmente no Google, um robô de prospecção busca empresas por segmento, cidade e palavras-chave, coletando nome, telefone, e-mail e CNPJ automaticamente.</p>
+
+<h3>Primeiro contato (e-mail e WhatsApp)</h3>
+<p>Com templates inteligentes gerados por IA, cada mensagem é personalizada com o nome da empresa e uma proposta de valor específica para o segmento do lead.</p>
+
+<h3>Follow-up automático</h3>
+<p>70% das vendas B2B acontecem após o 5º contato. Sequências automáticas garantem que nenhum lead seja esquecido, com intervalos programados entre cada mensagem.</p>
+
+<h3>Pipeline e CRM</h3>
+<p>Leads se movem automaticamente pelo funil conforme interagem: abriu e-mail → "Interessado", respondeu → "Em negociação", agendou reunião → "Qualificado".</p>
+
+<h2>ROI da automação comercial</h2>
+<p>Empresas que implementam automação comercial reportam em média:</p>
+<ul>
+<li><strong>3x mais leads</strong> gerados por vendedor</li>
+<li><strong>40% menos tempo</strong> em tarefas administrativas</li>
+<li><strong>25% aumento</strong> na taxa de conversão</li>
+<li><strong>50% redução</strong> no custo por lead</li>
+</ul>
+
+<h2>Como começar</h2>
+<p>O TurboVenda combina prospecção automática + CRM + envio de e-mails e WhatsApp em uma única plataforma. Configure seu perfil de cliente ideal, ative o robô e comece a receber leads qualificados em minutos.</p>
+"""
+    },
+    {
+        'slug': 'crm-para-pequenas-empresas',
+        'titulo': 'CRM para Pequenas Empresas: Por Que Você Precisa de Um',
+        'desc': 'Descubra por que um CRM é essencial para pequenas empresas e como escolher o ideal. Comparativo de funcionalidades e preços.',
+        'keywords': 'CRM pequenas empresas, CRM barato, CRM simples, software de vendas PME',
+        'data': '2026-03-25',
+        'tempo': '6 min',
+        'conteudo': """
+<p>Se você ainda controla seus clientes em planilhas, está perdendo vendas. Um CRM (Customer Relationship Management) organiza seus contatos, automatiza tarefas e mostra exatamente onde cada negociação está.</p>
+
+<h2>Sinais de que você precisa de um CRM</h2>
+<ul>
+<li>Leads se perdem entre planilhas e e-mails</li>
+<li>Você não sabe quantos clientes estão em cada etapa do funil</li>
+<li>Follow-ups são esquecidos com frequência</li>
+<li>Não há histórico centralizado de conversas com clientes</li>
+<li>Relatórios de vendas levam horas para serem montados</li>
+</ul>
+
+<h2>O que um bom CRM para PME precisa ter</h2>
+
+<h3>Pipeline visual (Kanban)</h3>
+<p>Visualize todas as suas negociações em colunas: Novo Lead → Contatado → Interessado → Proposta → Fechado. Arraste e solte para mover leads entre etapas.</p>
+
+<h3>Integração com e-mail e WhatsApp</h3>
+<p>Envie mensagens diretamente do CRM sem alternar entre aplicativos. Todo histórico de comunicação fica registrado no perfil do cliente.</p>
+
+<h3>Automação de tarefas</h3>
+<p>Lembretes de follow-up, e-mails automáticos, atribuição de leads — quanto menos trabalho manual, mais tempo para vender.</p>
+
+<h3>Relatórios simples</h3>
+<p>Dashboard com métricas essenciais: leads gerados, taxa de conversão, receita por período. Sem complicação.</p>
+
+<h2>CRM + Prospecção: a combinação perfeita</h2>
+<p>A maioria dos CRMs para PME só organiza leads que você já tem. O TurboVenda vai além: ele <strong>encontra novos leads automaticamente</strong> e já coloca no seu pipeline pronto para abordar. É CRM e prospecção numa única ferramenta, a partir de R$0/mês.</p>
+"""
+    },
+    {
+        'slug': 'como-gerar-leads-qualificados',
+        'titulo': 'Como Gerar Leads Qualificados: 7 Estratégias Práticas',
+        'desc': 'Aprenda 7 estratégias comprovadas para gerar leads B2B qualificados sem gastar fortunas com marketing. Técnicas gratuitas e pagas.',
+        'keywords': 'gerar leads qualificados, geração de leads, captar clientes, leads B2B qualificados',
+        'data': '2026-03-28',
+        'tempo': '9 min',
+        'conteudo': """
+<p>Quantidade sem qualidade é desperdício. O segredo não é gerar mais leads, mas gerar leads que realmente têm potencial de compra. Veja 7 estratégias práticas.</p>
+
+<h2>O que é um lead qualificado?</h2>
+<p>Um lead qualificado é uma empresa ou pessoa que:</p>
+<ul>
+<li>Tem o <strong>perfil</strong> do seu cliente ideal (porte, segmento, localização)</li>
+<li>Tem a <strong>necessidade</strong> que seu produto resolve</li>
+<li>Tem <strong>orçamento</strong> para investir</li>
+<li>Tem <strong>autoridade</strong> para tomar a decisão de compra</li>
+</ul>
+
+<h2>7 estratégias para gerar leads qualificados</h2>
+
+<h3>1. Defina seu ICP (Ideal Customer Profile)</h3>
+<p>Antes de prospectar, saiba exatamente quem você busca: segmento, porte, faturamento, localização, cargo do decisor. Quanto mais específico, mais qualificados serão seus leads.</p>
+
+<h3>2. Use dados públicos a seu favor</h3>
+<p>CNPJ, Receita Federal, sites de empresas — há uma mina de informações públicas. Ferramentas como o TurboVenda cruzam essas fontes automaticamente para enriquecer cada lead.</p>
+
+<h3>3. Segmente por dor, não por demografia</h3>
+<p>Em vez de "empresas de 10-50 funcionários", pense em "empresas que provavelmente sofrem com [problema que você resolve]". A abordagem muda completamente.</p>
+
+<h3>4. Crie conteúdo que atrai decisores</h3>
+<p>Um artigo sobre "Como reduzir custos operacionais em 30%" atrai gerentes e diretores. Um post genérico sobre seu produto atrai curiosos. Foque em conteúdo que resolve problemas reais.</p>
+
+<h3>5. Automatize a qualificação</h3>
+<p>Use critérios automáticos para classificar leads: empresa com site = +10 pontos, tem telefone = +5, segmento alvo = +20. Foque nos leads com maior pontuação.</p>
+
+<h3>6. Sequências de e-mail multi-toque</h3>
+<p>Um único e-mail converte 2%. Uma sequência de 5 e-mails converte 15%. Cada mensagem deve agregar valor e criar urgência progressiva.</p>
+
+<h3>7. Peça indicações sistematicamente</h3>
+<p>Após cada venda fechada, peça 3 indicações. Leads indicados convertem 4x mais que leads frios.</p>
+
+<h2>Ferramenta certa faz diferença</h2>
+<p>O TurboVenda automatiza as estratégias 1, 2, 5 e 6 em uma única plataforma. Configure seu ICP, ative o robô e receba leads qualificados no seu pipeline todos os dias.</p>
+"""
+    },
+    {
+        'slug': 'email-marketing-b2b-templates',
+        'titulo': 'E-mail Marketing B2B: 5 Templates que Convertem',
+        'desc': 'Templates prontos de e-mail B2B para prospecção, follow-up e reengajamento. Copie, personalize e envie. Taxas de conversão reais.',
+        'keywords': 'email marketing B2B, templates email comercial, email de prospecção, cold email',
+        'data': '2026-04-01',
+        'tempo': '7 min',
+        'conteudo': """
+<p>O e-mail ainda é o canal B2B com melhor ROI: R$36 para cada R$1 investido. Mas só funciona com a mensagem certa. Aqui estão 5 templates testados e aprovados.</p>
+
+<h2>Regras de ouro do e-mail B2B</h2>
+<ul>
+<li><strong>Assunto curto</strong> (máx. 50 caracteres) — personalizado com nome da empresa</li>
+<li><strong>Primeira linha</strong> mostra que você pesquisou sobre a empresa</li>
+<li><strong>Proposta de valor</strong> clara em uma frase</li>
+<li><strong>CTA único</strong> — uma pergunta ou ação, não três</li>
+<li><strong>Assinatura profissional</strong> com cargo e telefone</li>
+</ul>
+
+<h2>Template 1: Primeiro contato</h2>
+<p><em>Assunto: {Nome da empresa} + [benefício principal]</em></p>
+<p>Olá {Nome},<br>Vi que a {Empresa} atua com {segmento} em {cidade}. Empresas desse setor costumam enfrentar [dor comum]. Nós ajudamos empresas como a {Empresa concorrente} a resolver isso, gerando [resultado específico]. Vale uma conversa de 15 min esta semana?</p>
+
+<h2>Template 2: Follow-up (3 dias depois)</h2>
+<p><em>Assunto: Re: {assunto anterior}</em></p>
+<p>{Nome}, sei que a rotina é corrida. Só queria reforçar: temos ajudado empresas de {segmento} a {resultado}. Se fizer sentido, posso mostrar em 10 minutos como funciona. Qual o melhor horário?</p>
+
+<h2>Template 3: Prova social</h2>
+<p><em>Assunto: Como {empresa similar} conseguiu {resultado}</em></p>
+<p>Olá {Nome},<br>A {empresa similar do mesmo segmento} estava com o mesmo desafio que muitas empresas de {segmento}: {dor}. Em 3 meses usando nossa solução, conseguiram {resultado com números}. Acha que vale explorar algo assim para a {Empresa}?</p>
+
+<h2>Template 4: Último follow-up</h2>
+<p><em>Assunto: Devo parar de enviar e-mails?</em></p>
+<p>{Nome}, não quero ser inconveniente. Se {solução} não faz sentido para a {Empresa} agora, sem problemas. Mas se em algum momento quiser explorar como {benefício}, estou à disposição. Posso entrar em contato em outro momento?</p>
+
+<h2>Template 5: Reengajamento</h2>
+<p><em>Assunto: Novidades para {segmento}</em></p>
+<p>Olá {Nome},<br>Há uns meses conversamos sobre {tema}. Desde então, lançamos {novidade/funcionalidade} que tem ajudado empresas de {segmento} a {resultado novo}. Quer ver como ficou?</p>
+
+<h2>Automatize seus e-mails</h2>
+<p>No TurboVenda, a IA gera mensagens personalizadas para cada lead usando os dados da empresa. Você configura a sequência uma vez e o sistema envia automaticamente, com intervalos programados e follow-ups inteligentes.</p>
+"""
+    },
+]
+
+
 @app.route('/')
 def landing():
     return render_template('landing.html', ga_id=GA_MEASUREMENT_ID)
+
+
+@app.route('/blog')
+def blog_index():
+    return render_template('blog.html',
+                           posts=BLOG_POSTS,
+                           ga_id=GA_MEASUREMENT_ID)
+
+
+@app.route('/blog/<slug>')
+def blog_post(slug):
+    post = next((p for p in BLOG_POSTS if p['slug'] == slug), None)
+    if not post:
+        return redirect('/blog')
+    return render_template('blog_post.html',
+                           post=post,
+                           posts=BLOG_POSTS,
+                           ga_id=GA_MEASUREMENT_ID)
 
 
 @app.route('/robots.txt')
@@ -660,26 +893,24 @@ def robots_txt():
 
 @app.route('/sitemap.xml')
 def sitemap_xml():
-    xml = (
-        '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-        '  <url>\n'
-        '    <loc>https://turbovenda.com.br/</loc>\n'
-        '    <changefreq>weekly</changefreq>\n'
-        '    <priority>1.0</priority>\n'
-        '  </url>\n'
-        '  <url>\n'
-        '    <loc>https://turbovenda.com.br/login</loc>\n'
-        '    <changefreq>monthly</changefreq>\n'
-        '    <priority>0.6</priority>\n'
-        '  </url>\n'
-        '  <url>\n'
-        '    <loc>https://turbovenda.com.br/cadastro</loc>\n'
-        '    <changefreq>monthly</changefreq>\n'
-        '    <priority>0.8</priority>\n'
-        '  </url>\n'
-        '</urlset>\n'
-    )
+    urls = [
+        ('https://turbovenda.com.br/', 'weekly', '1.0'),
+        ('https://turbovenda.com.br/cadastro', 'monthly', '0.8'),
+        ('https://turbovenda.com.br/blog', 'weekly', '0.9'),
+        ('https://turbovenda.com.br/login', 'monthly', '0.6'),
+    ]
+    for p in BLOG_POSTS:
+        urls.append((
+            f"https://turbovenda.com.br/blog/{p['slug']}",
+            'monthly', '0.7'
+        ))
+    xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    for loc, freq, pri in urls:
+        xml += (f'  <url>\n    <loc>{loc}</loc>\n'
+                f'    <changefreq>{freq}</changefreq>\n'
+                f'    <priority>{pri}</priority>\n  </url>\n')
+    xml += '</urlset>\n'
     return app.response_class(xml, mimetype='application/xml')
 
 

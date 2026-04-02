@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ post.titulo }} — TurboVenda Blog</title>
+  <meta name="description" content="{{ post.desc }}">
+  <meta name="keywords" content="{{ post.keywords }}">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://turbovenda.com.br/blog/{{ post.slug }}">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://turbovenda.com.br/blog/{{ post.slug }}">
+  <meta property="og:title" content="{{ post.titulo }}">
+  <meta property="og:description" content="{{ post.desc }}">
+  <meta property="og:locale" content="pt_BR">
+  <meta property="og:site_name" content="TurboVenda">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="{{ post.titulo }}">
+  <meta name="twitter:description" content="{{ post.desc }}">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "{{ post.titulo }}",
+    "description": "{{ post.desc }}",
+    "datePublished": "{{ post.data }}",
+    "author": {"@type": "Organization", "name": "TurboVenda"},
+    "publisher": {
+      "@type": "Organization",
+      "name": "TurboVenda",
+      "url": "https://turbovenda.com.br"
+    },
+    "mainEntityOfPage": "https://turbovenda.com.br/blog/{{ post.slug }}"
+  }
+  </script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id={{ ga_id }}"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', '{{ ga_id }}');
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    :root{
+      --bg:#060b18;--surface:#0d1526;--surface2:#111d35;
+      --border:rgba(99,102,241,.18);--accent:#6366f1;--accent2:#8b5cf6;
+      --green:#10b981;--text:#f1f5f9;--muted:#64748b;--muted2:#94a3b8;
+    }
+    body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text)}
+
+    nav{position:fixed;top:0;left:0;right:0;z-index:100;
+        height:64px;display:flex;align-items:center;justify-content:space-between;
+        padding:0 40px;backdrop-filter:blur(20px);
+        background:rgba(6,11,24,.85);border-bottom:1px solid rgba(255,255,255,.05)}
+    .nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none}
+    .nav-logo-mark{width:36px;height:36px;border-radius:10px;
+        background:linear-gradient(135deg,var(--accent),var(--accent2));
+        display:flex;align-items:center;justify-content:center;font-size:16px}
+    .nav-logo-text{font-size:18px;font-weight:800;color:#fff;letter-spacing:-.4px}
+    .nav-logo-text span{color:var(--accent)}
+    .nav-links{display:flex;align-items:center;gap:8px}
+    .nav-links a{color:var(--muted2);text-decoration:none;font-size:14px;font-weight:500;
+        padding:6px 14px;border-radius:8px;transition:.2s}
+    .nav-links a:hover{color:#fff;background:rgba(255,255,255,.05)}
+    .btn-nav{background:var(--accent)!important;color:#fff!important;padding:8px 20px!important;
+        border-radius:8px!important;font-weight:600!important}
+
+    .post-header{padding:120px 24px 40px;text-align:center;max-width:800px;margin:0 auto}
+    .post-header .breadcrumb{font-size:14px;color:var(--muted);margin-bottom:24px}
+    .post-header .breadcrumb a{color:var(--accent);text-decoration:none}
+    .post-header .breadcrumb a:hover{text-decoration:underline}
+    .post-header h1{font-size:clamp(1.8rem,4vw,2.6rem);font-weight:900;line-height:1.2;
+        letter-spacing:-.8px;margin-bottom:16px}
+    .post-meta{display:flex;gap:20px;justify-content:center;font-size:14px;color:var(--muted)}
+
+    .post-content{max-width:720px;margin:0 auto;padding:40px 24px 60px;line-height:1.8;font-size:16.5px}
+    .post-content h2{font-size:1.5rem;font-weight:700;margin:36px 0 16px;letter-spacing:-.3px;
+        color:#fff}
+    .post-content h3{font-size:1.2rem;font-weight:600;margin:28px 0 12px;color:var(--accent)}
+    .post-content p{margin-bottom:16px;color:var(--muted2)}
+    .post-content strong{color:var(--text)}
+    .post-content ul{margin:0 0 16px 24px;color:var(--muted2)}
+    .post-content li{margin-bottom:8px}
+    .post-content em{color:var(--muted)}
+
+    .post-cta{max-width:720px;margin:0 auto;padding:40px;text-align:center;
+        background:var(--surface);border:1px solid var(--border);border-radius:16px}
+    .post-cta h3{font-size:1.3rem;font-weight:700;margin-bottom:8px}
+    .post-cta p{color:var(--muted2);margin-bottom:20px}
+    .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));
+        color:#fff;border:none;padding:14px 32px;border-radius:12px;font-size:16px;
+        font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;
+        align-items:center;gap:8px;transition:.2s}
+    .btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(99,102,241,.4)}
+
+    .related{max-width:720px;margin:40px auto;padding:0 24px 60px}
+    .related h3{font-size:1.1rem;font-weight:700;margin-bottom:16px;color:var(--muted2)}
+    .related-list{display:flex;flex-direction:column;gap:12px}
+    .related-list a{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+        padding:20px 24px;text-decoration:none;color:var(--text);font-weight:600;
+        font-size:15px;transition:.2s;display:block}
+    .related-list a:hover{border-color:var(--accent);transform:translateX(4px)}
+    .related-list a span{display:block;font-weight:400;font-size:13px;color:var(--muted);margin-top:4px}
+
+    footer{text-align:center;padding:40px 24px;border-top:1px solid rgba(255,255,255,.05)}
+    .footer-logo{font-size:18px;font-weight:800;margin-bottom:8px}
+    .footer-logo span{color:var(--accent)}
+    footer p{color:var(--muted);font-size:13px}
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="/">
+    <div class="nav-logo-mark"><i class="fa fa-bolt" style="color:#fff"></i></div>
+    <div class="nav-logo-text">Turbo<span>Venda</span></div>
+  </a>
+  <div class="nav-links">
+    <a href="/">Home</a>
+    <a href="/blog">Blog</a>
+    <a href="/cadastro" class="btn-nav">Criar conta gratis</a>
+  </div>
+</nav>
+
+<header class="post-header">
+  <div class="breadcrumb">
+    <a href="/">Home</a> &rsaquo; <a href="/blog">Blog</a> &rsaquo; {{ post.titulo }}
+  </div>
+  <h1>{{ post.titulo }}</h1>
+  <div class="post-meta">
+    <span><i class="fa fa-calendar"></i> {{ post.data }}</span>
+    <span><i class="fa fa-clock"></i> {{ post.tempo }} de leitura</span>
+  </div>
+</header>
+
+<article class="post-content">
+  {{ post.conteudo|safe }}
+</article>
+
+<div class="post-cta">
+  <h3>Quer automatizar sua prospecao B2B?</h3>
+  <p>O TurboVenda encontra leads, envia e-mails e gerencia seu pipeline com IA. Comece gratis.</p>
+  <a href="/cadastro" class="btn-primary"><i class="fa fa-rocket"></i> Criar conta gratis</a>
+</div>
+
+<div class="related">
+  <h3>Artigos relacionados</h3>
+  <div class="related-list">
+    {% for p in posts if p.slug != post.slug %}
+    <a href="/blog/{{ p.slug }}">
+      {{ p.titulo }}
+      <span>{{ p.tempo }} de leitura</span>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+
+<footer>
+  <div class="footer-logo">Turbo<span>Venda</span></div>
+  <p>&copy; 2026 TurboVenda. Todos os direitos reservados.</p>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blog TurboVenda — Dicas de Prospecção B2B, Vendas e CRM</title>
+  <meta name="description" content="Artigos sobre prospecção B2B, automação comercial, CRM, geração de leads e vendas. Dicas práticas para vender mais com inteligência artificial.">
+  <meta name="keywords" content="blog vendas B2B, dicas prospecção, CRM, automação comercial, geração de leads">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://turbovenda.com.br/blog">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://turbovenda.com.br/blog">
+  <meta property="og:title" content="Blog TurboVenda — Dicas de Prospecção B2B e Vendas">
+  <meta property="og:description" content="Artigos práticos sobre prospecção B2B, automação comercial e CRM com IA.">
+  <meta property="og:locale" content="pt_BR">
+  <script async src="https://www.googletagmanager.com/gtag/js?id={{ ga_id }}"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', '{{ ga_id }}');
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    :root{
+      --bg:#060b18;--surface:#0d1526;--surface2:#111d35;
+      --border:rgba(99,102,241,.18);--accent:#6366f1;--accent2:#8b5cf6;
+      --green:#10b981;--text:#f1f5f9;--muted:#64748b;--muted2:#94a3b8;
+    }
+    html{scroll-behavior:smooth}
+    body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text)}
+
+    nav{position:fixed;top:0;left:0;right:0;z-index:100;
+        height:64px;display:flex;align-items:center;justify-content:space-between;
+        padding:0 40px;backdrop-filter:blur(20px);
+        background:rgba(6,11,24,.85);border-bottom:1px solid rgba(255,255,255,.05)}
+    .nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none}
+    .nav-logo-mark{width:36px;height:36px;border-radius:10px;
+        background:linear-gradient(135deg,var(--accent),var(--accent2));
+        display:flex;align-items:center;justify-content:center;font-size:16px}
+    .nav-logo-text{font-size:18px;font-weight:800;color:#fff;letter-spacing:-.4px}
+    .nav-logo-text span{color:var(--accent)}
+    .nav-links{display:flex;align-items:center;gap:8px}
+    .nav-links a{color:var(--muted2);text-decoration:none;font-size:14px;font-weight:500;
+        padding:6px 14px;border-radius:8px;transition:.2s}
+    .nav-links a:hover{color:#fff;background:rgba(255,255,255,.05)}
+    .btn-nav{background:var(--accent)!important;color:#fff!important;padding:8px 20px!important;
+        border-radius:8px!important;font-weight:600!important}
+
+    .blog-hero{padding:120px 24px 60px;text-align:center}
+    .blog-hero h1{font-size:clamp(2rem,4vw,3rem);font-weight:900;letter-spacing:-1px;margin-bottom:12px}
+    .blog-hero h1 span{background:linear-gradient(135deg,var(--accent),var(--accent2));
+        -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .blog-hero p{color:var(--muted2);font-size:1.1rem;max-width:600px;margin:0 auto}
+
+    .blog-grid{max-width:900px;margin:0 auto;padding:0 24px 80px;display:flex;flex-direction:column;gap:24px}
+    .blog-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;
+        padding:32px;transition:.3s;cursor:pointer;text-decoration:none;color:inherit;display:block}
+    .blog-card:hover{border-color:var(--accent);transform:translateY(-2px);
+        box-shadow:0 8px 30px rgba(99,102,241,.15)}
+    .blog-card-meta{display:flex;gap:16px;font-size:13px;color:var(--muted);margin-bottom:12px}
+    .blog-card h2{font-size:1.4rem;font-weight:700;margin-bottom:8px;letter-spacing:-.3px}
+    .blog-card p{color:var(--muted2);line-height:1.6;font-size:15px}
+
+    .blog-cta{text-align:center;padding:60px 24px 80px}
+    .blog-cta h2{font-size:1.5rem;font-weight:700;margin-bottom:16px}
+    .blog-cta p{color:var(--muted2);margin-bottom:24px}
+    .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));
+        color:#fff;border:none;padding:14px 32px;border-radius:12px;font-size:16px;
+        font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;
+        align-items:center;gap:8px;transition:.2s}
+    .btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(99,102,241,.4)}
+
+    footer{text-align:center;padding:40px 24px;border-top:1px solid rgba(255,255,255,.05)}
+    .footer-logo{font-size:18px;font-weight:800;margin-bottom:8px}
+    .footer-logo span{color:var(--accent)}
+    footer p{color:var(--muted);font-size:13px}
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="/">
+    <div class="nav-logo-mark"><i class="fa fa-bolt" style="color:#fff"></i></div>
+    <div class="nav-logo-text">Turbo<span>Venda</span></div>
+  </a>
+  <div class="nav-links">
+    <a href="/">Home</a>
+    <a href="/blog" style="color:#fff">Blog</a>
+    <a href="/cadastro" class="btn-nav">Criar conta gratis</a>
+  </div>
+</nav>
+
+<section class="blog-hero">
+  <h1>Blog <span>TurboVenda</span></h1>
+  <p>Estrategias de prospecao B2B, vendas e automacao comercial para sua empresa crescer.</p>
+</section>
+
+<div class="blog-grid">
+  {% for post in posts|reverse %}
+  <a class="blog-card" href="/blog/{{ post.slug }}">
+    <div class="blog-card-meta">
+      <span><i class="fa fa-calendar"></i> {{ post.data }}</span>
+      <span><i class="fa fa-clock"></i> {{ post.tempo }} de leitura</span>
+    </div>
+    <h2>{{ post.titulo }}</h2>
+    <p>{{ post.desc }}</p>
+  </a>
+  {% endfor %}
+</div>
+
+<section class="blog-cta">
+  <h2>Pronto para automatizar sua prospecao?</h2>
+  <p>CRM + prospecao B2B com IA. Comece gratis em 5 minutos.</p>
+  <a href="/cadastro" class="btn-primary"><i class="fa fa-rocket"></i> Criar conta gratis</a>
+</section>
+
+<footer>
+  <div class="footer-logo">Turbo<span>Venda</span></div>
+  <p>&copy; 2026 TurboVenda. Todos os direitos reservados.</p>
+</footer>
+
+</body>
+</html>
