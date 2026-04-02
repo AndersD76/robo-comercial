@@ -23,6 +23,8 @@ app.secret_key = os.environ.get('SECRET_KEY', 'mv-saas-2025-change-in-prod')
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
+GA_MEASUREMENT_ID = os.environ.get('GA_MEASUREMENT_ID', 'G-NGSNSF3SPM')
+
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 if not DATABASE_URL:
     print('[FATAL] DATABASE_URL não configurado — defina a variável de ambiente')
@@ -638,7 +640,47 @@ def logout():
 
 @app.route('/')
 def landing():
-    return render_template('landing.html')
+    return render_template('landing.html', ga_id=GA_MEASUREMENT_ID)
+
+
+@app.route('/robots.txt')
+def robots_txt():
+    txt = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /api/\n"
+        "Disallow: /admin/\n"
+        "Disallow: /dashboard\n"
+        "Disallow: /configurar\n"
+        "Disallow: /logout\n\n"
+        "Sitemap: https://turbovenda.com.br/sitemap.xml\n"
+    )
+    return app.response_class(txt, mimetype='text/plain')
+
+
+@app.route('/sitemap.xml')
+def sitemap_xml():
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        '  <url>\n'
+        '    <loc>https://turbovenda.com.br/</loc>\n'
+        '    <changefreq>weekly</changefreq>\n'
+        '    <priority>1.0</priority>\n'
+        '  </url>\n'
+        '  <url>\n'
+        '    <loc>https://turbovenda.com.br/login</loc>\n'
+        '    <changefreq>monthly</changefreq>\n'
+        '    <priority>0.6</priority>\n'
+        '  </url>\n'
+        '  <url>\n'
+        '    <loc>https://turbovenda.com.br/cadastro</loc>\n'
+        '    <changefreq>monthly</changefreq>\n'
+        '    <priority>0.8</priority>\n'
+        '  </url>\n'
+        '</urlset>\n'
+    )
+    return app.response_class(xml, mimetype='application/xml')
 
 
 @app.route('/dashboard')
