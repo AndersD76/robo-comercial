@@ -84,8 +84,8 @@ def _init_public_schema_safe():
                 c.execute(stmt)
             except Exception:
                 conn.rollback()
-        # Set suporte@pcmonitor.com.br as pro
-        c.execute("UPDATE users SET plano = 'pro' WHERE email = 'suporte@pcmonitor.com.br' AND plano != 'pro'")
+        # Set users as pro
+        c.execute("UPDATE users SET plano = 'pro' WHERE email IN ('suporte@pcmonitor.com.br', 'comercial1@pili.ind.br') AND plano != 'pro'")
         conn.commit()
         conn.close()
     except Exception as e:
