@@ -2327,83 +2327,82 @@ def api_generate_terms(bot):
 
 
 def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
-    """Gera termos de busca por código, sem IA."""
+    """Gera termos de busca focados no perfil do cliente — sem IA."""
     desc_lower = descricao.lower()
 
-    SEGMENTOS_BASE = [
-        'escritório contabilidade', 'escritório advocacia', 'agência publicidade',
-        'agência marketing digital', 'consultoria empresarial', 'empresa logística',
-        'construtora', 'clínica médica', 'clínica odontológica', 'clínica veterinária',
-        'empresa comércio exterior', 'indústria metalúrgica', 'indústria alimentícia',
-        'indústria têxtil', 'indústria química', 'empresa recursos humanos',
-        'empresa call center', 'empresa tecnologia', 'corretora seguros',
-        'imobiliária', 'empresa transporte', 'distribuidora', 'atacadista',
-        'escola particular', 'faculdade', 'hospital', 'laboratório análises',
-        'concessionária veículos', 'oficina mecânica', 'loja materiais construção',
-        'supermercado', 'rede farmácias', 'hotel pousada', 'restaurante',
-        'cooperativa', 'empresa engenharia', 'gráfica', 'editora',
-        'empresa segurança patrimonial', 'empresa limpeza', 'academia',
-        'provedor internet', 'startup', 'coworking', 'franquia',
-    ]
-
+    # ── 1. Mapear keywords da descrição → segmentos-alvo ──
     KEYWORD_SEGMENTS = {
         'agro': ['fazenda', 'cooperativa agrícola', 'agroindústria', 'cerealista',
-                 'revendedora agrícola', 'usina açúcar', 'frigorifico'],
+                 'revendedora agrícola', 'usina açúcar álcool', 'frigorífico'],
+        'agrícol': ['cooperativa agrícola', 'agroindústria', 'cerealista', 'fazenda',
+                    'revendedora agrícola', 'silo grãos'],
         'rural': ['fazenda', 'cooperativa agrícola', 'agroindústria', 'pecuária'],
-        'grão': ['cerealista', 'cooperativa agrícola', 'armazém grãos', 'trading agrícola'],
-        'saúde': ['hospital', 'clínica médica', 'laboratório análises', 'clínica odontológica',
-                  'home care', 'operadora saúde'],
-        'médic': ['hospital', 'clínica médica', 'laboratório análises', 'farmácia manipulação'],
-        'software': ['escritório contabilidade', 'escritório advocacia', 'empresa logística',
-                     'construtora', 'indústria', 'comércio varejista'],
-        'sistema': ['escritório contabilidade', 'empresa logística', 'indústria',
-                    'distribuidora', 'comércio varejista', 'rede lojas'],
-        'monitor': ['escritório contabilidade', 'escritório advocacia', 'agência publicidade',
-                    'agência marketing digital', 'consultoria empresarial', 'empresa logística',
-                    'empresa recursos humanos', 'empresa call center', 'empresa tecnologia',
-                    'corretora seguros', 'empresa financeira', 'BPO', 'startup',
-                    'empresa comércio exterior', 'provedor internet', 'software house'],
-        'produtividade': ['escritório contabilidade', 'escritório advocacia', 'agência publicidade',
-                          'consultoria empresarial', 'empresa logística', 'empresa recursos humanos',
-                          'empresa call center', 'empresa tecnologia', 'corretora seguros',
-                          'empresa financeira', 'BPO', 'startup'],
-        'funcionário': ['escritório contabilidade', 'escritório advocacia', 'empresa logística',
-                        'empresa recursos humanos', 'empresa call center', 'empresa tecnologia',
-                        'corretora seguros', 'distribuidora', 'indústria metalúrgica'],
-        'computador': ['escritório contabilidade', 'escritório advocacia', 'agência publicidade',
-                       'consultoria empresarial', 'empresa call center', 'empresa tecnologia',
-                       'empresa financeira', 'BPO', 'startup'],
-        'gestor': ['escritório contabilidade', 'empresa logística', 'empresa recursos humanos',
-                   'empresa call center', 'empresa tecnologia', 'construtora', 'distribuidora'],
+        'grão': ['cerealista', 'cooperativa agrícola', 'armazém grãos', 'trading agrícola',
+                 'silo grãos', 'beneficiadora grãos'],
+        'cereal': ['cerealista', 'cooperativa agrícola', 'armazém grãos', 'trading agrícola'],
+        'soja': ['cerealista', 'cooperativa agrícola', 'trading agrícola', 'armazém grãos',
+                 'agroindústria soja', 'esmagadora soja'],
+        'milho': ['cerealista', 'cooperativa agrícola', 'trading agrícola', 'armazém grãos',
+                  'agroindústria milho'],
+        'trigo': ['moinho trigo', 'cooperativa agrícola', 'cerealista', 'armazém grãos',
+                  'indústria farinha'],
+        'arroz': ['beneficiadora arroz', 'cooperativa arroz', 'cerealista', 'armazém grãos'],
+        'café': ['cooperativa café', 'exportadora café', 'beneficiadora café', 'torrefadora'],
+        'silo': ['cerealista', 'cooperativa agrícola', 'armazém grãos', 'silo grãos'],
+        'cooperativ': ['cooperativa agrícola', 'cooperativa crédito', 'cooperativa'],
+        'tombador': ['cerealista', 'cooperativa agrícola', 'armazém grãos',
+                     'trading agrícola', 'agroindústria'],
+        'coletor': ['cerealista', 'cooperativa agrícola', 'armazém grãos'],
+        'prensa': ['indústria reciclagem', 'cooperativa reciclagem', 'sucateiro',
+                   'indústria papel', 'agroindústria'],
+        'hidráulic': ['indústria metalúrgica', 'construtora', 'mineradora',
+                      'empresa equipamentos industriais'],
+        'saúde': ['hospital', 'clínica médica', 'laboratório análises',
+                  'clínica odontológica', 'operadora saúde'],
+        'médic': ['hospital', 'clínica médica', 'laboratório análises'],
+        'software': ['empresa tecnologia', 'startup', 'software house',
+                     'escritório contabilidade', 'empresa logística'],
+        'sistema': ['escritório contabilidade', 'empresa logística',
+                    'distribuidora', 'comércio varejista'],
+        'monitor': ['escritório contabilidade', 'escritório advocacia',
+                    'agência marketing digital', 'consultoria empresarial',
+                    'empresa logística', 'empresa recursos humanos',
+                    'empresa call center', 'empresa tecnologia',
+                    'corretora seguros', 'BPO', 'startup'],
+        'produtividade': ['escritório contabilidade', 'escritório advocacia',
+                          'consultoria empresarial', 'empresa call center',
+                          'empresa tecnologia', 'BPO', 'startup'],
+        'funcionário': ['escritório contabilidade', 'empresa logística',
+                        'empresa recursos humanos', 'empresa call center',
+                        'empresa tecnologia', 'distribuidora'],
+        'computador': ['escritório contabilidade', 'empresa call center',
+                       'empresa tecnologia', 'BPO', 'startup'],
+        'gestor': ['escritório contabilidade', 'empresa logística',
+                   'empresa call center', 'empresa tecnologia', 'distribuidora'],
         'tecnologia': ['empresa tecnologia', 'startup', 'software house',
-                       'provedor internet', 'agência digital'],
+                       'provedor internet'],
         'construção': ['construtora', 'incorporadora', 'empresa engenharia',
-                       'loja materiais construção', 'marmoraria'],
-        'aliment': ['indústria alimentícia', 'restaurante', 'rede fast food',
-                    'distribuidora alimentos', 'padaria industrial'],
-        'automotiv': ['concessionária veículos', 'oficina mecânica', 'autopeças',
-                      'locadora veículos', 'funilaria'],
-        'varejo': ['loja roupas', 'supermercado', 'shopping center',
-                   'loja eletrônicos', 'rede lojas', 'franquia'],
-        'financ': ['cooperativa crédito', 'corretora investimentos', 'fintech',
-                   'empresa factoring', 'escritório contabilidade'],
-        'jurídic': ['escritório advocacia', 'cartório', 'empresa recuperação crédito'],
-        'contab': ['escritório contabilidade', 'consultoria tributária', 'auditoria'],
-        'logística': ['transportadora', 'empresa logística', 'operador portuário',
-                      'armazém', 'empresa courier'],
-        'indústria': ['indústria metalúrgica', 'indústria química', 'indústria têxtil',
-                      'fábrica', 'indústria plásticos', 'indústria alimentícia'],
-        'educaç': ['escola particular', 'faculdade', 'cursinho', 'centro treinamento',
-                   'escola idiomas', 'escola técnica'],
-        'seguran': ['condomínio empresarial', 'shopping center', 'empresa segurança',
-                    'portaria remota', 'empresa facilities', 'escritório advocacia',
-                    'empresa financeira', 'corretora seguros'],
-        'energia': ['empresa energia solar', 'distribuidora energia', 'empresa elétrica',
-                    'construtora', 'indústria'],
-        'telecom': ['provedor internet', 'empresa telecom', 'revenda telefonia'],
-        'pet': ['pet shop', 'clínica veterinária', 'hotel pet', 'distribuidora pet'],
-        'beleza': ['salão beleza', 'clínica estética', 'barbearia', 'distribuidora cosméticos'],
-        'imóve': ['imobiliária', 'incorporadora', 'construtora', 'administradora condomínios'],
+                       'loja materiais construção'],
+        'aliment': ['indústria alimentícia', 'distribuidora alimentos',
+                    'frigorífico', 'padaria industrial'],
+        'automotiv': ['concessionária veículos', 'oficina mecânica', 'autopeças'],
+        'varejo': ['loja roupas', 'supermercado', 'rede lojas', 'franquia'],
+        'financ': ['cooperativa crédito', 'corretora investimentos', 'fintech'],
+        'jurídic': ['escritório advocacia', 'cartório'],
+        'contab': ['escritório contabilidade', 'consultoria tributária'],
+        'logística': ['transportadora', 'empresa logística', 'armazém'],
+        'indústria': ['indústria metalúrgica', 'indústria química',
+                      'indústria têxtil', 'fábrica', 'indústria plásticos'],
+        'educaç': ['escola particular', 'faculdade', 'centro treinamento'],
+        'seguran': ['empresa segurança', 'portaria remota', 'empresa facilities'],
+        'energia': ['empresa energia solar', 'distribuidora energia'],
+        'telecom': ['provedor internet', 'empresa telecom'],
+        'pet': ['pet shop', 'clínica veterinária'],
+        'beleza': ['salão beleza', 'clínica estética'],
+        'imóve': ['imobiliária', 'incorporadora', 'construtora'],
+        'recicl': ['cooperativa reciclagem', 'empresa reciclagem', 'sucateiro'],
+        'mineraç': ['mineradora', 'pedreira', 'empresa mineração'],
+        'pecuári': ['fazenda gado', 'frigorífico', 'leilão gado', 'confinamento'],
     }
 
     segmentos_priorizados = []
@@ -2418,76 +2417,131 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
             seen.add(s)
             segmentos.append(s)
 
-    if segmentos_priorizados:
-        extras = [s for s in SEGMENTOS_BASE if s not in seen]
-        random.shuffle(extras)
-        for s in extras[:10]:
-            seen.add(s)
-            segmentos.append(s)
-    else:
-        for s in SEGMENTOS_BASE:
-            if s not in seen:
-                seen.add(s)
-                segmentos.append(s)
+    if not segmentos:
+        segmentos = [
+            'escritório contabilidade', 'escritório advocacia',
+            'consultoria empresarial', 'empresa logística', 'construtora',
+            'indústria metalúrgica', 'empresa tecnologia', 'distribuidora',
+            'empresa recursos humanos', 'corretora seguros', 'imobiliária',
+            'empresa transporte', 'cooperativa', 'empresa engenharia',
+        ]
 
-    CAPITAIS = [
-        'São Paulo', 'Rio de Janeiro', 'Belo Horizonte', 'Curitiba',
-        'Porto Alegre', 'Brasília', 'Salvador', 'Recife', 'Fortaleza',
-        'Goiânia', 'Campinas', 'Florianópolis', 'Manaus', 'Belém', 'Vitória',
+    # ── 2. Detectar regiões/estados mencionados na descrição ──
+    REGIOES = {
+        'sul': ['Curitiba', 'Porto Alegre', 'Florianópolis', 'Londrina', 'Maringá',
+                'Cascavel', 'Ponta Grossa', 'Chapecó', 'Joinville', 'Blumenau',
+                'Caxias do Sul', 'Passo Fundo', 'Novo Hamburgo', 'Santa Maria',
+                'Pelotas', 'Guarapuava', 'Toledo', 'Francisco Beltrão'],
+        'centro-oeste': ['Goiânia', 'Brasília', 'Campo Grande', 'Cuiabá',
+                         'Anápolis', 'Aparecida de Goiânia', 'Dourados',
+                         'Rondonópolis', 'Rio Verde', 'Sinop', 'Lucas do Rio Verde',
+                         'Sorriso', 'Primavera do Leste', 'Itumbiara'],
+        'sudeste': ['São Paulo', 'Campinas', 'Ribeirão Preto', 'Sorocaba',
+                    'São José dos Campos', 'Piracicaba', 'Belo Horizonte',
+                    'Uberlândia', 'Rio de Janeiro', 'Vitória', 'Jundiaí',
+                    'Bauru', 'Franca', 'Uberaba'],
+        'nordeste': ['Salvador', 'Recife', 'Fortaleza', 'São Luís', 'Natal',
+                     'João Pessoa', 'Aracaju', 'Maceió', 'Teresina',
+                     'Feira de Santana', 'Petrolina', 'Barreiras',
+                     'Luís Eduardo Magalhães'],
+        'norte': ['Manaus', 'Belém', 'Porto Velho', 'Palmas', 'Macapá',
+                  'Rio Branco', 'Boa Vista'],
+    }
+    ESTADOS_POR_REGIAO = {
+        'sul': ['PR', 'SC', 'RS'],
+        'centro-oeste': ['GO', 'MT', 'MS', 'DF'],
+        'sudeste': ['SP', 'MG', 'RJ', 'ES'],
+        'nordeste': ['BA', 'PE', 'CE', 'MA', 'RN', 'PB', 'SE', 'AL', 'PI'],
+        'norte': ['AM', 'PA', 'TO', 'RO', 'AC', 'RR', 'AP'],
+    }
+
+    regioes_match = []
+    for regiao in REGIOES:
+        if regiao in desc_lower:
+            regioes_match.append(regiao)
+
+    uf_map = {
+        'paraná': 'sul', 'santa catarina': 'sul', 'rio grande do sul': 'sul',
+        'goiás': 'centro-oeste', 'mato grosso': 'centro-oeste',
+        'mato grosso do sul': 'centro-oeste',
+        'são paulo': 'sudeste', 'minas gerais': 'sudeste',
+        'rio de janeiro': 'sudeste', 'espírito santo': 'sudeste',
+        'bahia': 'nordeste', 'pernambuco': 'nordeste', 'ceará': 'nordeste',
+        'maranhão': 'nordeste', 'piauí': 'nordeste', 'tocantins': 'norte',
+    }
+    for uf_nome, reg in uf_map.items():
+        if uf_nome in desc_lower and reg not in regioes_match:
+            regioes_match.append(reg)
+
+    if not regioes_match:
+        regioes_match = list(REGIOES.keys())
+
+    cidades = []
+    estados = []
+    for reg in regioes_match:
+        cidades.extend(REGIOES.get(reg, []))
+        estados.extend(ESTADOS_POR_REGIAO.get(reg, []))
+    cidades = list(dict.fromkeys(cidades))
+    estados = list(dict.fromkeys(estados))
+
+    # ── 3. Cargos baseados na descrição ──
+    CARGO_KW = {
+        'Gerente de Operações': ['operaç'],
+        'Gerente de Compras': ['compra', 'suprimento'],
+        'Gerente de Infraestrutura': ['infraestrutura', 'silo', 'armazém'],
+        'Diretor Industrial': ['indústria', 'industrial', 'fábrica'],
+        'Gerente Agrícola': ['agrícol', 'agro', 'safra', 'grão'],
+        'Diretor de TI': ['software', 'sistema', 'monitor', 'tecnologia'],
+        'Gerente de TI': ['software', 'sistema', 'computador'],
+        'Gerente Comercial': ['vendas', 'comercial'],
+        'Gerente Financeiro': ['financ', 'contab'],
+        'Gerente de Logística': ['logística', 'transporte', 'armazém'],
+        'Gerente de Produção': ['produção', 'produtividade', 'fábrica'],
+    }
+    cargos_pri = []
+    for cargo, triggers in CARGO_KW.items():
+        if any(t in desc_lower for t in triggers):
+            cargos_pri.append(cargo)
+    cargos_base = [
+        'Diretor Geral', 'Diretor Comercial', 'Proprietário',
+        'Sócio-diretor', 'CEO', 'Gerente Administrativo',
+        'Gerente Comercial', 'Gerente de Operações',
     ]
-    INTERIOR = [
-        'Ribeirão Preto', 'São José dos Campos', 'Sorocaba', 'Santos',
-        'Londrina', 'Maringá', 'Joinville', 'Blumenau', 'Caxias do Sul',
-        'Uberlândia', 'Juiz de Fora', 'São José do Rio Preto', 'Piracicaba',
-        'Jundiaí', 'Bauru', 'Cascavel', 'Chapecó', 'Novo Hamburgo',
-        'Passo Fundo', 'Americana', 'Franca', 'Limeira', 'Montes Claros',
-        'Volta Redonda', 'Petrópolis', 'Niterói', 'Feira de Santana',
-        'Anápolis', 'Aparecida de Goiânia', 'São Luís',
-    ]
-    ESTADOS = [
-        'SP', 'RJ', 'MG', 'PR', 'SC', 'RS', 'BA', 'GO', 'MT', 'MS',
-        'PE', 'CE', 'PA', 'ES', 'DF', 'AM', 'MA', 'RN', 'PI', 'TO',
-    ]
+    cargos = list(dict.fromkeys(cargos_pri + cargos_base))
+
+    # ── 4. Gerar termos de busca (100% focados) ──
     PADROES = [
         '{seg} {loc} contato site:.com.br',
         '{seg} {loc} telefone email',
         '{seg} {loc} quem somos',
-        'empresas de {seg} {loc} site:.com.br',
+        'empresas de {seg} {loc}',
         '{seg} {loc} endereço telefone',
         '{seg} {loc} CNPJ contato',
         'lista {seg} {loc}',
         'diretório {seg} {loc}',
     ]
 
-    todas_cidades = CAPITAIS + INTERIOR
     termos = set()
-
     for seg in segmentos:
-        cids = random.sample(todas_cidades, min(4, len(todas_cidades)))
+        n_cids = min(6, len(cidades))
+        cids = random.sample(cidades, n_cids)
         for cid in cids:
             pat = random.choice(PADROES)
             termos.add(pat.format(seg=seg, loc=cid))
-        uf = random.choice(ESTADOS)
-        termos.add(f'{seg} {uf} contato site:.com.br')
+        ufs = random.sample(estados, min(3, len(estados)))
+        for uf in ufs:
+            termos.add(f'{seg} {uf} contato site:.com.br')
 
     while len(termos) < 130:
         seg = random.choice(segmentos)
-        loc = random.choice(todas_cidades + ESTADOS)
+        loc = random.choice(cidades + estados)
         pat = random.choice(PADROES)
         termos.add(pat.format(seg=seg, loc=loc))
 
-    CARGOS = [
-        'Diretor Geral', 'Diretor Comercial', 'Diretor Financeiro',
-        'Diretor de TI', 'Gerente Administrativo', 'Gerente de Compras',
-        'Gerente de TI', 'Gerente Comercial', 'Gerente de Operações',
-        'Proprietário', 'Sócio-diretor', 'CEO', 'COO', 'CFO', 'CTO',
-        'Coordenador Administrativo', 'Supervisor', 'Controller',
-        'Responsável de TI', 'Head de Operações',
-    ]
-
     lista = list(termos)
     random.shuffle(lista)
-    return {'termos': lista, 'cargos': CARGOS}
+    return {'termos': lista, 'cargos': cargos}
+
 
 
 # --- API Tokens ---
