@@ -1012,6 +1012,13 @@ function renderLeadsList(){
   </div></td></tr>`;
   tb.innerHTML+=pagHtml;
 
+  if(_waSelectAllIds.length>0){
+    const selSet=new Set(_waSelectAllIds);
+    document.querySelectorAll('.lead-chk').forEach(c=>{if(selSet.has(parseInt(c.value))) c.checked=true;});
+    const master=document.getElementById('sel-all-wa');
+    if(master) master.checked=true;
+  }
+
   document.getElementById('lead-count').textContent=filtered.length+' leads';
 }
 
@@ -1028,6 +1035,9 @@ function getFilteredLeads(){
 }
 function filterLeads(){
   _waPage=1;
+  _waSelectAllIds=[];
+  const master=document.getElementById('sel-all-wa');
+  if(master) master.checked=false;
   renderLeadsList();
 }
 
@@ -1062,17 +1072,28 @@ function executeBulk(){
   }
   document.getElementById('bulk-action').value='';
 }
+let _waSelectAllIds=[];
 function toggleSelectAll(master){
   document.querySelectorAll('.lead-chk').forEach(c=>c.checked=master.checked);
+  if(master.checked){
+    _waSelectAllIds=getFilteredLeads().map(l=>l.id);
+  } else {
+    _waSelectAllIds=[];
+  }
 }
 function getSelectedIds(){
-  return Array.from(document.querySelectorAll('.lead-chk:checked')).map(c=>parseInt(c.value));
+  const visible=Array.from(document.querySelectorAll('.lead-chk:checked')).map(c=>parseInt(c.value));
+  if(_waSelectAllIds.length>0){
+    const visibleUnchecked=new Set(Array.from(document.querySelectorAll('.lead-chk:not(:checked)')).map(c=>parseInt(c.value)));
+    return _waSelectAllIds.filter(id=>!visibleUnchecked.has(id));
+  }
+  return visible;
 }
 function enviarEmailSel(){
   const ids=getSelectedIds();
   if(!ids.length){ alert('Selecione ao menos 1 lead com checkbox'); return; }
-  const chks=Array.from(document.querySelectorAll('.lead-chk:checked'));
-  const comEmail=chks.filter(c=>c.dataset.email&&c.dataset.email.includes('@')).length;
+  const idSet=new Set(ids);
+  const comEmail=_waAllLeads.filter(l=>idSet.has(l.id)&&l.email&&l.email.includes('@')).length;
   if(!comEmail){ alert('Nenhum lead selecionado tem email válido'); return; }
   if(!confirm(`Enviar email para ${comEmail} lead(s) com email?\n\n(${ids.length} selecionados, ${ids.length-comEmail} sem email serão ignorados)`)) return;
   // Feedback visual
