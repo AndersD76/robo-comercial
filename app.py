@@ -2792,57 +2792,51 @@ O email deve parecer que foi feito pelo mesmo designer do site.
 
         msg = client.messages.create(
             model='claude-sonnet-4-6',
-            max_tokens=4000,
-            messages=[{'role': 'user', 'content': f"""Crie um email HTML curto de prospecção B2B para "{empresa}".
+            max_tokens=2000,
+            messages=[{'role': 'user', 'content': f"""Gere um template de email HTML para mala direta B2B.
 
-PRODUTO: {descricao}
+EMPRESA REMETENTE: {empresa}
+O QUE VENDE: {descricao}
 {contexto}
 
-━━━ REGRA #1: VARIÁVEIS OBRIGATÓRIAS ━━━
+ESTE É UM TEMPLATE — será enviado para centenas de leads diferentes.
+O sistema faz find-and-replace antes de enviar. As variáveis abaixo serão substituídas pelo nome/dados reais de cada lead.
 
-O email será enviado em massa. Cada lead tem dados diferentes.
-Use EXATAMENTE estas variáveis (com chaves duplas) no HTML:
+VARIÁVEIS DE TEMPLATE (escreva LITERALMENTE no HTML):
+- LEAD_NOME → será substituído pelo nome da empresa destinatária
+- LEAD_SEGMENTO → será substituído pelo ramo do destinatário
+- LEAD_CIDADE → será substituído pela cidade do destinatário
+- LINK_AGENDA → será substituído pela URL de agendamento
 
-- {{{{nome}}}} → nome da empresa do lead (OBRIGATÓRIO na saudação)
-- {{{{segmento}}}} → ramo de atuação do lead (use no texto se fizer sentido)
-- {{{{cidade}}}} → cidade do lead (pode usar ou não)
-- {{{{link_agenda}}}} → URL do botão CTA (OBRIGATÓRIO no href do botão)
+EXEMPLO CORRETO de saudação: "Olá LEAD_NOME,"
+EXEMPLO ERRADO: "Olá Empresa Exemplo," ou "Olá João,"
 
-PROIBIDO escrever nomes fixos de empresa, cidade ou segmento no corpo.
-Onde faria sentido personalizar, USE A VARIÁVEL.
-Exemplo correto: "Olá {{{{nome}}}}," — ERRADO: "Olá Empresa Exemplo,"
+TEXTO DO EMAIL (máximo 3 parágrafos curtos):
+- Parágrafo 1: "Olá LEAD_NOME," + uma pergunta provocativa sobre uma dor real
+- Parágrafo 2: Como {empresa} resolve isso (1-2 frases concretas, sem clichê)
+- Parágrafo 3: CTA — botão "Agendar 15 min" com href="LINK_AGENDA"
 
-━━━ REGRA #2: CURTO E DIRETO ━━━
+PROIBIDO: bullet points, emojis, badges, cards, ícones, imagens, footer de descadastrar, mais de 3 parágrafos.
 
-MÁXIMO 4-5 frases no corpo total. Ninguém lê email longo de desconhecido.
-Estrutura:
-1. Saudação com {{{{nome}}}}
-2. Uma pergunta provocativa ou dor real (1 frase)
-3. O que seu produto resolve em termos concretos (1-2 frases)
-4. CTA: botão com href={{{{link_agenda}}}}
-
-PROIBIDO: bullet points, ícones/emojis, seções extras, cards de estatísticas, badges, imagens.
-PROIBIDO: "sabemos que", "solução inovadora", "desafios constantes", "é essencial"
-PROIBIDO: link/texto de descadastrar no footer (o sistema já adiciona)
-
-━━━ REGRA #3: DESIGN SIMPLES ━━━
-
-- Container max-width 600px centralizado, fundo #fff
-- Header: barra cor da marca (ou #1a2332) com "{empresa}" em branco, font-size 18px, padding 20px
+HTML:
+- max-width 600px, fundo #fff, CSS todo inline
+- Header: barra #1a2332 com "{empresa}" em branco
 - Body: padding 28px 32px, font 15px/1.6 'Segoe UI',Arial,sans-serif, color #333
-- Parágrafos com margin-bottom 14px
-- UM ÚNICO botão CTA: background #2563eb (ou cor da marca), color #fff, border-radius 8px, padding 13px 28px, font-weight 700, text-align center, text-decoration none, display inline-block
-- Footer: apenas 1 linha cinza (font-size 11px, color #aaa, margin-top 24px)
-- TODO CSS inline (style=""). Sem tag <style>. Sem imagens externas.
+- Botão: background #2563eb, color #fff, border-radius 8px, padding 13px 28px, font-weight 700
+- Footer: 1 linha cinza 11px
 
-Responda SOMENTE o HTML (<!DOCTYPE html> até </html>). Nada mais."""}]
+Responda SOMENTE o HTML."""}]
         )
         html = msg.content[0].text.strip()
-        # Remove possíveis markdown code fences
         if html.startswith('```'):
             html = html.split('\n', 1)[1]
         if html.endswith('```'):
             html = html.rsplit('```', 1)[0]
+        html = html.strip()
+        html = (html.replace('LEAD_NOME', '{{nome}}')
+                    .replace('LEAD_SEGMENTO', '{{segmento}}')
+                    .replace('LEAD_CIDADE', '{{cidade}}')
+                    .replace('LINK_AGENDA', '{{link_agenda}}'))
         assunto_msg = client.messages.create(
             model='claude-haiku-4-5-20251001',
             max_tokens=60,
