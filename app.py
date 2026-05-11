@@ -2805,110 +2805,134 @@ def _build_email_html(*, empresa, pitch, cor_header, cor_btn, cor_texto,
                       site_link_inline, site_footer, site_url):
     """Monta o HTML profissional do email de prospecção."""
     site_display = site_url.replace("https://", "").replace("http://", "").rstrip("/") if site_url else ''
-    header_subtitle = ''
-    if site_url:
-        header_subtitle = (
-            '<p style="margin:8px 0 0;font-family:Segoe UI,Arial,sans-serif;'
-            'font-size:13px;color:' + cor_texto + ';opacity:0.7;">'
-            + site_display + '</p>')
-    footer_line = ''
+
+    header_site_row = ''
+    if site_display:
+        header_site_row = (
+            '<tr><td style="padding:6px 48px 0;font-family:Segoe UI,Arial,sans-serif;'
+            'font-size:12px;color:' + cor_texto + ';opacity:0.6;letter-spacing:0.5px;">'
+            + site_display + '</td></tr>')
+
+    footer_site = ''
     if site_footer:
-        footer_line = ' &mdash; ' + site_footer
+        footer_site = '<br>' + site_footer
+
+    site_btn = ''
+    if site_url:
+        site_btn = (
+            '<tr><td align="center" style="padding:16px 0 0;">'
+            '<a href="' + site_url + '" style="font-family:Segoe UI,Arial,sans-serif;'
+            'font-size:13px;color:' + cor_btn + ';text-decoration:none;">'
+            'Conheça nosso site &rarr;</a></td></tr>')
+
+    # btn_light: versão clara da cor do botão para backgrounds
+    # Converte hex para RGB e mistura com branco
+    try:
+        r = int(cor_btn[1:3], 16)
+        g = int(cor_btn[3:5], 16)
+        b = int(cor_btn[5:7], 16)
+        btn_bg = f"#{min(r+200,255):02x}{min(g+200,255):02x}{min(b+200,255):02x}"
+        btn_border = f"#{min(r+140,255):02x}{min(g+140,255):02x}{min(b+140,255):02x}"
+    except Exception:
+        btn_bg = '#e0e7ff'
+        btn_border = '#c7d2fe'
+
     return f'''<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{empresa}</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>{empresa}</title>
 </head>
-<body style="margin:0;padding:0;background-color:#eef1f6;-webkit-font-smoothing:antialiased;">
+<body style="margin:0;padding:0;background-color:#f3f4f6;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f3f4f6;">
+<tr><td align="center" style="padding:40px 16px;">
 
-  <!-- WRAPPER -->
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#eef1f6;">
-    <tr><td align="center" style="padding:32px 16px;">
+<!-- CARD -->
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
 
-      <!-- CARD -->
-      <table role="presentation" width="600" cellpadding="0" cellspacing="0"
-             style="max-width:600px;width:100%;border-radius:16px;overflow:hidden;
-                    box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+<!-- HEADER BAR -->
+<tr><td style="background-color:{cor_header};padding:36px 48px 30px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+<tr>
+<td style="font-family:Segoe UI,Arial,sans-serif;font-size:24px;font-weight:800;color:{cor_texto};letter-spacing:-0.5px;">{empresa}</td>
+</tr>
+{header_site_row}
+</table>
+</td></tr>
 
-        <!-- HEADER -->
-        <tr>
-          <td style="background-color:{cor_header};padding:40px 48px 32px;">
-            <h1 style="margin:0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;
-                        font-size:26px;font-weight:800;color:{cor_texto};
-                        letter-spacing:-0.5px;">{empresa}</h1>
-            {header_subtitle}
-          </td>
-        </tr>
+<!-- ACCENT -->
+<tr><td style="background-color:{cor_btn};height:3px;font-size:0;">&nbsp;</td></tr>
 
-        <!-- ACCENT LINE -->
-        <tr>
-          <td style="background:{cor_btn};height:4px;font-size:0;line-height:0;">&nbsp;</td>
-        </tr>
+<!-- GREETING -->
+<tr><td style="background-color:#ffffff;padding:36px 48px 0;">
+<p style="margin:0;font-family:Segoe UI,Arial,sans-serif;font-size:16px;line-height:1.6;color:#1f2937;">
+Olá <strong>{{{{nome}}}}</strong>,
+</p>
+</td></tr>
 
-        <!-- BODY -->
-        <tr>
-          <td style="background-color:#ffffff;padding:40px 48px;">
-            <p style="margin:0 0 24px;font-family:'Segoe UI',Arial,sans-serif;
-                       font-size:17px;line-height:1.6;color:#111827;">
-              Olá <strong>{{{{nome}}}}</strong>,
-            </p>
+<!-- INTRO -->
+<tr><td style="background-color:#ffffff;padding:20px 48px 0;">
+<p style="margin:0;font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.75;color:#374151;">
+Sou da <strong>{empresa}</strong>{site_link_inline} e trabalho com empresas de
+<strong>{{{{segmento}}}}</strong> em <strong>{{{{cidade}}}}</strong>.
+</p>
+</td></tr>
 
-            <p style="margin:0 0 24px;font-family:'Segoe UI',Arial,sans-serif;
-                       font-size:15px;line-height:1.75;color:#374151;">
-              Sou da <strong>{empresa}</strong>{site_link_inline}.
-              Ajudamos empresas de <strong>{{{{segmento}}}}</strong> em
-              <strong>{{{{cidade}}}}</strong> a {pitch}.
-            </p>
+<!-- PITCH CARD -->
+<tr><td style="background-color:#ffffff;padding:24px 48px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+       style="background-color:{btn_bg};border-left:4px solid {cor_btn};border-radius:0 8px 8px 0;">
+<tr><td style="padding:20px 24px;">
+<p style="margin:0;font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.7;color:#1e293b;">
+<strong style="font-size:15px;">O que fazemos:</strong><br>
+Ajudamos empresas a {pitch}.
+</p>
+</td></tr>
+</table>
+</td></tr>
 
-            <p style="margin:0 0 32px;font-family:'Segoe UI',Arial,sans-serif;
-                       font-size:15px;line-height:1.75;color:#374151;">
-              Posso te mostrar em 15 minutos como funciona na prática?
-            </p>
+<!-- CTA TEXT -->
+<tr><td style="background-color:#ffffff;padding:0 48px 28px;">
+<p style="margin:0;font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.75;color:#374151;">
+Posso te mostrar em <strong>15 minutos</strong> como funciona na prática?
+</p>
+</td></tr>
 
-            <!-- CTA BUTTON -->
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-              <tr><td align="center">
-                <a href="{{{{link_agenda}}}}"
-                   style="display:inline-block;background-color:{cor_btn};
-                          color:#ffffff;font-family:'Segoe UI',Arial,sans-serif;
-                          font-size:15px;font-weight:700;text-decoration:none;
-                          padding:16px 44px;border-radius:10px;
-                          letter-spacing:0.3px;
-                          box-shadow:0 4px 14px rgba(0,0,0,0.15);">
-                  Agendar conversa de 15 min &rarr;
-                </a>
-              </td></tr>
-            </table>
-          </td>
-        </tr>
+<!-- CTA BUTTON -->
+<tr><td align="center" style="background-color:#ffffff;padding:0 48px 12px;">
+<table role="presentation" cellpadding="0" cellspacing="0">
+<tr><td style="background-color:{cor_btn};border-radius:10px;">
+<a href="{{{{link_agenda}}}}" style="display:inline-block;font-family:Segoe UI,Arial,sans-serif;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;padding:16px 48px;letter-spacing:0.3px;">
+&#128197; Agendar conversa de 15 min
+</a>
+</td></tr>
+</table>
+</td></tr>
 
-        <!-- DIVIDER -->
-        <tr>
-          <td style="background-color:#ffffff;padding:0 48px;">
-            <div style="border-top:1px solid #e5e7eb;"></div>
-          </td>
-        </tr>
+<!-- SITE LINK -->
+{site_btn}
 
-        <!-- FOOTER -->
-        <tr>
-          <td style="background-color:#ffffff;padding:24px 48px 32px;border-radius:0 0 16px 16px;">
-            <p style="margin:0;font-family:'Segoe UI',Arial,sans-serif;
-                       font-size:12px;color:#9ca3af;text-align:center;line-height:1.6;">
-              <strong style="color:#6b7280;">{empresa}</strong>
-              {footer_line}
-            </p>
-          </td>
-        </tr>
+<!-- SPACER -->
+<tr><td style="background-color:#ffffff;padding:16px 0 0;font-size:0;">&nbsp;</td></tr>
 
-      </table>
-      <!-- /CARD -->
+<!-- DIVIDER -->
+<tr><td style="background-color:#ffffff;padding:0 48px;">
+<div style="border-top:1px solid #e5e7eb;"></div>
+</td></tr>
 
-    </td></tr>
-  </table>
-  <!-- /WRAPPER -->
+<!-- FOOTER -->
+<tr><td style="background-color:#ffffff;padding:20px 48px 28px;">
+<p style="margin:0;font-family:Segoe UI,Arial,sans-serif;font-size:11px;color:#9ca3af;text-align:center;line-height:1.6;">
+<strong style="color:#6b7280;">{empresa}</strong>{footer_site}
+</p>
+</td></tr>
 
+</table>
+<!-- /CARD -->
+
+</td></tr>
+</table>
 </body>
 </html>'''
 
