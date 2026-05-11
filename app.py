@@ -2327,125 +2327,148 @@ def api_generate_terms(bot):
 
 
 def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
-    """Gera termos de busca focados no perfil do cliente — sem IA."""
+    """Gera termos de busca dinamicamente a partir da descricao do usuario."""
     desc_lower = descricao.lower()
 
-    # ── 1. Mapear keywords da descrição → segmentos-alvo ──
-    KEYWORD_SEGMENTS = {
-        'agro': ['fazenda', 'cooperativa agrícola', 'agroindústria', 'cerealista',
-                 'revendedora agrícola', 'usina açúcar álcool', 'frigorífico'],
-        'agrícol': ['cooperativa agrícola', 'agroindústria', 'cerealista', 'fazenda',
-                    'revendedora agrícola', 'silo grãos'],
-        'rural': ['fazenda', 'cooperativa agrícola', 'agroindústria', 'pecuária'],
-        'grão': ['cerealista', 'cooperativa agrícola', 'armazém grãos', 'trading agrícola',
-                 'silo grãos', 'beneficiadora grãos'],
-        'cereal': ['cerealista', 'cooperativa agrícola', 'armazém grãos', 'trading agrícola'],
-        'soja': ['cerealista', 'cooperativa agrícola', 'trading agrícola', 'armazém grãos',
-                 'agroindústria soja', 'esmagadora soja'],
-        'milho': ['cerealista', 'cooperativa agrícola', 'trading agrícola', 'armazém grãos',
-                  'agroindústria milho'],
-        'trigo': ['moinho trigo', 'cooperativa agrícola', 'cerealista', 'armazém grãos',
-                  'indústria farinha'],
-        'arroz': ['beneficiadora arroz', 'cooperativa arroz', 'cerealista', 'armazém grãos'],
-        'café': ['cooperativa café', 'exportadora café', 'beneficiadora café', 'torrefadora'],
-        'silo': ['cerealista', 'cooperativa agrícola', 'armazém grãos', 'silo grãos'],
-        'cooperativ': ['cooperativa agrícola', 'cooperativa crédito', 'cooperativa'],
-        'tombador': ['cerealista', 'cooperativa agrícola', 'armazém grãos',
-                     'trading agrícola', 'agroindústria'],
-        'coletor': ['cerealista', 'cooperativa agrícola', 'armazém grãos'],
-        'prensa': ['indústria reciclagem', 'cooperativa reciclagem', 'sucateiro',
-                   'indústria papel', 'agroindústria'],
-        'hidráulic': ['indústria metalúrgica', 'construtora', 'mineradora',
-                      'empresa equipamentos industriais'],
-        'saúde': ['hospital', 'clínica médica', 'laboratório análises',
-                  'clínica odontológica', 'operadora saúde'],
-        'médic': ['hospital', 'clínica médica', 'laboratório análises'],
-        'software': ['empresa tecnologia', 'startup', 'software house',
-                     'escritório contabilidade', 'empresa logística'],
-        'sistema': ['escritório contabilidade', 'empresa logística',
-                    'distribuidora', 'comércio varejista'],
-        'monitor': ['escritório contabilidade', 'escritório advocacia',
-                    'agência marketing digital', 'consultoria empresarial',
-                    'empresa logística', 'empresa recursos humanos',
-                    'empresa call center', 'empresa tecnologia',
-                    'corretora seguros', 'BPO', 'startup'],
-        'produtividade': ['escritório contabilidade', 'escritório advocacia',
-                          'consultoria empresarial', 'empresa call center',
-                          'empresa tecnologia', 'BPO', 'startup'],
-        'funcionário': ['escritório contabilidade', 'empresa logística',
-                        'empresa recursos humanos', 'empresa call center',
-                        'empresa tecnologia', 'distribuidora'],
-        'computador': ['escritório contabilidade', 'empresa call center',
-                       'empresa tecnologia', 'BPO', 'startup'],
-        'gestor': ['escritório contabilidade', 'empresa logística',
-                   'empresa call center', 'empresa tecnologia', 'distribuidora'],
-        'tecnologia': ['empresa tecnologia', 'startup', 'software house',
-                       'provedor internet'],
-        'construção': ['construtora', 'incorporadora', 'empresa engenharia',
-                       'loja materiais construção'],
-        'aliment': ['indústria alimentícia', 'distribuidora alimentos',
-                    'frigorífico', 'padaria industrial'],
-        'automotiv': ['concessionária veículos', 'oficina mecânica', 'autopeças'],
-        'varejo': ['loja roupas', 'supermercado', 'rede lojas', 'franquia'],
-        'financ': ['cooperativa crédito', 'corretora investimentos', 'fintech'],
-        'jurídic': ['escritório advocacia', 'cartório'],
-        'contab': ['escritório contabilidade', 'consultoria tributária'],
-        'logística': ['transportadora', 'empresa logística', 'armazém'],
-        'indústria': ['indústria metalúrgica', 'indústria química',
-                      'indústria têxtil', 'fábrica', 'indústria plásticos'],
-        'educaç': ['escola particular', 'faculdade', 'centro treinamento'],
-        'seguran': ['empresa segurança', 'portaria remota', 'empresa facilities'],
-        'energia': ['empresa energia solar', 'distribuidora energia'],
-        'telecom': ['provedor internet', 'empresa telecom'],
-        'pet': ['pet shop', 'clínica veterinária'],
-        'beleza': ['salão beleza', 'clínica estética'],
-        'imóve': ['imobiliária', 'incorporadora', 'construtora'],
-        'recicl': ['cooperativa reciclagem', 'empresa reciclagem', 'sucateiro'],
-        'mineraç': ['mineradora', 'pedreira', 'empresa mineração'],
-        'pecuári': ['fazenda gado', 'frigorífico', 'leilão gado', 'confinamento'],
-    }
+    # ── 1. Extrair SEGMENTOS-ALVO (tipos de empresa cliente) ──
 
-    segmentos_priorizados = []
-    for kw, segs in KEYWORD_SEGMENTS.items():
-        if kw in desc_lower:
-            segmentos_priorizados.extend(segs)
+    # Regex para tipos de organizacao (substantivos que descrevem empresas)
+    _ORG = (
+        r'cooperativa|cerealista|agroindustria|agroindústria|industria|indústria|'
+        r'fabrica|fábrica|usina|hospital|clinica|clínica|escola|faculdade|'
+        r'escritorio|escritório|construtora|distribuidora|transportadora|'
+        r'atacadista|imobiliaria|imobiliária|concessionaria|concessionária|'
+        r'mineradora|frigorifico|frigorífico|armazem|armazém|silo|'
+        r'laboratorio|laboratório|farmacia|farmácia|drogaria|loja|'
+        r'franquia|startup|consultoria|corretora|provedor|agencia|agência|'
+        r'hotel|pousada|restaurante|supermercado|academia|grafica|gráfica|'
+        r'editora|condominio|condomínio|shopping|oficina|autopecas|autopeças|'
+        r'padaria|torrefadora|moinho|beneficiadora|exportadora|'
+        r'trading|revendedora|fazenda|pecuaria|pecuária|confinamento|'
+        r'pet shop|coworking|call center|software house|'
+        r'incorporadora|marmoraria|funilaria|bpo'
+    )
 
-    seen = set()
     segmentos = []
-    for s in segmentos_priorizados:
-        if s not in seen:
-            seen.add(s)
-            segmentos.append(s)
+    seen_segs = set()
 
-    if not segmentos:
-        segmentos = [
-            'escritório contabilidade', 'escritório advocacia',
-            'consultoria empresarial', 'empresa logística', 'construtora',
-            'indústria metalúrgica', 'empresa tecnologia', 'distribuidora',
-            'empresa recursos humanos', 'corretora seguros', 'imobiliária',
-            'empresa transporte', 'cooperativa', 'empresa engenharia',
+    def _add_seg(s):
+        s = s.strip()
+        if len(s) < 4 or len(s) > 35:
+            return
+        if s in seen_segs:
+            return
+        # Filtra: nao pode ser nome da propria empresa
+        if empresa_nome and empresa_nome.lower() in s:
+            return
+        # Filtra: nao pode ser regiao/estado/preposicao/adjetivo
+        rejects = [
+            'brasil', 'norte', 'sul', 'sudeste', 'nordeste', 'centro-oeste',
+            'grande porte', 'medio porte', 'pequeno porte',
+            'gerente', 'diretor', 'coordenador', 'responsavel',
+            'compras', 'operacoes', 'infraestrutura', 'vendas',
+            'nosso', 'nossa', 'todo', 'toda',
         ]
+        sl = s.lower()
+        for r in rejects:
+            if sl.startswith(r) or sl == r:
+                return
+        # Filtra frases com pronome relativo ou verbos
+        if re.search(r'\b(?:que|quem|onde|como|quando)\b', sl):
+            return
+        # Filtra estados como segmento
+        estados_nomes = [
+            'sao paulo', 'minas gerais', 'rio de janeiro', 'parana',
+            'santa catarina', 'rio grande do sul', 'bahia', 'goias',
+            'mato grosso', 'espirito santo', 'pernambuco', 'ceara',
+        ]
+        if sl in estados_nomes:
+            return
+        seen_segs.add(s)
+        segmentos.append(s)
 
-    # ── 2. Detectar regiões/estados mencionados na descrição ──
-    REGIOES = {
-        'sul': ['Curitiba', 'Porto Alegre', 'Florianópolis', 'Londrina', 'Maringá',
-                'Cascavel', 'Ponta Grossa', 'Chapecó', 'Joinville', 'Blumenau',
+    # a) Extrai tipos de organizacao do texto completo
+    for m in re.finditer(
+        r'\b(' + _ORG + r')(?:\s+(?:de\s+|da\s+|do\s+|das\s+|dos\s+)?[a-záàâãéêíóôõúüç]+){0,2}',
+        desc_lower
+    ):
+        seg = m.group(0).strip()
+        # Nao capturar se faz parte de "fabricamos" ou "vendemos X para"
+        # Verifica se o contexto e "nosso produto" vs "nosso cliente"
+        pos = m.start()
+        antes = desc_lower[max(0, pos-30):pos].strip()
+        verbos_proprios = ['fabricamos', 'vendemos', 'produzimos',
+                           'oferecemos', 'desenvolvemos', 'criamos']
+        is_proprio = any(v in antes for v in verbos_proprios)
+        if not is_proprio:
+            _add_seg(seg)
+
+    # b) Extrai do padrao "cliente ideal e ... de XXXX, YYYY e ZZZZ"
+    cliente_match = re.search(
+        r'cliente[s]?\s+ideal[^.]*?(?:de|em|para)\s+([^.]+)',
+        desc_lower
+    )
+    if cliente_match:
+        trecho = cliente_match.group(1)
+        # Remove cargos
+        trecho = re.sub(
+            r'(?:gerente|diretor|coordenador|responsavel|chefe|head|'
+            r'supervisor|dono|proprietario|socio)\s+(?:de\s+)?[^,]+,?\s*',
+            '', trecho
+        )
+        partes = re.split(r'\s*,\s*|\s+e\s+', trecho)
+        for parte in partes:
+            parte = re.sub(r'^(?:os?|as?|de|da|do|das|dos|uns?|umas?)\s+', '', parte.strip())
+            # So aceita se contem uma palavra de tipo de org
+            if re.search(_ORG, parte):
+                _add_seg(parte)
+
+    # c) Extrai do padrao "atendemos XXXX"
+    atende_match = re.search(r'atendemos\s+([^.]+)', desc_lower)
+    if atende_match:
+        partes = re.split(r'\s*,\s*|\s+e\s+', atende_match.group(1))
+        for parte in partes:
+            parte = re.sub(r'^(?:os?|as?|de|da|do|das|dos)\s+', '', parte.strip())
+            if re.search(_ORG, parte):
+                _add_seg(parte)
+
+    # d) Se vazio, tenta extrair palavras-chave relevantes do contexto
+    if not segmentos:
+        from collections import Counter
+        stops = {
+            'para', 'como', 'mais', 'nosso', 'nossa', 'nossos', 'nossas',
+            'empresa', 'ideal', 'cliente', 'objetivo', 'meta', 'foco',
+            'entre', 'desde', 'sobre', 'esse', 'essa', 'este', 'esta',
+            'tambem', 'pode', 'deve', 'todo', 'toda', 'todos', 'todas',
+            'muito', 'menos', 'cada', 'outro', 'outra', 'mesmo', 'mesma',
+            'qual', 'quando', 'onde', 'porque', 'pois', 'ainda',
+            'vendemos', 'oferecemos', 'somos', 'temos', 'fazemos',
+            'atendemos', 'trabalhamos', 'atuamos', 'produzimos',
+            'servico', 'produto', 'solucao', 'sistema', 'plataforma',
+            'brasil', 'nacional', 'porte',
+        }
+        palavras = re.findall(r'[a-záàâãéêíóôõúüç]{5,}', desc_lower)
+        freq = Counter(p for p in palavras if p not in stops)
+        segmentos = [w for w, _ in freq.most_common(8)]
+
+    # ── 2. Extrair REGIOES / CIDADES ──
+    TODAS_CIDADES = {
+        'sul': ['Curitiba', 'Porto Alegre', 'Florianopolis', 'Londrina', 'Maringa',
+                'Cascavel', 'Ponta Grossa', 'Chapeco', 'Joinville', 'Blumenau',
                 'Caxias do Sul', 'Passo Fundo', 'Novo Hamburgo', 'Santa Maria',
-                'Pelotas', 'Guarapuava', 'Toledo', 'Francisco Beltrão'],
-        'centro-oeste': ['Goiânia', 'Brasília', 'Campo Grande', 'Cuiabá',
-                         'Anápolis', 'Aparecida de Goiânia', 'Dourados',
-                         'Rondonópolis', 'Rio Verde', 'Sinop', 'Lucas do Rio Verde',
-                         'Sorriso', 'Primavera do Leste', 'Itumbiara'],
-        'sudeste': ['São Paulo', 'Campinas', 'Ribeirão Preto', 'Sorocaba',
-                    'São José dos Campos', 'Piracicaba', 'Belo Horizonte',
-                    'Uberlândia', 'Rio de Janeiro', 'Vitória', 'Jundiaí',
-                    'Bauru', 'Franca', 'Uberaba'],
-        'nordeste': ['Salvador', 'Recife', 'Fortaleza', 'São Luís', 'Natal',
-                     'João Pessoa', 'Aracaju', 'Maceió', 'Teresina',
-                     'Feira de Santana', 'Petrolina', 'Barreiras',
-                     'Luís Eduardo Magalhães'],
-        'norte': ['Manaus', 'Belém', 'Porto Velho', 'Palmas', 'Macapá',
-                  'Rio Branco', 'Boa Vista'],
+                'Pelotas', 'Guarapuava', 'Toledo', 'Francisco Beltrao'],
+        'centro-oeste': ['Goiania', 'Brasilia', 'Campo Grande', 'Cuiaba',
+                         'Anapolis', 'Dourados', 'Rondonopolis', 'Rio Verde',
+                         'Sinop', 'Lucas do Rio Verde', 'Sorriso',
+                         'Primavera do Leste', 'Itumbiara'],
+        'sudeste': ['Sao Paulo', 'Campinas', 'Ribeirao Preto', 'Sorocaba',
+                    'Sao Jose dos Campos', 'Piracicaba', 'Belo Horizonte',
+                    'Uberlandia', 'Rio de Janeiro', 'Vitoria', 'Jundiai',
+                    'Bauru', 'Franca', 'Uberaba', 'Juiz de Fora'],
+        'nordeste': ['Salvador', 'Recife', 'Fortaleza', 'Sao Luis', 'Natal',
+                     'Joao Pessoa', 'Aracaju', 'Maceio', 'Teresina',
+                     'Feira de Santana', 'Petrolina', 'Barreiras'],
+        'norte': ['Manaus', 'Belem', 'Porto Velho', 'Palmas', 'Macapa'],
     }
     ESTADOS_POR_REGIAO = {
         'sul': ['PR', 'SC', 'RS'],
@@ -2456,69 +2479,81 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
     }
 
     regioes_match = []
-    for regiao in REGIOES:
-        if regiao in desc_lower:
+    # Regioes explicitas (com word boundary para evitar falsos positivos)
+    for regiao in TODAS_CIDADES:
+        if re.search(r'\b' + re.escape(regiao) + r'\b', desc_lower):
             regioes_match.append(regiao)
 
+    # Estados por nome completo (word boundary)
     uf_map = {
-        'paraná': 'sul', 'santa catarina': 'sul', 'rio grande do sul': 'sul',
-        'goiás': 'centro-oeste', 'mato grosso': 'centro-oeste',
+        'paraná': 'sul', 'parana': 'sul',
+        'santa catarina': 'sul',
+        'rio grande do sul': 'sul',
+        'goiás': 'centro-oeste', 'goias': 'centro-oeste',
+        'mato grosso': 'centro-oeste',
         'mato grosso do sul': 'centro-oeste',
-        'são paulo': 'sudeste', 'minas gerais': 'sudeste',
-        'rio de janeiro': 'sudeste', 'espírito santo': 'sudeste',
-        'bahia': 'nordeste', 'pernambuco': 'nordeste', 'ceará': 'nordeste',
-        'maranhão': 'nordeste', 'piauí': 'nordeste', 'tocantins': 'norte',
+        'são paulo': 'sudeste', 'sao paulo': 'sudeste',
+        'minas gerais': 'sudeste',
+        'rio de janeiro': 'sudeste',
+        'espírito santo': 'sudeste', 'espirito santo': 'sudeste',
+        'bahia': 'nordeste', 'pernambuco': 'nordeste',
+        'ceará': 'nordeste', 'ceara': 'nordeste',
+        'maranhão': 'nordeste', 'maranhao': 'nordeste',
+        'tocantins': 'norte',
     }
     for uf_nome, reg in uf_map.items():
-        if uf_nome in desc_lower and reg not in regioes_match:
-            regioes_match.append(reg)
+        if re.search(r'\b' + re.escape(uf_nome) + r'\b', desc_lower):
+            if reg not in regioes_match:
+                regioes_match.append(reg)
+
+    if any(x in desc_lower for x in ['todo o brasil', 'brasil inteiro', 'nacional',
+                                       'todo brasil']):
+        regioes_match = list(TODAS_CIDADES.keys())
 
     if not regioes_match:
-        regioes_match = list(REGIOES.keys())
+        regioes_match = list(TODAS_CIDADES.keys())
 
     cidades = []
     estados = []
     for reg in regioes_match:
-        cidades.extend(REGIOES.get(reg, []))
+        cidades.extend(TODAS_CIDADES.get(reg, []))
         estados.extend(ESTADOS_POR_REGIAO.get(reg, []))
     cidades = list(dict.fromkeys(cidades))
     estados = list(dict.fromkeys(estados))
 
-    # ── 3. Cargos baseados na descrição ──
-    CARGO_KW = {
-        'Gerente de Operações': ['operaç'],
-        'Gerente de Compras': ['compra', 'suprimento'],
-        'Gerente de Infraestrutura': ['infraestrutura', 'silo', 'armazém'],
-        'Diretor Industrial': ['indústria', 'industrial', 'fábrica'],
-        'Gerente Agrícola': ['agrícol', 'agro', 'safra', 'grão'],
-        'Diretor de TI': ['software', 'sistema', 'monitor', 'tecnologia'],
-        'Gerente de TI': ['software', 'sistema', 'computador'],
-        'Gerente Comercial': ['vendas', 'comercial'],
-        'Gerente Financeiro': ['financ', 'contab'],
-        'Gerente de Logística': ['logística', 'transporte', 'armazém'],
-        'Gerente de Produção': ['produção', 'produtividade', 'fábrica'],
-    }
-    cargos_pri = []
-    for cargo, triggers in CARGO_KW.items():
-        if any(t in desc_lower for t in triggers):
-            cargos_pri.append(cargo)
-    cargos_base = [
-        'Diretor Geral', 'Diretor Comercial', 'Proprietário',
-        'Sócio-diretor', 'CEO', 'Gerente Administrativo',
-        'Gerente Comercial', 'Gerente de Operações',
-    ]
-    cargos = list(dict.fromkeys(cargos_pri + cargos_base))
+    # ── 3. Extrair CARGOS ──
+    cargos = []
+    for m in re.finditer(
+        r'\b((?:gerente|diretor|coordenador|responsavel|responsável|'
+        r'chefe|head|supervisor|proprietario|proprietário|'
+        r'socio|sócio|dono|ceo|cfo|cto|coo)'
+        r'(?:\s+(?:de|da|do|geral|comercial|industrial|administrativo|'
+        r'financeiro|operacoes|operações|compras|infraestrutura|'
+        r'producao|produção|logistica|logística|marketing|vendas|'
+        r'agricola|agrícola|tecnico|técnico|ti|rh|recursos\s+humanos))*)',
+        desc_lower
+    ):
+        c = m.group(0).strip().title()
+        if len(c) > 3 and c not in cargos:
+            cargos.append(c)
 
-    # ── 4. Gerar termos de busca (100% focados) ──
+    cargos_base = [
+        'Diretor Geral', 'Diretor Comercial', 'Proprietario',
+        'Socio-diretor', 'CEO', 'Gerente Administrativo',
+        'Gerente Comercial', 'Gerente de Operacoes',
+    ]
+    cargos = list(dict.fromkeys(cargos + cargos_base))
+
+    # ── 4. Gerar termos ──
     PADROES = [
         '{seg} {loc} contato site:.com.br',
         '{seg} {loc} telefone email',
         '{seg} {loc} quem somos',
         'empresas de {seg} {loc}',
-        '{seg} {loc} endereço telefone',
+        '{seg} {loc} endereco telefone',
         '{seg} {loc} CNPJ contato',
         'lista {seg} {loc}',
-        'diretório {seg} {loc}',
+        'diretorio {seg} {loc}',
     ]
 
     termos = set()
@@ -2541,6 +2576,9 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
     lista = list(termos)
     random.shuffle(lista)
     return {'termos': lista, 'cargos': cargos}
+
+
+
 
 
 
