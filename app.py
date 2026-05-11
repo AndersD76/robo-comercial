@@ -2795,28 +2795,36 @@ O email deve parecer que foi feito pelo mesmo designer do site.
             max_tokens=2000,
             messages=[{'role': 'user', 'content': f"""Gere um template de email HTML para mala direta B2B.
 
-EMPRESA REMETENTE: {empresa}
-O QUE VENDE: {descricao}
+EMPRESA REMETENTE (quem envia): {empresa}
+SERVIÇO QUE VENDE: {descricao}
 {contexto}
 
-ESTE É UM TEMPLATE — será enviado para centenas de leads diferentes.
-O sistema faz find-and-replace antes de enviar. As variáveis abaixo serão substituídas pelo nome/dados reais de cada lead.
+REGRA PRINCIPAL — LEIA COM ATENÇÃO:
+Este HTML é um TEMPLATE reutilizável. Ele será enviado para CENTENAS de empresas
+diferentes. O sistema substitui variáveis antes de enviar. Você DEVE usar as
+variáveis abaixo LITERALMENTE no HTML. NÃO invente nomes, cidades ou segmentos.
 
-VARIÁVEIS DE TEMPLATE (escreva LITERALMENTE no HTML):
-- LEAD_NOME → será substituído pelo nome da empresa destinatária
-- LEAD_SEGMENTO → será substituído pelo ramo do destinatário
-- LEAD_CIDADE → será substituído pela cidade do destinatário
-- LINK_AGENDA → será substituído pela URL de agendamento
+VARIÁVEIS OBRIGATÓRIAS (copie e cole EXATAMENTE como estão):
+  LEAD_NOME      = nome da empresa destinatária
+  LEAD_SEGMENTO  = ramo/setor do destinatário
+  LEAD_CIDADE    = cidade do destinatário
+  LINK_AGENDA    = URL de agendamento
 
-EXEMPLO CORRETO de saudação: "Olá LEAD_NOME,"
-EXEMPLO ERRADO: "Olá Empresa Exemplo," ou "Olá João,"
+EXEMPLO CORRETO:  Olá LEAD_NOME,
+EXEMPLO ERRADO:   Olá Empresa Exemplo,   ← PROIBIDO!
+EXEMPLO ERRADO:   Olá João,              ← PROIBIDO!
+EXEMPLO ERRADO:   empresas de São Paulo  ← PROIBIDO! Use "empresas de LEAD_CIDADE"
+EXEMPLO ERRADO:   setor de Agronegócio   ← PROIBIDO! Use "setor de LEAD_SEGMENTO"
 
-TEXTO DO EMAIL (máximo 3 parágrafos curtos):
-- Parágrafo 1: "Olá LEAD_NOME," + uma pergunta provocativa sobre uma dor real
-- Parágrafo 2: Como {empresa} resolve isso (1-2 frases concretas, sem clichê)
-- Parágrafo 3: CTA — botão "Agendar 15 min" com href="LINK_AGENDA"
+NÃO ESCREVA nenhum nome de empresa fictício, nenhuma cidade real, nenhum segmento
+real no corpo do email. SEMPRE use LEAD_NOME, LEAD_SEGMENTO, LEAD_CIDADE.
 
-PROIBIDO: bullet points, emojis, badges, cards, ícones, imagens, footer de descadastrar, mais de 3 parágrafos.
+ESTRUTURA DO EMAIL (máximo 3 parágrafos curtos):
+1. "Olá LEAD_NOME," + pergunta provocativa sobre uma dor real do LEAD_SEGMENTO
+2. Como {empresa} resolve isso (1-2 frases concretas, sem clichê)
+3. CTA — botão "Agendar 15 min" com href="LINK_AGENDA"
+
+PROIBIDO: bullet points, emojis, badges, cards, ícones, imagens, footer, mais de 3 parágrafos.
 
 HTML:
 - max-width 600px, fundo #fff, CSS todo inline
@@ -2825,7 +2833,7 @@ HTML:
 - Botão: background #2563eb, color #fff, border-radius 8px, padding 13px 28px, font-weight 700
 - Footer: 1 linha cinza 11px
 
-Responda SOMENTE o HTML."""}]
+Responda SOMENTE o HTML, sem explicações."""}]
         )
         html = msg.content[0].text.strip()
         if html.startswith('```'):
@@ -2833,10 +2841,63 @@ Responda SOMENTE o HTML."""}]
         if html.endswith('```'):
             html = html.rsplit('```', 1)[0]
         html = html.strip()
+
+        # -- Post-processing: garantir variáveis de template --
+        import re
+
+        # 1) Substituir placeholders literais
         html = (html.replace('LEAD_NOME', '{{nome}}')
                     .replace('LEAD_SEGMENTO', '{{segmento}}')
                     .replace('LEAD_CIDADE', '{{cidade}}')
                     .replace('LINK_AGENDA', '{{link_agenda}}'))
+
+        # 2) Se a IA ignorou as instruções e NÃO colocou {{nome}},
+        #    forçar substituição de padrões comuns de saudação
+        if '{{nome}}' not in html:
+            html = re.sub(
+                r'(Olá|Oi|Prezad[oa]s?|Caro[sa]?)\s+[^,<]{2,40},',
+                r'\1 {{nome}},',
+                html, count=1)
+
+        # 3) Se mencionou alguma cidade/segmento literal da descrição,
+        #    substituir por {{cidade}} / {{segmento}}
+        palavras_desc = set()
+        for p in re.split(r'[,;./\s]+', descricao):
+            p = p.strip()
+            if len(p) >= 4 and p[0].isupper():
+                palavras_desc.add(p)
+
+        for palavra in palavras_desc:
+            pat = re.compile(re.escape(palavra), re.IGNORECASE)
+            ocorrencias = pat.findall(html)
+            for oc in ocorrencias:
+                ctx_antes = html[:html.find(oc)]
+                if empresa.lower() not in oc.lower():
+                    if any(k in ctx_antes[-60:].lower() for k in
+                           ['cidade', 'região', 'empresas de', 'negócios em',
+                            'mercado de', 'em ']):
+                        html = html.replace(oc, '{{cidade}}', 1)
+                    else:
+                        html = html.replace(oc, '{{segmento}}', 1)
+
+        # 4) Fallback: detectar nomes genéricos que a IA adora inventar
+        for falso in ['Empresa Exemplo', 'Empresa X', 'Empresa Y',
+                      'Nome da Empresa', 'Sua Empresa', '[Nome]',
+                      '[Empresa]', 'EMPRESA', 'Fulano']:
+            if falso in html and empresa not in falso:
+                html = html.replace(falso, '{{nome}}')
+
+        # 5) Garantir que o botão de CTA aponta para {{link_agenda}}
+        if '{{link_agenda}}' not in html:
+            html = re.sub(
+                r'href="[^"]*agendar[^"]*"',
+                'href="{{link_agenda}}"',
+                html, flags=re.IGNORECASE)
+            if '{{link_agenda}}' not in html:
+                html = re.sub(
+                    r'href="#"',
+                    'href="{{link_agenda}}"',
+                    html, count=1)
         assunto_msg = client.messages.create(
             model='claude-haiku-4-5-20251001',
             max_tokens=60,
