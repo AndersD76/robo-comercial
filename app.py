@@ -2335,8 +2335,23 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
                      'construtora', 'indústria', 'comércio varejista'],
         'sistema': ['escritório contabilidade', 'empresa logística', 'indústria',
                     'distribuidora', 'comércio varejista', 'rede lojas'],
-        'monitor': ['empresa escritório', 'call center', 'empresa financeira',
-                    'escritório contabilidade', 'empresa tecnologia', 'BPO'],
+        'monitor': ['escritório contabilidade', 'escritório advocacia', 'agência publicidade',
+                    'agência marketing digital', 'consultoria empresarial', 'empresa logística',
+                    'empresa recursos humanos', 'empresa call center', 'empresa tecnologia',
+                    'corretora seguros', 'empresa financeira', 'BPO', 'startup',
+                    'empresa comércio exterior', 'provedor internet', 'software house'],
+        'produtividade': ['escritório contabilidade', 'escritório advocacia', 'agência publicidade',
+                          'consultoria empresarial', 'empresa logística', 'empresa recursos humanos',
+                          'empresa call center', 'empresa tecnologia', 'corretora seguros',
+                          'empresa financeira', 'BPO', 'startup'],
+        'funcionário': ['escritório contabilidade', 'escritório advocacia', 'empresa logística',
+                        'empresa recursos humanos', 'empresa call center', 'empresa tecnologia',
+                        'corretora seguros', 'distribuidora', 'indústria metalúrgica'],
+        'computador': ['escritório contabilidade', 'escritório advocacia', 'agência publicidade',
+                       'consultoria empresarial', 'empresa call center', 'empresa tecnologia',
+                       'empresa financeira', 'BPO', 'startup'],
+        'gestor': ['escritório contabilidade', 'empresa logística', 'empresa recursos humanos',
+                   'empresa call center', 'empresa tecnologia', 'construtora', 'distribuidora'],
         'tecnologia': ['empresa tecnologia', 'startup', 'software house',
                        'provedor internet', 'agência digital'],
         'construção': ['construtora', 'incorporadora', 'empresa engenharia',
@@ -2357,8 +2372,9 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
                       'fábrica', 'indústria plásticos', 'indústria alimentícia'],
         'educaç': ['escola particular', 'faculdade', 'cursinho', 'centro treinamento',
                    'escola idiomas', 'escola técnica'],
-        'segurança': ['condomínio empresarial', 'shopping center', 'empresa segurança',
-                      'portaria remota', 'empresa facilities'],
+        'seguran': ['condomínio empresarial', 'shopping center', 'empresa segurança',
+                    'portaria remota', 'empresa facilities', 'escritório advocacia',
+                    'empresa financeira', 'corretora seguros'],
         'energia': ['empresa energia solar', 'distribuidora energia', 'empresa elétrica',
                     'construtora', 'indústria'],
         'telecom': ['provedor internet', 'empresa telecom', 'revenda telefonia'],
@@ -2374,10 +2390,22 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
 
     seen = set()
     segmentos = []
-    for s in segmentos_priorizados + SEGMENTOS_BASE:
+    for s in segmentos_priorizados:
         if s not in seen:
             seen.add(s)
             segmentos.append(s)
+
+    if segmentos_priorizados:
+        extras = [s for s in SEGMENTOS_BASE if s not in seen]
+        random.shuffle(extras)
+        for s in extras[:10]:
+            seen.add(s)
+            segmentos.append(s)
+    else:
+        for s in SEGMENTOS_BASE:
+            if s not in seen:
+                seen.add(s)
+                segmentos.append(s)
 
     CAPITAIS = [
         'São Paulo', 'Rio de Janeiro', 'Belo Horizonte', 'Curitiba',
@@ -2686,22 +2714,22 @@ def api_generate_msg(bot):
     if not descricao:
         return jsonify({'error': 'Preencha a descrição da empresa'}), 400
 
-    pitch = _extrair_pitch(descricao)
+    pitch = _extrair_pitch(descricao, empresa)
+    pitch_lower = pitch[0].lower() + pitch[1:] if pitch else ''
     tipo = data.get('tipo', 'whatsapp')
 
     if tipo == 'followup':
         mensagem = (
-            "Oi {{nome}}, tudo bem?\n\n"
-            "Te enviei uma mensagem sobre como a " + empresa + " pode ajudar "
-            "seu negócio. " + pitch + ".\n\n"
-            "Vale uma conversa rápida de 15 min?\n"
-            "{{link_agenda}}"
+            "{{nome}}, te mandei uma msg sobre a " + empresa + ".\n\n"
+            "Resumindo: ajudamos empresas a " + pitch_lower + ".\n\n"
+            "Vale 15 min? {{link_agenda}}"
         )
     else:
         mensagem = (
-            "Oi {{nome}}, tudo bem? 👋\n\n"
-            "Sou da " + empresa + ". " + pitch + ".\n\n"
-            "Posso te mostrar como funciona em 15 min?\n"
+            "Oi {{nome}}! 👋\n\n"
+            "Aqui é da " + empresa + " — ajudamos empresas a "
+            + pitch_lower + ".\n\n"
+            "Posso te mostrar em 15 min como funciona?\n"
             "{{cal_link}}"
         )
 
@@ -2718,7 +2746,8 @@ def api_generate_email(bot):
     if not descricao:
         return jsonify({'error': 'Preencha a descrição da empresa'}), 400
 
-    pitch = _extrair_pitch(descricao)
+    pitch = _extrair_pitch(descricao, empresa)
+    pitch_lower = pitch[0].lower() + pitch[1:] if pitch else ''
     cor_header, cor_btn = _extrair_cores_site(website)
     footer_extra = ''
     if website:
@@ -2738,12 +2767,13 @@ def api_generate_email(bot):
         "  <div style=\"padding:32px;font-family:'Segoe UI',Arial,sans-serif;"
         'font-size:15px;line-height:1.7;color:#333333;">\n'
         '    <p style="margin:0 0 16px;">Olá <strong>{{nome}}</strong>,</p>\n'
-        '    <p style="margin:0 0 16px;">' + pitch + '. '
-        'Trabalhamos com empresas de <strong>{{segmento}}</strong> em '
-        '<strong>{{cidade}}</strong> e região, e acredito que podemos '
-        'agregar bastante ao seu negócio.</p>\n'
-        '    <p style="margin:0 0 24px;">Gostaria de mostrar como funciona '
-        'na prática. Podemos conversar 15 minutos?</p>\n'
+        '    <p style="margin:0 0 16px;">Empresas de '
+        '<strong>{{segmento}}</strong> em <strong>{{cidade}}</strong> '
+        'costumam enfrentar desafios com isso: '
+        + pitch_lower + '.</p>\n'
+        '    <p style="margin:0 0 24px;">A <strong>' + empresa
+        + '</strong> resolve exatamente esse problema. '
+        'Posso te mostrar em 15 minutos como funciona na prática?</p>\n'
         '    <p style="text-align:center;margin:0;">\n'
         '      <a href="{{link_agenda}}" style="display:inline-block;background:'
         + cor_btn + ';color:#ffffff;font-family:\'Segoe UI\',Arial,sans-serif;'
@@ -2760,18 +2790,53 @@ def api_generate_email(bot):
         '</body></html>'
     )
 
-    assunto = '{{nome}}, podemos conversar?'
+    assunto = '{{nome}}, posso te mostrar algo?'
     return jsonify({'ok': True, 'html': html, 'assunto': assunto})
 
 
-def _extrair_pitch(descricao, max_chars=200):
-    """Extrai a frase principal de valor a partir da descrição."""
+def _extrair_pitch(descricao, empresa_nome='', max_chars=150):
+    """Extrai a frase de BENEFÍCIO da descrição, não a frase descritiva."""
+    BENEFIT_WORDS = [
+        'produtividade', 'economia', 'reduz', 'aumenta', 'controle',
+        'proteg', 'seguran', 'resultado', 'otimiz', 'eficiên',
+        'visibilidade', 'automatiz', 'agilidade', 'evita', 'elimin',
+        'garante', 'melhora', 'simplifica', 'acelera', 'monitora',
+        'objetivo', 'permite', 'ajuda', 'facilita',
+    ]
     frases = re.split(r'(?<=[.!?])\s+', descricao.strip())
     if not frases:
         return descricao[:max_chars]
+
+    for frase in reversed(frases):
+        fl = frase.lower()
+        if any(bw in fl for bw in BENEFIT_WORDS):
+            pitch = frase.rstrip('.')
+            pitch = re.sub(r'^O objetivo é\s+', '', pitch, flags=re.IGNORECASE)
+            pitch = re.sub(r'^A meta é\s+', '', pitch, flags=re.IGNORECASE)
+            pitch = re.sub(r'^O foco é\s+', '', pitch, flags=re.IGNORECASE)
+            if empresa_nome:
+                pitch = re.sub(
+                    rf'^O\s+{re.escape(empresa_nome)}\s+(é|permite|ajuda|oferece)\s+',
+                    '', pitch, flags=re.IGNORECASE)
+                pitch = re.sub(
+                    rf'^A\s+{re.escape(empresa_nome)}\s+(é|permite|ajuda|oferece)\s+',
+                    '', pitch, flags=re.IGNORECASE)
+            if pitch:
+                pitch = pitch[0].upper() + pitch[1:]
+            if len(pitch) > max_chars:
+                pitch = pitch[:max_chars].rsplit(' ', 1)[0]
+            return pitch
+
     pitch = frases[0].rstrip('.')
-    if len(frases) > 1 and len(pitch) < 80:
-        pitch += '. ' + frases[1].rstrip('.')
+    if empresa_nome:
+        pitch = re.sub(
+            rf'^O\s+{re.escape(empresa_nome)}\s+é\s+(um[a]?\s+)?',
+            '', pitch, flags=re.IGNORECASE)
+        pitch = re.sub(
+            rf'^A\s+{re.escape(empresa_nome)}\s+é\s+(um[a]?\s+)?',
+            '', pitch, flags=re.IGNORECASE)
+    if pitch:
+        pitch = pitch[0].upper() + pitch[1:]
     if len(pitch) > max_chars:
         pitch = pitch[:max_chars].rsplit(' ', 1)[0]
     return pitch
