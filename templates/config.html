@@ -372,7 +372,8 @@ async function generateMsg() {
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         empresa_nome: document.getElementById('empresa_nome').value,
-        descricao: desc
+        descricao: desc,
+        website: document.getElementById('website').value
       })
     })
     const d = await r.json()

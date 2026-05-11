@@ -2721,6 +2721,7 @@ def api_generate_msg(bot):
     data = request.get_json(silent=True) or {}
     empresa = data.get('empresa_nome', '')
     descricao = data.get('descricao', '')
+    website = data.get('website', '').strip()
     if not descricao:
         return jsonify({'error': 'Preencha a descrição da empresa'}), 400
 
@@ -2728,11 +2729,16 @@ def api_generate_msg(bot):
     pitch_lower = pitch[0].lower() + pitch[1:] if pitch else ''
     tipo = data.get('tipo', 'whatsapp')
 
+    site_link = ''
+    if website:
+        url = website if website.startswith('http') else f'https://{website}'
+        site_link = '\n\n🔗 ' + url
+
     if tipo == 'followup':
         mensagem = (
             "{{nome}}, te mandei uma msg sobre a " + empresa + ".\n\n"
             "Resumindo: ajudamos empresas a " + pitch_lower + ".\n\n"
-            "Vale 15 min? {{link_agenda}}"
+            "Vale 15 min? {{link_agenda}}" + site_link
         )
     else:
         mensagem = (
@@ -2740,7 +2746,7 @@ def api_generate_msg(bot):
             "Aqui é da " + empresa
             + " — ajudamos empresas a " + pitch_lower + ".\n\n"
             "Posso te mostrar em 15 min como funciona?\n"
-            "{{cal_link}}"
+            "{{cal_link}}" + site_link
         )
 
     return jsonify({'ok': True, 'mensagem': mensagem})
@@ -2766,9 +2772,13 @@ def api_generate_email(bot):
         cor_header = site_h
         cor_btn = site_b if cor_btn == '#2563eb' else cor_btn
     footer_extra = ''
+    site_url = ''
     if website:
+        site_url = website if website.startswith('http') else f'https://{website}'
         site_limpo = re.sub(r'^https?://(www\.)?', '', website).rstrip('/')
-        footer_extra = ' &mdash; ' + site_limpo
+        footer_extra = (' &mdash; <a href="' + site_url
+                        + '" style="color:#6b7280;text-decoration:underline;">'
+                        + site_limpo + '</a>')
 
     html = (
         '<!DOCTYPE html>\n'
@@ -2793,7 +2803,12 @@ def api_generate_email(bot):
         '      Olá <strong>{{nome}}</strong>,\n'
         '    </p>\n'
         '    <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#374151;">\n'
-        '      Sou da <strong>' + empresa + '</strong>. Ajudamos empresas de\n'
+        '      Sou da <strong>' + empresa + '</strong>'
+        + ((' (<a href="' + site_url
+            + '" style="color:' + cor_btn + ';text-decoration:none;">'
+            + re.sub(r'^https?://(www\.)?', '', website).rstrip('/')
+            + '</a>)') if site_url else '')
+        + '. Ajudamos empresas de\n'
         '      <strong>{{segmento}}</strong> em <strong>{{cidade}}</strong> a\n'
         '      ' + pitch_lower + '.\n'
         '    </p>\n'
