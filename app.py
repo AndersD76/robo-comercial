@@ -2312,57 +2312,69 @@ def _gerar_termos_ia(empresa_nome: str, descricao: str, website: str) -> dict:
         import anthropic
         client = anthropic.Anthropic(api_key=api_key)
         msg = client.messages.create(
-            model='claude-haiku-4-5-20251001',
-            max_tokens=2000,
-            messages=[{'role': 'user', 'content': f"""Você é especialista em prospecção B2B no Brasil.
+            model='claude-sonnet-4-6',
+            max_tokens=6000,
+            messages=[{'role': 'user', 'content': f"""Você é o melhor especialista em prospecção B2B outbound do Brasil. Sua missão é gerar termos de busca Google que encontrem SITES INSTITUCIONAIS de empresas que seriam CLIENTES (compradores).
 
-Empresa vendedora: {empresa_nome}
-Site: {website}
-O que ela vende/faz: {descricao}
+EMPRESA VENDEDORA: {empresa_nome}
+SITE: {website}
+O QUE ELA VENDE: {descricao}
 
-OBJETIVO: gerar MUITOS termos de busca Google para encontrar SITES DE EMPRESAS que seriam CLIENTES (compradores) deste produto/serviço.
+━━━ RACIOCÍNIO OBRIGATÓRIO (pense antes de gerar) ━━━
 
-REGRAS CRÍTICAS:
-1. NUNCA gere termos que descrevam o produto/serviço vendido (isso acha concorrentes e blogs!)
-2. Gere termos que achem o SITE INSTITUCIONAL das empresas que COMPRARIAM isso
-3. Pense: quem é o COMPRADOR? Qual o segmento, porte, região?
+Antes de gerar os termos, responda mentalmente:
+1. Quem COMPRA esse produto/serviço? (segmentos, portes, tipos de empresa)
+2. Quais departamentos dentro da empresa cliente precisariam disso?
+3. Em quais regiões do Brasil esses clientes estão concentrados?
+4. Qual o porte ideal? (PME, médio, grande?)
 
-FORMATO DOS TERMOS (varie entre esses padrões):
-- "[tipo de empresa] [cidade] contato site:.com.br"
-- "[segmento] [estado] telefone email"
-- "[tipo empresa] [bairro/região] endereço contato"
-- "lista [segmento] [cidade]"
-- "[segmento] [cidade] quem somos"
-- "[cargo decisor] [segmento] [cidade]"
+━━━ REGRAS ABSOLUTAS ━━━
 
-EXEMPLOS:
-Se vende software de monitoramento de PCs:
-- ERRADO: "monitoramento de funcionários" (acha concorrentes!)
-- CERTO: "escritório contabilidade centro SP contato site:.com.br"
-- CERTO: "empresa call center Campinas telefone email"
-- CERTO: "agência publicidade Pinheiros SP quem somos"
-- CERTO: "lista escritórios advocacia Belo Horizonte"
-- CERTO: "empresa logística Curitiba contato site:.com.br"
-- CERTO: "construtora obras São Paulo telefone"
+PROIBIDO gerar termos com palavras do produto/serviço vendido!
+- Se vende "monitoramento de PCs" → NUNCA use "monitoramento", "rastreamento", "controle de acesso"
+- Se vende "tombador de grãos" → NUNCA use "tombador", "equipamento agrícola"
+- Esses termos acham CONCORRENTES e BLOGS, não clientes!
 
-Se vende tombadores de grãos:
-- ERRADO: "tombador de grãos" (acha concorrentes!)
-- CERTO: "cerealista MT contato site:.com.br"
-- CERTO: "cooperativa agrícola Londrina telefone"
+OBRIGATÓRIO: termos que achem o SITE DA EMPRESA COMPRADORA
+- O cliente ideal tem site próprio com página de contato
+- Busque pelo SEGMENTO DO CLIENTE, não pelo produto vendido
 
-IMPORTANTE:
-- Gere 50 termos (não 20!) — quanto mais, melhor
-- Varie MUITO: diferentes segmentos de cliente, diferentes cidades (capitais + interiores), diferentes estados
-- Cubra pelo menos 10 estados brasileiros diferentes
-- Cubra pelo menos 8 segmentos diferentes de empresas clientes
-- Use cidades do interior também (Campinas, Londrina, Joinville, Uberlândia, etc.)
+━━━ PADRÕES DE TERMOS (use TODOS, alternando) ━━━
 
-Retorne JSON:
-1. "termos": 50 termos variados
-2. "cargos": 10 cargos de decisores de compra DENTRO dessas empresas clientes
+1. "[segmento cliente] [cidade] contato site:.com.br"
+2. "[segmento] [estado] telefone email"
+3. "[tipo empresa] [cidade] quem somos"
+4. "lista [segmento] [cidade/estado]"
+5. "[segmento] [região/bairro comercial] contato"
+6. "[segmento] [cidade] endereço telefone"
+7. "empresas de [segmento] [estado] site:.com.br"
+8. "[segmento] [cidade] CNPJ contato"
+9. "diretório [segmento] [estado]"
+10. "[cargo decisor] [segmento] [cidade]"
 
-SOMENTE JSON válido:
-{{"termos": ["cerealista MT contato site:.com.br", "cooperativa agricola PR telefone"], "cargos": ["gerente de operações", "diretor de compras"]}}"""}]
+━━━ COBERTURA GEOGRÁFICA MÍNIMA ━━━
+
+CAPITAIS (use todas): São Paulo, Rio de Janeiro, Belo Horizonte, Curitiba, Porto Alegre, Brasília, Salvador, Recife, Fortaleza, Goiânia, Campinas, Florianópolis, Manaus, Belém, Vitória
+
+INTERIOR (use pelo menos 15): Campinas, Ribeirão Preto, São José dos Campos, Sorocaba, Santos, Londrina, Maringá, Joinville, Blumenau, Caxias do Sul, Uberlândia, Juiz de Fora, São José do Rio Preto, Piracicaba, Jundiaí, Bauru, Cascavel, Chapecó, Novo Hamburgo, Passo Fundo
+
+ESTADOS por sigla: SP, RJ, MG, PR, SC, RS, BA, GO, MT, MS, PE, CE, PA, ES, DF, AM, MA, RN, PI, TO
+
+━━━ QUANTIDADE E DIVERSIDADE ━━━
+
+Gere EXATAMENTE 120 termos:
+- 15+ segmentos diferentes de empresa cliente
+- 20+ cidades diferentes (capitais + interior)
+- 15+ estados diferentes
+- Todos os 10 padrões de termo acima representados
+- Zero repetição de combinação segmento+cidade
+
+Gere também 15 cargos de decisores de compra dentro das empresas CLIENTES.
+
+━━━ FORMATO DE RESPOSTA ━━━
+
+SOMENTE JSON válido (sem explicações, sem markdown):
+{{"termos": ["termo1", "termo2", ...], "cargos": ["cargo1", "cargo2", ...]}}"""}]
         )
         text = msg.content[0].text.strip()
         match = re.search(r'\{.*\}', text, re.DOTALL)
@@ -2748,7 +2760,7 @@ def api_generate_email(bot):
         if site_html:
             analise = client.messages.create(
                 model='claude-haiku-4-5-20251001',
-                max_tokens=500,
+                max_tokens=400,
                 messages=[{'role': 'user', 'content': f"""Analise o HTML deste site e extraia a identidade visual da empresa.
 
 HTML DO SITE:
@@ -2777,35 +2789,51 @@ O email deve parecer que foi feito pelo mesmo designer do site.
 """
 
         msg = client.messages.create(
-            model='claude-haiku-4-5-20251001',
-            max_tokens=3000,
-            messages=[{'role': 'user', 'content': f"""Você é designer de email marketing B2B da empresa "{empresa}".
+            model='claude-sonnet-4-6',
+            max_tokens=4000,
+            messages=[{'role': 'user', 'content': f"""Você é um copywriter sênior de cold email B2B. Crie um email HTML de prospecção para a empresa "{empresa}".
 
-LEIA COM ATENÇÃO o que a empresa vende — use essas informações reais no email:
+━━━ PRODUTO/SERVIÇO (leia com atenção) ━━━
 {descricao}
 {contexto}
-Crie um email HTML de prospecção CORPORATIVO com DESIGN PROFISSIONAL, baseado no produto/serviço descrito acima.
 
-DESIGN:
-- Layout limpo, moderno, container centralizado (max-width: 600px)
-- Fundo branco, header discreto com "{empresa}" estilizado
-- Padding generoso (30-40px lateral), espaçamento 16-24px entre blocos
-- Botão CTA destacado (border-radius: 6px, padding: 12px 28px, cor profissional)
-- Footer sutil cinza pequeno
-- Fontes: 'Segoe UI', Arial, sans-serif
-- Cores profissionais (azul/cinza escuro ou da identidade visual se disponível)
+━━━ ESTILO DE ESCRITA — COLD EMAIL QUE CONVERTE ━━━
 
-CONTEÚDO (extraia da descrição do produto acima):
-- Tom CORPORATIVO e PROFISSIONAL
-- MÁXIMO 5-6 linhas de texto
-- Extraia o PRINCIPAL diferencial do produto descrito acima e transforme em benefício concreto para o cliente
-- NÃO copie a descrição literalmente — sintetize o valor em 2-3 frases de impacto
-- Use {{{{nome}}}} para nome do prospecto, {{{{cal_link}}}} no botão CTA ("Agendar Conversa")
-- PROIBIDO: "sabemos que", "é essencial", "solução ideal", "desafios constantes"
+NÃO FAÇA:
+- Linguagem corporativa vazia ("solução inovadora", "é essencial", "desafios constantes", "sabemos que")
+- Parágrafos longos — ninguém lê email longo de desconhecido
+- Falar de si mesmo antes de falar do problema do cliente
+- Bullet points genéricos que qualquer concorrente poderia dizer
 
-ESTRUTURA: Header → Saudação {{{{nome}}}} → 2-3 frases do benefício real → Botão CTA → Footer
+FAÇA:
+- Comece com uma pergunta ou provocação sobre DOR REAL do prospect
+- Uma frase curta mostrando que entende o dia-a-dia dele
+- UM benefício concreto com número/resultado se possível (ex: "reduz 40% do tempo de X")
+- CTA direto e simples — "15 minutos" é menos assustador que "uma reunião"
+- Tom de conversa entre profissionais, não de vendedor
 
-Responda SOMENTE com o HTML completo, sem explicações ou markdown."""}]
+ESTRUTURA DO TEXTO (máximo 6 linhas úteis):
+1. Gancho — pergunta ou provocação (1 linha)
+2. Empatia — mostra que entende o problema (1 linha)
+3. Benefício concreto — o que muda com seu produto (1-2 linhas)
+4. Prova rápida — um dado, cliente ou resultado (1 linha, opcional)
+5. CTA — botão "Agendar 15 min" (link: {{{{link_agenda}}}})
+
+VARIÁVEIS DISPONÍVEIS: {{{{nome}}}}, {{{{segmento}}}}, {{{{cidade}}}}, {{{{link_agenda}}}}
+
+━━━ DESIGN HTML ━━━
+
+- Container: max-width 600px, centralizado, fundo #ffffff
+- Header: barra de cor da marca (ou azul escuro #1a2332) com nome "{empresa}" em branco, sem logo, clean
+- Body: padding 32px 36px, font-family 'Segoe UI', Arial, sans-serif, font-size 15px, line-height 1.7, color #333
+- Parágrafos curtos com margin-bottom 16px
+- Botão CTA: background cor da marca (ou #2563eb), color #fff, border-radius 8px, padding 14px 32px, font-weight 700, display block, text-align center, text-decoration none, margin 28px auto, max-width 260px
+- Footer: padding 20px 36px, font-size 12px, color #999, border-top 1px solid #eee
+- Mobile-friendly: use width 100% no container externo
+- NÃO use imagens externas — só CSS inline
+- Todo CSS INLINE (style="") — emails não suportam <style> tag em muitos clients
+
+Responda SOMENTE com o HTML completo (<!DOCTYPE html> até </html>). Sem explicações, sem markdown, sem code fences."""}]
         )
         html = msg.content[0].text.strip()
         # Remove possíveis markdown code fences
@@ -2813,8 +2841,22 @@ Responda SOMENTE com o HTML completo, sem explicações ou markdown."""}]
             html = html.split('\n', 1)[1]
         if html.endswith('```'):
             html = html.rsplit('```', 1)[0]
+        assunto_msg = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=60,
+            messages=[{'role': 'user', 'content': f"""Crie 1 assunto de cold email B2B para a empresa "{empresa}" que vende: {descricao[:200]}
+
+Regras:
+- Máximo 50 caracteres
+- Sem clichês ("proposta", "oportunidade", "parceria")
+- Pareça email pessoal, não marketing
+- Use {{{{nome}}}} se fizer sentido
+- Gere curiosidade ou toque numa dor
+- Responda SOMENTE o assunto, sem aspas"""}]
+        )
+        assunto = assunto_msg.content[0].text.strip().strip('"').strip("'")
         return jsonify({'ok': True, 'html': html.strip(),
-                        'assunto': f'{empresa} | Proposta para {{{{nome}}}}'})
+                        'assunto': assunto})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
