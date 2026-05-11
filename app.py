@@ -2714,21 +2714,19 @@ def api_generate_msg(bot):
     if not descricao:
         return jsonify({'error': 'Preencha a descrição da empresa'}), 400
 
-    pitch = _extrair_pitch(descricao, empresa)
-    pitch_lower = pitch[0].lower() + pitch[1:] if pitch else ''
     tipo = data.get('tipo', 'whatsapp')
 
     if tipo == 'followup':
         mensagem = (
             "{{nome}}, te mandei uma msg sobre a " + empresa + ".\n\n"
-            "Resumindo: ajudamos empresas a " + pitch_lower + ".\n\n"
+            "[EDITE: resuma em 1 frase o benefício principal]\n\n"
             "Vale 15 min? {{link_agenda}}"
         )
     else:
         mensagem = (
             "Oi {{nome}}! 👋\n\n"
-            "Aqui é da " + empresa + " — ajudamos empresas a "
-            + pitch_lower + ".\n\n"
+            "Aqui é da " + empresa
+            + ". [EDITE: 1 frase curta sobre o que vocês fazem pelo cliente]\n\n"
             "Posso te mostrar em 15 min como funciona?\n"
             "{{cal_link}}"
         )
@@ -2746,8 +2744,6 @@ def api_generate_email(bot):
     if not descricao:
         return jsonify({'error': 'Preencha a descrição da empresa'}), 400
 
-    pitch = _extrair_pitch(descricao, empresa)
-    pitch_lower = pitch[0].lower() + pitch[1:] if pitch else ''
     cor_header, cor_btn = _extrair_cores_site(website)
     footer_extra = ''
     if website:
@@ -2760,32 +2756,52 @@ def api_generate_email(bot):
         '<body style="margin:0;padding:0;background:#f4f4f7;">\n'
         '<div style="max-width:600px;margin:20px auto;background:#ffffff;'
         'border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">\n'
+        '\n'
+        '  <!-- HEADER -->\n'
         '  <div style="background:' + cor_header + ';padding:24px 32px;">\n'
         '    <span style="color:#ffffff;font-size:20px;font-weight:700;'
         "font-family:'Segoe UI',Arial,sans-serif;\">" + empresa + '</span>\n'
         '  </div>\n'
+        '\n'
+        '  <!-- CORPO DO EMAIL - edite o texto abaixo -->\n'
         "  <div style=\"padding:32px;font-family:'Segoe UI',Arial,sans-serif;"
         'font-size:15px;line-height:1.7;color:#333333;">\n'
-        '    <p style="margin:0 0 16px;">Olá <strong>{{nome}}</strong>,</p>\n'
-        '    <p style="margin:0 0 16px;">Empresas de '
-        '<strong>{{segmento}}</strong> em <strong>{{cidade}}</strong> '
-        'costumam enfrentar desafios com isso: '
-        + pitch_lower + '.</p>\n'
-        '    <p style="margin:0 0 24px;">A <strong>' + empresa
-        + '</strong> resolve exatamente esse problema. '
-        'Posso te mostrar em 15 minutos como funciona na prática?</p>\n'
+        '\n'
+        '    <p style="margin:0 0 18px;">\n'
+        '      Olá <strong>{{nome}}</strong>,\n'
+        '    </p>\n'
+        '\n'
+        '    <p style="margin:0 0 18px;">\n'
+        '      [ESCREVA AQUI sua pergunta ou gancho inicial. Exemplo: '
+        '"Vocês têm visibilidade do que acontece nos computadores da equipe?"]\n'
+        '    </p>\n'
+        '\n'
+        '    <p style="margin:0 0 18px;">\n'
+        '      [ESCREVA AQUI 1-2 frases sobre como a ' + empresa
+        + ' resolve o problema. Seja direto e concreto.]\n'
+        '    </p>\n'
+        '\n'
+        '    <p style="margin:0 0 24px;">\n'
+        '      Posso te mostrar em 15 minutos como funciona?\n'
+        '    </p>\n'
+        '\n'
+        '    <!-- BOTÃO DE AGENDAMENTO -->\n'
         '    <p style="text-align:center;margin:0;">\n'
         '      <a href="{{link_agenda}}" style="display:inline-block;background:'
         + cor_btn + ';color:#ffffff;font-family:\'Segoe UI\',Arial,sans-serif;'
         'font-size:15px;font-weight:700;text-decoration:none;padding:14px 32px;'
         'border-radius:8px;">Agendar 15 min</a>\n'
         '    </p>\n'
+        '\n'
         '  </div>\n'
+        '\n'
+        '  <!-- FOOTER -->\n'
         '  <div style="padding:16px 32px;text-align:center;'
         "font-family:'Segoe UI',Arial,sans-serif;font-size:11px;"
         'color:#999999;border-top:1px solid #eee;">\n'
         '    ' + empresa + footer_extra + '\n'
         '  </div>\n'
+        '\n'
         '</div>\n'
         '</body></html>'
     )
