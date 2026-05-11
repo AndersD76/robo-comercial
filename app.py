@@ -16,7 +16,7 @@ import psycopg2
 import psycopg2.extras
 from functools import wraps
 from flask import (Flask, jsonify, redirect, render_template,
-                   request, session, url_for)
+                   request, send_file, session, url_for)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'mv-saas-2025-change-in-prod')
@@ -1025,7 +1025,20 @@ def api_bot_status(bot):
     schema = _get_schema() or bot
     return jsonify({
         'busca': _proc_running(schema, 'busca'),
+        'wa': _proc_running(schema, 'wa'),
+        'linkedin': _proc_running(schema, 'linkedin'),
     })
+
+
+@app.route('/api/<bot>/qr')
+@login_required
+def api_bot_qr(bot):
+    base = os.path.dirname(os.path.abspath(__file__))
+    qr_path = os.path.join(base, 'robo_pili', 'wa_qr.png')
+    if os.path.exists(qr_path):
+        return send_file(qr_path, mimetype='image/png',
+                         max_age=0)
+    return '', 404
 
 
 @app.route('/api/<bot>/start', methods=['POST'])

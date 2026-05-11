@@ -32,8 +32,8 @@ class Buscador:
             'youtube.com', 'wikipedia.org', 'reclameaqui.com.br', 'olx.com.br',
             'mercadolivre.com.br', 'amazon.com.br', 'catho.com.br',
             'indeed.com', 'infojobs.com.br', 'glassdoor.com.br',
-            'gupy.io', 'vagas.com.br', 'google.com', 'bing.com',
-            'gov.br', 'jusbrasil.com.br', 'duckduckgo.com',
+            'gupy.io', 'vagas.com.br', 'google.com', 'google.com.br',
+            'bing.com', 'gov.br', 'jusbrasil.com.br', 'duckduckgo.com',
             'pinterest.com', 'tiktok.com',
         }
         self.ddds_validos = {
@@ -753,6 +753,7 @@ class Buscador:
     _motor_idx = 0
     _falhas_consecutivas = 0
     _google_pw_bloqueado_ate = 0  # timestamp até quando pular Google PW
+    _motor_cooldown = {}  # {nome_motor: timestamp_ate} — cooldown por motor HTTP
 
     async def buscar_leads(self, termo=None, max_resultados=20, start=0):
         """Busca leads: Serper API primeiro, HTTP fallback, Playwright último."""
@@ -786,13 +787,20 @@ class Buscador:
                 ('Yandex', self._buscar_yandex_http),
                 ('Google', self._buscar_google_http),
             ]
-            # Rotaciona: cada ciclo começa por motor diferente
             idx = Buscador._motor_idx % len(motores)
             Buscador._motor_idx += 1
             motores = motores[idx:] + motores[:idx]
+
+            agora = time.time()
             for nome_motor, fn_busca in motores:
                 if len(resultados) >= 5:
                     break
+                # Pula motor em cooldown
+                cd_ate = Buscador._motor_cooldown.get(nome_motor, 0)
+                if agora < cd_ate:
+                    restante = int(cd_ate - agora)
+                    print(f"  {nome_motor} HTTP: skip (cooldown {restante}s)")
+                    continue
                 try:
                     novos = await fn_busca(termo, max_resultados)
                     added = 0
@@ -807,9 +815,14 @@ class Buscador:
                             f"+{added} resultados"
                         )
                     else:
+                        # Motor bloqueado — cooldown progressivo (2min, depois 5min)
+                        falhas = Buscador._motor_cooldown.get(f'{nome_motor}_n', 0) + 1
+                        Buscador._motor_cooldown[f'{nome_motor}_n'] = falhas
+                        cd = min(120 * falhas, 600)
+                        Buscador._motor_cooldown[nome_motor] = agora + cd
                         print(
                             f"  {nome_motor} HTTP: "
-                            f"0 resultados (bloqueado?)"
+                            f"0 resultados (cooldown {cd}s)"
                         )
                 except Exception as e:
                     print(f"  [ERRO] {nome_motor}: {e}")
@@ -819,7 +832,6 @@ class Buscador:
             print("  HTTP insuficiente - Playwright...")
 
             pw_fns = []
-            # Pula Google PW se CAPTCHA recente (5 min)
             if time.time() > Buscador._google_pw_bloqueado_ate:
                 pw_fns.append(
                     ('Google PW', self.buscar_google)
@@ -851,6 +863,9 @@ class Buscador:
                             added += 1
                     if added:
                         print(f"  {nome_pw}: +{added}")
+                        # Motor HTTP correspondente funcionou via PW — reseta cooldown
+                        base = nome_pw.replace(' PW', '')
+                        Buscador._motor_cooldown.pop(f'{base}_n', None)
                     else:
                         print(f"  {nome_pw}: 0 resultados")
                 except Exception as e:
@@ -861,7 +876,7 @@ class Buscador:
             Buscador._falhas_consecutivas += 1
             if Buscador._falhas_consecutivas >= 3:
                 wait = min(
-                    20 * Buscador._falhas_consecutivas, 180
+                    60 * Buscador._falhas_consecutivas, 600
                 )
                 print(
                     f"  Motores bloqueados — "
@@ -1107,7 +1122,7 @@ class Buscador:
         try:
             termo_limpo = re.sub(r'site:\S+\s*', '', termo).strip()
             url = f'https://www.guiamais.com.br/busca/{quote_plus(termo_limpo)}'
-            await self.page.goto(url, wait_until='networkidle', timeout=30000)
+            await self.page.goto(url, wait_until='domcontentloaded', timeout=20000)
             await asyncio.sleep(random.uniform(2, 4))
 
             dados = await self.page.evaluate("""() => {

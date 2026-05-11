@@ -722,21 +722,18 @@ def _resultado_para_empresa(r):
 
 
 async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
-                      palavras_concorrente: list = None) -> int:
-    """Um ciclo de busca. Retorna qtd de leads salvos."""
-    # Sem limite diário — roda direto
+                      palavras_concorrente: list = None) -> tuple:
+    """Um ciclo de busca. Retorna (qtd_leads_salvos, termo_usado)."""
 
     termo = random.choice(termos)
-    # Rastreia páginas por termo para pegar resultados novos
     if not hasattr(buscador, '_termo_paginas'):
         buscador._termo_paginas = {}
     pagina = buscador._termo_paginas.get(termo, 0)
-    # Máximo 5 páginas por termo — depois disso Google retorna lixo
     if pagina >= 5:
-        pagina = 0  # reseta e busca de novo (novos resultados podem surgir)
+        pagina = 0
         buscador._termo_paginas[termo] = 0
     buscador._termo_paginas[termo] = pagina + 1
-    start = pagina * 10  # Google usa start=0, 10, 20...
+    start = pagina * 10
 
     if start > 0:
         print(f'[{schema}] 🔍 Buscando: "{termo}" (página {pagina + 1})', flush=True)
@@ -929,7 +926,7 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
         pass
 
     print(f'[{schema}] ✓ {len(resultados)} sites → {salvos} lead(s) salvos', flush=True)
-    return salvos
+    return salvos, termo
 
 
 async def main_loop(schema: str):
@@ -990,26 +987,25 @@ async def main_loop(schema: str):
 
         print(f'\n[{schema}] ━━━ Ciclo #{ciclo} | buscas hoje: {get_contagem_diaria(schema, "buscas")} | termos ativos: {len(termos_ativos)}/{len(termos)} ━━━', flush=True)
 
+        termo_usado = None
         try:
-            salvos = await ciclo_busca(schema, buscador, termos_ativos, palavras_conc)
+            resultado = await ciclo_busca(schema, buscador, termos_ativos, palavras_conc)
+            if isinstance(resultado, tuple):
+                salvos, termo_usado = resultado
+            else:
+                salvos = resultado
         except Exception as e:
             print(f'[{schema}] Erro no ciclo: {e}', flush=True)
             log_db(schema, 'erro', str(e))
             salvos = 0
 
-        # Rastreia termo usado (pega do log — ciclo_busca usa random.choice)
-        # Se 0 leads, marca como sem novos
-        if salvos == 0:
-            # Incrementa contador de "sem novos" para todos termos ativos
-            # (não sabemos exatamente qual foi usado, mas com o tempo todos vão ser marcados)
-            for t in termos_ativos:
-                termo_sem_novos[t] = termo_sem_novos.get(t, 0) + 1
-                if termo_sem_novos[t] >= len(termos_ativos) * 2:
-                    termos_esgotados.add(t)
-                    print(f'[{schema}]   ⏭ Termo esgotado: "{t[:40]}..."', flush=True)
-        else:
-            # Reset contadores — ainda achando coisas
-            termo_sem_novos.clear()
+        if salvos == 0 and termo_usado:
+            termo_sem_novos[termo_usado] = termo_sem_novos.get(termo_usado, 0) + 1
+            if termo_sem_novos[termo_usado] >= 5:
+                termos_esgotados.add(termo_usado)
+                print(f'[{schema}]   ⏭ Termo esgotado: "{termo_usado[:50]}"', flush=True)
+        elif salvos > 0 and termo_usado:
+            termo_sem_novos.pop(termo_usado, None)
 
         # Processar sequências de email pendentes (a cada 10 ciclos)
         if ciclo % 10 == 0:
@@ -1033,8 +1029,16 @@ async def main_loop(schema: str):
             except Exception:
                 pass
 
-        # Delay anti-bloqueio
-        await asyncio.sleep(random.uniform(15, 30))
+        # Delay adaptativo — mais lento quando sem resultados novos
+        total_esgotados = len(termos_esgotados)
+        total_termos = len(termos)
+        if total_esgotados > total_termos * 0.8:
+            delay = random.uniform(120, 180)
+        elif total_esgotados > total_termos * 0.5:
+            delay = random.uniform(60, 90)
+        else:
+            delay = random.uniform(20, 40)
+        await asyncio.sleep(delay)
 
 
 if __name__ == '__main__':
