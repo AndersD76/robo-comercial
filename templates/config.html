@@ -441,10 +441,10 @@ function previewCfgHtml() {
     preview.style.display = 'none'
     return
   }
-  const rendered = html.replace(/\{\{nome\}\}/g, '⟨nome do lead⟩')
-    .replace(/\{\{email\}\}/g, '⟨email do lead⟩')
-    .replace(/\{\{segmento\}\}/g, '⟨segmento do lead⟩')
-    .replace(/\{\{cidade\}\}/g, '⟨cidade do lead⟩')
+  const rendered = html.replace(/\{\{nome\}\}/g, '<span style="background:#e0e7ff;color:#4338ca;padding:1px 6px;border-radius:4px;font-size:13px">{{nome}}</span>')
+    .replace(/\{\{email\}\}/g, '<span style="background:#e0e7ff;color:#4338ca;padding:1px 6px;border-radius:4px;font-size:13px">{{email}}</span>')
+    .replace(/\{\{segmento\}\}/g, '<span style="background:#e0e7ff;color:#4338ca;padding:1px 6px;border-radius:4px;font-size:13px">{{segmento}}</span>')
+    .replace(/\{\{cidade\}\}/g, '<span style="background:#e0e7ff;color:#4338ca;padding:1px 6px;border-radius:4px;font-size:13px">{{cidade}}</span>')
     .replace(/\{\{link_agenda\}\}/g, '#')
   // Usar iframe para isolamento de estilos
   preview.innerHTML = ''
