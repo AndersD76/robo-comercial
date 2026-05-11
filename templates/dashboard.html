@@ -649,6 +649,9 @@
           <option value="respondeu">Respondeu</option>
           <option value="qualificado">Qualificado</option>
           <option value="convertido">Convertido</option>
+          <option value="robo_wa">🤖 Robô WA</option>
+          <option value="sem_whatsapp">Sem WA</option>
+          <option value="encerrado">Encerrado</option>
         </select>
         <select id="filter-source" class="filter-select" onchange="filterLeads()">
           <option value="">Todas fontes</option>
@@ -946,6 +949,8 @@ function statusChip(s,d){
   if(s==='qualificado')return '<span class="chip c-qualif">Qualificado</span>';
   if(s==='respondeu')  return '<span class="chip c-resp">Respondeu</span>';
   if(s==='contactada') return '<span class="chip c-cont">Contactado</span>';
+  if(s==='robo_wa')    return '<span class="chip" style="background:#78716c;color:#fff;padding:2px 8px;font-size:10px;border-radius:6px">🤖 Robô</span>';
+  if(s==='sem_whatsapp')return '<span class="chip" style="background:#57534e;color:#d6d3d1;padding:2px 8px;font-size:10px;border-radius:6px">Sem WA</span>';
   return '<span class="chip c-novo">Novo</span>';
 }
 function lbCls(t=''){

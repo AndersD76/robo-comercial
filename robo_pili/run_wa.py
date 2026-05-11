@@ -627,6 +627,46 @@ async def ciclo_followup(bot: WhatsAppBot, gerador: GeradorMensagens):
 
 
 # =============================================================================
+# DETECÇÃO DE ROBÔ / CHATBOT
+# =============================================================================
+
+_PADROES_ROBO = [
+    r'(?:^|\n)\s*[1-9]\s*[-–.)]\s*\w',
+    r'(?:envie|informe|digite)\s+(?:seu\s+)?(?:nome|cpf|cnpj|email|e-mail)',
+    r'(?:escolha|selecione|digite)\s+(?:uma?\s+)?(?:op[cç][aã]o|n[uú]mero|opcao|numero)',
+    r'bem[- ]?vindo\(?a?\)?\s+(?:ao?|[àa])\s',
+    r'seja\s+(?:muito\s+)?bem\s*vindo',
+    r'agrade[cç](?:e|emos)\s+(?:seu|o)\s+contato',
+    r'para\s+(?:falar|atendimento|suporte|vendas|financeiro)',
+    r'hor[aá]rio\s+de\s+atendimento',
+    r'envie\s+uma?\s+informa[cç][aã]o',
+    r'n[aã]o\s+(?:entendi|compreendi|identifiquei)',
+    r'fora\s+do\s+hor[aá]rio',
+    r'aguarde.*atendente|atendente.*aguarde',
+    r'como\s+(?:podemos|posso)\s+(?:ajudar|te ajudar)',
+    r'atendente\s+(?:do|da|virtual)',
+    r'^ol[aá]!?\s+(?:bem[- ]?vindo|seja)',
+    r'pr[eé][- ]?vendas\s+online',
+]
+_RE_ROBO = [re.compile(p, re.IGNORECASE) for p in _PADROES_ROBO]
+
+
+def _eh_resposta_robo(msg: str) -> bool:
+    """Detecta se a mensagem parece ser de um chatbot/robô."""
+    if not msg:
+        return False
+    msg = msg.strip()
+    linhas_menu = [l for l in msg.split('\n')
+                   if re.match(r'^\s*[1-9]\s*[-–.)]\s*\w', l.strip())]
+    if len(linhas_menu) >= 3:
+        return True
+    for rx in _RE_ROBO:
+        if rx.search(msg):
+            return True
+    return False
+
+
+# =============================================================================
 # CICLO RESPOSTAS
 # =============================================================================
 
@@ -671,7 +711,18 @@ async def ciclo_respostas(bot: WhatsAppBot, gerador: GeradorMensagens):
 
         estagio = get_estagio_conversa(empresa['id'])
         msg_lead = info.get('ultima_recebida', '')
+        todas_recebidas = info.get('msgs_recebidas', [])
         nome = empresa.get('nome_fantasia', numero)
+
+        if todas_recebidas and all(
+            _eh_resposta_robo(m) for m in todas_recebidas
+        ):
+            print(
+                f"[WA/Pili {_ts()}] ⏭ {nome[:35]} — "
+                f"resposta de robô (ignorando)",
+                flush=True)
+            atualizar_status_empresa(empresa['id'], 'robo_wa')
+            continue
 
         print(
             f"[WA/Pili {_ts()}] ℹ Respondendo {nome[:35]} "
