@@ -2666,45 +2666,47 @@ def api_generate_msg(bot):
         import anthropic
         client = anthropic.Anthropic(api_key=api_key)
         if tipo == 'followup':
-            prompt = f"""Você é vendedor B2B da empresa "{empresa}".
+            prompt = f"""Escreva um follow-up curto de email B2B para "{empresa}".
 
-LEIA COM ATENÇÃO o que a empresa vende:
-{descricao}
+PRODUTO: {descricao}
 
-Agora escreva um follow-up CURTO por email (4-5 linhas). Use as informações acima para criar algo ESPECÍFICO sobre o produto/serviço real.
+VARIÁVEIS OBRIGATÓRIAS (use com chaves duplas):
+- {{{{nome}}}} → nome da empresa (OBRIGATÓRIO)
+- {{{{link_agenda}}}} → link de agendamento (OBRIGATÓRIO no CTA)
 
-REGRAS:
-- Tom corporativo e profissional
-- Extraia da descrição acima o PRINCIPAL benefício e mencione-o de forma concreta
-- Referencie um contato anterior naturalmente
-- Finalize com CTA + {{{{link_agenda}}}}
-- Use {{{{nome}}}} para o nome do prospecto
-- PROIBIDO: "é essencial", "solução ideal", "desafios constantes", repetir a descrição inteira
-- Pode usar 1 emoji
+PROIBIDO usar nomes fixos. Use {{{{nome}}}} onde for personalizar.
+
+FORMATO:
+- MÁXIMO 3-4 linhas
+- Referencie um contato anterior ("te mandei uma msg sobre...")
+- 1 frase de valor concreto do produto
+- CTA com {{{{link_agenda}}}}
+- SEM "é essencial", "solução ideal", "desafios constantes"
+- 1 emoji no máximo
 
 Responda SOMENTE com a mensagem."""
         else:
-            prompt = f"""Você é vendedor B2B da empresa "{empresa}".
+            prompt = f"""Escreva UMA mensagem de WhatsApp de prospecção B2B para "{empresa}".
 
-LEIA COM ATENÇÃO o que a empresa vende — use essas informações para criar a mensagem:
-{descricao}
+PRODUTO: {descricao}
 
-Agora escreva UMA mensagem de WhatsApp de prospecção. Use os detalhes reais do produto/serviço acima.
+VARIÁVEIS OBRIGATÓRIAS (use com chaves duplas):
+- {{{{nome}}}} → nome da empresa do lead (OBRIGATÓRIO na saudação)
+- {{{{cal_link}}}} → link de agendamento (OBRIGATÓRIO no final)
 
-REGRAS:
-- Tom CORPORATIVO e profissional
-- MÁXIMO 4 linhas — WhatsApp longo ninguém lê
-- Extraia da descrição acima o PRINCIPAL diferencial e transforme em benefício para o cliente
-- NÃO copie a descrição literalmente — sintetize em 1 frase de impacto
-- Use {{{{nome}}}} para o prospecto, {{{{cal_link}}}} para link de agenda
-- PROIBIDO: "sabemos que", "é essencial", "solução ideal", "desafios constantes"
-- PROIBIDO: assinatura (Abraço, Equipe X, etc)
-- Pode usar 1-2 emojis profissionais
+PROIBIDO usar nomes fixos de empresa/cidade. Use {{{{nome}}}} onde for personalizar.
 
-EXEMPLO DE ESTRUTURA (adapte ao produto real descrito acima):
-"Bom dia, {{{{nome}}}}! [1 frase específica sobre o benefício real do produto]. Posso mostrar como funciona em 15 min? {{{{cal_link}}}} 📅"
+FORMATO:
+- MÁXIMO 3-4 linhas curtas (WhatsApp longo = ignorado)
+- Linha 1: "Oi {{{{nome}}}}!" ou "Bom dia, {{{{nome}}}}!"
+- Linha 2: 1 frase curta sobre o benefício concreto do produto
+- Linha 3: CTA direto com {{{{cal_link}}}}
+- Tom direto, profissional, humano
+- 1 emoji no máximo
+- SEM assinatura, SEM "Abraço", SEM "Equipe X"
+- SEM "sabemos que", "solução ideal", "desafios constantes"
 
-Responda SOMENTE com a mensagem, nada mais."""
+Responda SOMENTE com a mensagem."""
         msg = client.messages.create(
             model='claude-haiku-4-5-20251001',
             max_tokens=600,
@@ -2791,49 +2793,49 @@ O email deve parecer que foi feito pelo mesmo designer do site.
         msg = client.messages.create(
             model='claude-sonnet-4-6',
             max_tokens=4000,
-            messages=[{'role': 'user', 'content': f"""Você é um copywriter sênior de cold email B2B. Crie um email HTML de prospecção para a empresa "{empresa}".
+            messages=[{'role': 'user', 'content': f"""Crie um email HTML curto de prospecção B2B para "{empresa}".
 
-━━━ PRODUTO/SERVIÇO (leia com atenção) ━━━
-{descricao}
+PRODUTO: {descricao}
 {contexto}
 
-━━━ ESTILO DE ESCRITA — COLD EMAIL QUE CONVERTE ━━━
+━━━ REGRA #1: VARIÁVEIS OBRIGATÓRIAS ━━━
 
-NÃO FAÇA:
-- Linguagem corporativa vazia ("solução inovadora", "é essencial", "desafios constantes", "sabemos que")
-- Parágrafos longos — ninguém lê email longo de desconhecido
-- Falar de si mesmo antes de falar do problema do cliente
-- Bullet points genéricos que qualquer concorrente poderia dizer
+O email será enviado em massa. Cada lead tem dados diferentes.
+Use EXATAMENTE estas variáveis (com chaves duplas) no HTML:
 
-FAÇA:
-- Comece com uma pergunta ou provocação sobre DOR REAL do prospect
-- Uma frase curta mostrando que entende o dia-a-dia dele
-- UM benefício concreto com número/resultado se possível (ex: "reduz 40% do tempo de X")
-- CTA direto e simples — "15 minutos" é menos assustador que "uma reunião"
-- Tom de conversa entre profissionais, não de vendedor
+- {{{{nome}}}} → nome da empresa do lead (OBRIGATÓRIO na saudação)
+- {{{{segmento}}}} → ramo de atuação do lead (use no texto se fizer sentido)
+- {{{{cidade}}}} → cidade do lead (pode usar ou não)
+- {{{{link_agenda}}}} → URL do botão CTA (OBRIGATÓRIO no href do botão)
 
-ESTRUTURA DO TEXTO (máximo 6 linhas úteis):
-1. Gancho — pergunta ou provocação (1 linha)
-2. Empatia — mostra que entende o problema (1 linha)
-3. Benefício concreto — o que muda com seu produto (1-2 linhas)
-4. Prova rápida — um dado, cliente ou resultado (1 linha, opcional)
-5. CTA — botão "Agendar 15 min" (link: {{{{link_agenda}}}})
+PROIBIDO escrever nomes fixos de empresa, cidade ou segmento no corpo.
+Onde faria sentido personalizar, USE A VARIÁVEL.
+Exemplo correto: "Olá {{{{nome}}}}," — ERRADO: "Olá Empresa Exemplo,"
 
-VARIÁVEIS DISPONÍVEIS: {{{{nome}}}}, {{{{segmento}}}}, {{{{cidade}}}}, {{{{link_agenda}}}}
+━━━ REGRA #2: CURTO E DIRETO ━━━
 
-━━━ DESIGN HTML ━━━
+MÁXIMO 4-5 frases no corpo total. Ninguém lê email longo de desconhecido.
+Estrutura:
+1. Saudação com {{{{nome}}}}
+2. Uma pergunta provocativa ou dor real (1 frase)
+3. O que seu produto resolve em termos concretos (1-2 frases)
+4. CTA: botão com href={{{{link_agenda}}}}
 
-- Container: max-width 600px, centralizado, fundo #ffffff
-- Header: barra de cor da marca (ou azul escuro #1a2332) com nome "{empresa}" em branco, sem logo, clean
-- Body: padding 32px 36px, font-family 'Segoe UI', Arial, sans-serif, font-size 15px, line-height 1.7, color #333
-- Parágrafos curtos com margin-bottom 16px
-- Botão CTA: background cor da marca (ou #2563eb), color #fff, border-radius 8px, padding 14px 32px, font-weight 700, display block, text-align center, text-decoration none, margin 28px auto, max-width 260px
-- Footer: padding 20px 36px, font-size 12px, color #999, border-top 1px solid #eee
-- Mobile-friendly: use width 100% no container externo
-- NÃO use imagens externas — só CSS inline
-- Todo CSS INLINE (style="") — emails não suportam <style> tag em muitos clients
+PROIBIDO: bullet points, ícones/emojis, seções extras, cards de estatísticas, badges, imagens.
+PROIBIDO: "sabemos que", "solução inovadora", "desafios constantes", "é essencial"
+PROIBIDO: link/texto de descadastrar no footer (o sistema já adiciona)
 
-Responda SOMENTE com o HTML completo (<!DOCTYPE html> até </html>). Sem explicações, sem markdown, sem code fences."""}]
+━━━ REGRA #3: DESIGN SIMPLES ━━━
+
+- Container max-width 600px centralizado, fundo #fff
+- Header: barra cor da marca (ou #1a2332) com "{empresa}" em branco, font-size 18px, padding 20px
+- Body: padding 28px 32px, font 15px/1.6 'Segoe UI',Arial,sans-serif, color #333
+- Parágrafos com margin-bottom 14px
+- UM ÚNICO botão CTA: background #2563eb (ou cor da marca), color #fff, border-radius 8px, padding 13px 28px, font-weight 700, text-align center, text-decoration none, display inline-block
+- Footer: apenas 1 linha cinza (font-size 11px, color #aaa, margin-top 24px)
+- TODO CSS inline (style=""). Sem tag <style>. Sem imagens externas.
+
+Responda SOMENTE o HTML (<!DOCTYPE html> até </html>). Nada mais."""}]
         )
         html = msg.content[0].text.strip()
         # Remove possíveis markdown code fences
