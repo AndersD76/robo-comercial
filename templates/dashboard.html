@@ -1859,16 +1859,21 @@ function loadWaStats(){
   // Check WA bot status
   fetch(`/api/${BOT}/status`).then(r=>r.json()).then(d=>{
     const st=document.getElementById('wa-conn-status');
+    const btnStart=document.getElementById('btn-wa-start');
+    const btnStop=document.getElementById('btn-wa-stop');
     if(d.wa){
       st.innerHTML='<i class="fa fa-circle-check" style="color:#22c55e"></i> Conectado e enviando';
       st.style.color='#22c55e';
-      document.getElementById('btn-wa-start').disabled=true;
-      document.getElementById('btn-wa-stop').disabled=false;
+      btnStart.innerHTML='<i class="fab fa-whatsapp"></i> Conectado';
+      btnStart.disabled=true;
+      btnStop.disabled=false;
+      document.getElementById('wa-action-status').textContent='';
     } else {
       st.innerHTML='<i class="fa fa-circle-xmark"></i> Desconectado';
       st.style.color='var(--muted)';
-      document.getElementById('btn-wa-start').disabled=false;
-      document.getElementById('btn-wa-stop').disabled=true;
+      btnStart.innerHTML='<i class="fab fa-whatsapp"></i> Conectar e Enviar';
+      btnStart.disabled=false;
+      btnStop.disabled=true;
     }
   }).catch(()=>{});
 }
