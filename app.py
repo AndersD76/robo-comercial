@@ -2771,77 +2771,136 @@ def api_generate_email(bot):
         site_h, site_b = _extrair_cores_site(website)
         cor_header = site_h
         cor_btn = site_b if cor_btn == '#2563eb' else cor_btn
-    footer_extra = ''
     site_url = ''
+    site_limpo = ''
     if website:
         site_url = website if website.startswith('http') else f'https://{website}'
         site_limpo = re.sub(r'^https?://(www\.)?', '', website).rstrip('/')
-        footer_extra = (' &mdash; <a href="' + site_url
-                        + '" style="color:#6b7280;text-decoration:underline;">'
-                        + site_limpo + '</a>')
 
-    html = (
-        '<!DOCTYPE html>\n'
-        '<html><head><meta charset="utf-8"></head>\n'
-        '<body style="margin:0;padding:0;background:#f0f2f5;'
-        "font-family:'Segoe UI',Arial,Helvetica,sans-serif;\">\n"
-        '<div style="max-width:600px;margin:0 auto;background:#f0f2f5;padding:20px 0;">\n'
-        '\n'
-        '  <!-- HEADER -->\n'
-        '  <div style="background:' + cor_header + ';padding:0;'
-        'border-radius:12px 12px 0 0;overflow:hidden;">\n'
-        '    <div style="padding:32px 40px 28px;">\n'
-        '      <h1 style="margin:0;font-size:22px;font-weight:800;'
-        'color:' + cor_texto + ';letter-spacing:-0.3px;">' + empresa + '</h1>\n'
-        '    </div>\n'
-        '    <div style="height:4px;background:' + cor_btn + ';"></div>\n'
-        '  </div>\n'
-        '\n'
-        '  <!-- BODY -->\n'
-        '  <div style="background:#ffffff;padding:36px 40px 32px;">\n'
-        '    <p style="margin:0 0 20px;font-size:16px;line-height:1.7;color:#1a1a1a;">\n'
-        '      Olá <strong>{{nome}}</strong>,\n'
-        '    </p>\n'
-        '    <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#374151;">\n'
-        '      Sou da <strong>' + empresa + '</strong>'
-        + ((' (<a href="' + site_url
-            + '" style="color:' + cor_btn + ';text-decoration:none;">'
-            + re.sub(r'^https?://(www\.)?', '', website).rstrip('/')
-            + '</a>)') if site_url else '')
-        + '. Ajudamos empresas de\n'
-        '      <strong>{{segmento}}</strong> em <strong>{{cidade}}</strong> a\n'
-        '      ' + pitch_lower + '.\n'
-        '    </p>\n'
-        '    <p style="margin:0 0 28px;font-size:15px;line-height:1.7;color:#374151;">\n'
-        '      Posso te mostrar em 15 minutos como funciona na prática?\n'
-        '    </p>\n'
-        '\n'
-        '    <!-- CTA -->\n'
-        '    <div style="text-align:center;margin:0 0 8px;">\n'
-        '      <a href="{{link_agenda}}" style="display:inline-block;background:'
-        + cor_btn + ';color:#ffffff;font-size:15px;font-weight:700;'
-        "font-family:'Segoe UI',Arial,sans-serif;"
-        'text-decoration:none;padding:15px 40px;border-radius:8px;'
-        'letter-spacing:0.2px;">Agendar conversa de 15 min &rarr;</a>\n'
-        '    </div>\n'
-        '  </div>\n'
-        '\n'
-        '  <!-- FOOTER -->\n'
-        '  <div style="background:#fafafa;padding:20px 40px;'
-        'border-radius:0 0 12px 12px;border-top:1px solid #e5e7eb;">\n'
-        '    <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;'
-        'line-height:1.5;">\n'
-        '      <strong style="color:#6b7280;">' + empresa + '</strong>'
-        + footer_extra + '\n'
-        '    </p>\n'
-        '  </div>\n'
-        '\n'
-        '</div>\n'
-        '</body></html>'
-    )
+    site_link_inline = ''
+    if site_url:
+        site_link_inline = (
+            ' (<a href="' + site_url + '" style="color:' + cor_btn
+            + ';text-decoration:none;border-bottom:1px solid ' + cor_btn + ';">'
+            + site_limpo + '</a>)')
+
+    site_footer = ''
+    if site_url:
+        site_footer = (
+            '<a href="' + site_url
+            + '" style="color:#6b7280;text-decoration:none;border-bottom:1px solid #d1d5db;">'
+            + site_limpo + '</a>')
+
+    html = _build_email_html(
+        empresa=empresa, pitch=pitch_lower, cor_header=cor_header,
+        cor_btn=cor_btn, cor_texto=cor_texto,
+        site_link_inline=site_link_inline, site_footer=site_footer,
+        site_url=site_url)
 
     assunto = '{{nome}}, posso te mostrar algo?'
     return jsonify({'ok': True, 'html': html, 'assunto': assunto})
+
+
+def _build_email_html(*, empresa, pitch, cor_header, cor_btn, cor_texto,
+                      site_link_inline, site_footer, site_url):
+    """Monta o HTML profissional do email de prospecção."""
+    return f'''<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{empresa}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#eef1f6;-webkit-font-smoothing:antialiased;">
+
+  <!-- WRAPPER -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#eef1f6;">
+    <tr><td align="center" style="padding:32px 16px;">
+
+      <!-- CARD -->
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0"
+             style="max-width:600px;width:100%;border-radius:16px;overflow:hidden;
+                    box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+
+        <!-- HEADER -->
+        <tr>
+          <td style="background-color:{cor_header};padding:40px 48px 32px;">
+            <h1 style="margin:0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;
+                        font-size:26px;font-weight:800;color:{cor_texto};
+                        letter-spacing:-0.5px;">{empresa}</h1>
+            {('<p style="margin:8px 0 0;font-family:\'Segoe UI\',Arial,sans-serif;font-size:13px;color:' + cor_texto + ';opacity:0.7;">' + site_url.replace("https://","").replace("http://","").rstrip("/") + '</p>') if site_url else ''}
+          </td>
+        </tr>
+
+        <!-- ACCENT LINE -->
+        <tr>
+          <td style="background:{cor_btn};height:4px;font-size:0;line-height:0;">&nbsp;</td>
+        </tr>
+
+        <!-- BODY -->
+        <tr>
+          <td style="background-color:#ffffff;padding:40px 48px;">
+            <p style="margin:0 0 24px;font-family:'Segoe UI',Arial,sans-serif;
+                       font-size:17px;line-height:1.6;color:#111827;">
+              Olá <strong>{{{{nome}}}}</strong>,
+            </p>
+
+            <p style="margin:0 0 24px;font-family:'Segoe UI',Arial,sans-serif;
+                       font-size:15px;line-height:1.75;color:#374151;">
+              Sou da <strong>{empresa}</strong>{site_link_inline}.
+              Ajudamos empresas de <strong>{{{{segmento}}}}</strong> em
+              <strong>{{{{cidade}}}}</strong> a {pitch}.
+            </p>
+
+            <p style="margin:0 0 32px;font-family:'Segoe UI',Arial,sans-serif;
+                       font-size:15px;line-height:1.75;color:#374151;">
+              Posso te mostrar em 15 minutos como funciona na prática?
+            </p>
+
+            <!-- CTA BUTTON -->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+              <tr><td align="center">
+                <a href="{{{{link_agenda}}}}"
+                   style="display:inline-block;background-color:{cor_btn};
+                          color:#ffffff;font-family:'Segoe UI',Arial,sans-serif;
+                          font-size:15px;font-weight:700;text-decoration:none;
+                          padding:16px 44px;border-radius:10px;
+                          letter-spacing:0.3px;
+                          box-shadow:0 4px 14px rgba(0,0,0,0.15);">
+                  Agendar conversa de 15 min &rarr;
+                </a>
+              </td></tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- DIVIDER -->
+        <tr>
+          <td style="background-color:#ffffff;padding:0 48px;">
+            <div style="border-top:1px solid #e5e7eb;"></div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td style="background-color:#ffffff;padding:24px 48px 32px;border-radius:0 0 16px 16px;">
+            <p style="margin:0;font-family:'Segoe UI',Arial,sans-serif;
+                       font-size:12px;color:#9ca3af;text-align:center;line-height:1.6;">
+              <strong style="color:#6b7280;">{empresa}</strong>
+              {(' &mdash; ' + site_footer) if site_footer else ''}
+            </p>
+          </td>
+        </tr>
+
+      </table>
+      <!-- /CARD -->
+
+    </td></tr>
+  </table>
+  <!-- /WRAPPER -->
+
+</body>
+</html>'''
 
 
 def _extrair_pitch(descricao, empresa_nome='', max_chars=150):
