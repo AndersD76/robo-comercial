@@ -144,7 +144,7 @@
     <div class="terms-header">
       <span id="terms-count">0 termos configurados</span>
       <button class="btn-gen" id="btn-gen" onclick="generateTerms()">
-        <i class="fa fa-wand-magic-sparkles"></i> Gerar com IA
+        <i class="fa fa-wand-magic-sparkles"></i> Gerar Automático
       </button>
     </div>
     <div class="terms-list" id="terms-list"></div>
@@ -157,12 +157,12 @@
   <div class="card">
     <div class="card-title"><i class="fab fa-whatsapp"></i> Mensagem Inicial (WhatsApp)</div>
     <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
-      Esta mensagem será enviada no primeiro contato com cada lead. A IA gera uma sugestão baseada no seu negócio — edite antes de salvar.
+      Esta mensagem será enviada no primeiro contato com cada lead. O sistema gera uma sugestão baseada no seu negócio — edite antes de salvar.
     </p>
     <div class="terms-header" style="margin-bottom:10px">
       <span style="font-size:12px;color:var(--muted)">Variáveis: <code style="color:#22c55e">{% raw %}{{nome}}{% endraw %}</code> = empresa, <code style="color:#22c55e">{% raw %}{{cal_link}}{% endraw %}</code> = link de agendamento</span>
       <button class="btn-gen" id="btn-gen-msg" onclick="generateMsg()">
-        <i class="fa fa-wand-magic-sparkles"></i> Gerar com IA
+        <i class="fa fa-wand-magic-sparkles"></i> Gerar Automático
       </button>
     </div>
     <textarea id="msg_inicial" rows="6" placeholder="Olá! Sou da equipe {nome_empresa}.&#10;&#10;Vi que a {nome} pode se interessar...&#10;&#10;Posso agendar uma conversa? {cal_link}"></textarea>
@@ -196,7 +196,7 @@
       <label>Template HTML do email <small>— Variáveis: {% raw %}{{nome}}, {{email}}, {{segmento}}, {{cidade}}, {{link_agenda}}{% endraw %}</small></label>
       <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
         <button class="btn-gen" id="btn-gen-email" onclick="generateEmail()">
-          <i class="fa fa-wand-magic-sparkles"></i> Gerar com IA
+          <i class="fa fa-wand-magic-sparkles"></i> Gerar Automático
         </button>
         <label style="background:rgba(99,102,241,.12);border:1px solid var(--border);color:#818cf8;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;margin:0">
           <i class="fa fa-upload"></i> Carregar HTML
@@ -323,7 +323,7 @@ async function generateTerms() {
     }
   } catch(e) { showToast('Erro de conexão', false) }
   btn.disabled = false
-  btn.innerHTML = '<i class="fa fa-wand-magic-sparkles"></i> Gerar com IA'
+  btn.innerHTML = '<i class="fa fa-wand-magic-sparkles"></i> Gerar Automático'
 }
 
 async function generateMsg() {
@@ -350,7 +350,7 @@ async function generateMsg() {
     }
   } catch(e) { showToast('Erro de conexão', false) }
   btn.disabled = false
-  btn.innerHTML = '<i class="fa fa-wand-magic-sparkles"></i> Gerar com IA'
+  btn.innerHTML = '<i class="fa fa-wand-magic-sparkles"></i> Gerar Automático'
 }
 
 async function generateEmail() {
@@ -383,7 +383,7 @@ async function generateEmail() {
     }
   } catch(e) { showToast('Erro de conexão', false) }
   btn.disabled = false
-  btn.innerHTML = '<i class="fa fa-wand-magic-sparkles"></i> Gerar com IA'
+  btn.innerHTML = '<i class="fa fa-wand-magic-sparkles"></i> Gerar Automático'
 }
 
 function loadCfgHtml(input) {

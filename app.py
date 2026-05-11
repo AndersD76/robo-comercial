@@ -2295,7 +2295,7 @@ def api_save_config(bot):
 @login_required
 def api_generate_terms(bot):
     data = request.get_json(silent=True) or {}
-    result = _gerar_termos_ia(
+    result = _gerar_termos(
         data.get('empresa_nome', ''),
         data.get('descricao', ''),
         data.get('website', '')
@@ -2303,112 +2303,140 @@ def api_generate_terms(bot):
     return jsonify({'ok': True, 'termos': result['termos'], 'cargos': result['cargos']})
 
 
-def _gerar_termos_ia(empresa_nome: str, descricao: str, website: str) -> dict:
-    """Retorna {'termos': [...], 'cargos': [...]}"""
-    api_key = os.environ.get('ANTHROPIC_API_KEY', '')
-    if not api_key:
-        return {'termos': _termos_fallback(descricao), 'cargos': []}
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-        msg = client.messages.create(
-            model='claude-sonnet-4-6',
-            max_tokens=6000,
-            messages=[{'role': 'user', 'content': f"""Você é o melhor especialista em prospecção B2B outbound do Brasil. Sua missão é gerar termos de busca Google que encontrem SITES INSTITUCIONAIS de empresas que seriam CLIENTES (compradores).
+def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
+    """Gera termos de busca por código, sem IA."""
+    desc_lower = descricao.lower()
 
-EMPRESA VENDEDORA: {empresa_nome}
-SITE: {website}
-O QUE ELA VENDE: {descricao}
-
-━━━ RACIOCÍNIO OBRIGATÓRIO (pense antes de gerar) ━━━
-
-Antes de gerar os termos, responda mentalmente:
-1. Quem COMPRA esse produto/serviço? (segmentos, portes, tipos de empresa)
-2. Quais departamentos dentro da empresa cliente precisariam disso?
-3. Em quais regiões do Brasil esses clientes estão concentrados?
-4. Qual o porte ideal? (PME, médio, grande?)
-
-━━━ REGRAS ABSOLUTAS ━━━
-
-PROIBIDO gerar termos com palavras do produto/serviço vendido!
-- Se vende "monitoramento de PCs" → NUNCA use "monitoramento", "rastreamento", "controle de acesso"
-- Se vende "tombador de grãos" → NUNCA use "tombador", "equipamento agrícola"
-- Esses termos acham CONCORRENTES e BLOGS, não clientes!
-
-OBRIGATÓRIO: termos que achem o SITE DA EMPRESA COMPRADORA
-- O cliente ideal tem site próprio com página de contato
-- Busque pelo SEGMENTO DO CLIENTE, não pelo produto vendido
-
-━━━ PADRÕES DE TERMOS (use TODOS, alternando) ━━━
-
-1. "[segmento cliente] [cidade] contato site:.com.br"
-2. "[segmento] [estado] telefone email"
-3. "[tipo empresa] [cidade] quem somos"
-4. "lista [segmento] [cidade/estado]"
-5. "[segmento] [região/bairro comercial] contato"
-6. "[segmento] [cidade] endereço telefone"
-7. "empresas de [segmento] [estado] site:.com.br"
-8. "[segmento] [cidade] CNPJ contato"
-9. "diretório [segmento] [estado]"
-10. "[cargo decisor] [segmento] [cidade]"
-
-━━━ COBERTURA GEOGRÁFICA MÍNIMA ━━━
-
-CAPITAIS (use todas): São Paulo, Rio de Janeiro, Belo Horizonte, Curitiba, Porto Alegre, Brasília, Salvador, Recife, Fortaleza, Goiânia, Campinas, Florianópolis, Manaus, Belém, Vitória
-
-INTERIOR (use pelo menos 15): Campinas, Ribeirão Preto, São José dos Campos, Sorocaba, Santos, Londrina, Maringá, Joinville, Blumenau, Caxias do Sul, Uberlândia, Juiz de Fora, São José do Rio Preto, Piracicaba, Jundiaí, Bauru, Cascavel, Chapecó, Novo Hamburgo, Passo Fundo
-
-ESTADOS por sigla: SP, RJ, MG, PR, SC, RS, BA, GO, MT, MS, PE, CE, PA, ES, DF, AM, MA, RN, PI, TO
-
-━━━ QUANTIDADE E DIVERSIDADE ━━━
-
-Gere EXATAMENTE 120 termos:
-- 15+ segmentos diferentes de empresa cliente
-- 20+ cidades diferentes (capitais + interior)
-- 15+ estados diferentes
-- Todos os 10 padrões de termo acima representados
-- Zero repetição de combinação segmento+cidade
-
-Gere também 15 cargos de decisores de compra dentro das empresas CLIENTES.
-
-━━━ FORMATO DE RESPOSTA ━━━
-
-SOMENTE JSON válido (sem explicações, sem markdown):
-{{"termos": ["termo1", "termo2", ...], "cargos": ["cargo1", "cargo2", ...]}}"""}]
-        )
-        text = msg.content[0].text.strip()
-        match = re.search(r'\{.*\}', text, re.DOTALL)
-        if match:
-            data = json.loads(match.group())
-            termos = data.get('termos') or []
-            cargos = data.get('cargos') or []
-            if termos:
-                return {'termos': termos, 'cargos': cargos}
-    except Exception as e:
-        print(f'[gerar_termos] {e}')
-    return {'termos': _termos_fallback(descricao), 'cargos': []}
-
-
-def _termos_fallback(descricao: str) -> list:
-    segmentos = [
+    SEGMENTOS_BASE = [
         'escritório contabilidade', 'escritório advocacia', 'agência publicidade',
         'agência marketing digital', 'consultoria empresarial', 'empresa logística',
-        'construtora', 'clínica médica', 'empresa comércio', 'indústria',
-        'empresa recursos humanos', 'empresa call center', 'empresa tecnologia',
-        'corretora seguros', 'imobiliária', 'empresa transporte',
+        'construtora', 'clínica médica', 'clínica odontológica', 'clínica veterinária',
+        'empresa comércio exterior', 'indústria metalúrgica', 'indústria alimentícia',
+        'indústria têxtil', 'indústria química', 'empresa recursos humanos',
+        'empresa call center', 'empresa tecnologia', 'corretora seguros',
+        'imobiliária', 'empresa transporte', 'distribuidora', 'atacadista',
+        'escola particular', 'faculdade', 'hospital', 'laboratório análises',
+        'concessionária veículos', 'oficina mecânica', 'loja materiais construção',
+        'supermercado', 'rede farmácias', 'hotel pousada', 'restaurante',
+        'cooperativa', 'empresa engenharia', 'gráfica', 'editora',
+        'empresa segurança patrimonial', 'empresa limpeza', 'academia',
+        'provedor internet', 'startup', 'coworking', 'franquia',
     ]
-    cidades = [
+
+    KEYWORD_SEGMENTS = {
+        'agro': ['fazenda', 'cooperativa agrícola', 'agroindústria', 'cerealista',
+                 'revendedora agrícola', 'usina açúcar', 'frigorifico'],
+        'rural': ['fazenda', 'cooperativa agrícola', 'agroindústria', 'pecuária'],
+        'grão': ['cerealista', 'cooperativa agrícola', 'armazém grãos', 'trading agrícola'],
+        'saúde': ['hospital', 'clínica médica', 'laboratório análises', 'clínica odontológica',
+                  'home care', 'operadora saúde'],
+        'médic': ['hospital', 'clínica médica', 'laboratório análises', 'farmácia manipulação'],
+        'software': ['escritório contabilidade', 'escritório advocacia', 'empresa logística',
+                     'construtora', 'indústria', 'comércio varejista'],
+        'sistema': ['escritório contabilidade', 'empresa logística', 'indústria',
+                    'distribuidora', 'comércio varejista', 'rede lojas'],
+        'monitor': ['empresa escritório', 'call center', 'empresa financeira',
+                    'escritório contabilidade', 'empresa tecnologia', 'BPO'],
+        'tecnologia': ['empresa tecnologia', 'startup', 'software house',
+                       'provedor internet', 'agência digital'],
+        'construção': ['construtora', 'incorporadora', 'empresa engenharia',
+                       'loja materiais construção', 'marmoraria'],
+        'aliment': ['indústria alimentícia', 'restaurante', 'rede fast food',
+                    'distribuidora alimentos', 'padaria industrial'],
+        'automotiv': ['concessionária veículos', 'oficina mecânica', 'autopeças',
+                      'locadora veículos', 'funilaria'],
+        'varejo': ['loja roupas', 'supermercado', 'shopping center',
+                   'loja eletrônicos', 'rede lojas', 'franquia'],
+        'financ': ['cooperativa crédito', 'corretora investimentos', 'fintech',
+                   'empresa factoring', 'escritório contabilidade'],
+        'jurídic': ['escritório advocacia', 'cartório', 'empresa recuperação crédito'],
+        'contab': ['escritório contabilidade', 'consultoria tributária', 'auditoria'],
+        'logística': ['transportadora', 'empresa logística', 'operador portuário',
+                      'armazém', 'empresa courier'],
+        'indústria': ['indústria metalúrgica', 'indústria química', 'indústria têxtil',
+                      'fábrica', 'indústria plásticos', 'indústria alimentícia'],
+        'educaç': ['escola particular', 'faculdade', 'cursinho', 'centro treinamento',
+                   'escola idiomas', 'escola técnica'],
+        'segurança': ['condomínio empresarial', 'shopping center', 'empresa segurança',
+                      'portaria remota', 'empresa facilities'],
+        'energia': ['empresa energia solar', 'distribuidora energia', 'empresa elétrica',
+                    'construtora', 'indústria'],
+        'telecom': ['provedor internet', 'empresa telecom', 'revenda telefonia'],
+        'pet': ['pet shop', 'clínica veterinária', 'hotel pet', 'distribuidora pet'],
+        'beleza': ['salão beleza', 'clínica estética', 'barbearia', 'distribuidora cosméticos'],
+        'imóve': ['imobiliária', 'incorporadora', 'construtora', 'administradora condomínios'],
+    }
+
+    segmentos_priorizados = []
+    for kw, segs in KEYWORD_SEGMENTS.items():
+        if kw in desc_lower:
+            segmentos_priorizados.extend(segs)
+
+    seen = set()
+    segmentos = []
+    for s in segmentos_priorizados + SEGMENTOS_BASE:
+        if s not in seen:
+            seen.add(s)
+            segmentos.append(s)
+
+    CAPITAIS = [
         'São Paulo', 'Rio de Janeiro', 'Belo Horizonte', 'Curitiba',
-        'Porto Alegre', 'Brasília', 'Salvador', 'Goiânia',
-        'Campinas', 'Fortaleza', 'Recife', 'Florianópolis',
-        'Joinville', 'Uberlândia', 'Londrina', 'Ribeirão Preto',
+        'Porto Alegre', 'Brasília', 'Salvador', 'Recife', 'Fortaleza',
+        'Goiânia', 'Campinas', 'Florianópolis', 'Manaus', 'Belém', 'Vitória',
     ]
-    termos = []
+    INTERIOR = [
+        'Ribeirão Preto', 'São José dos Campos', 'Sorocaba', 'Santos',
+        'Londrina', 'Maringá', 'Joinville', 'Blumenau', 'Caxias do Sul',
+        'Uberlândia', 'Juiz de Fora', 'São José do Rio Preto', 'Piracicaba',
+        'Jundiaí', 'Bauru', 'Cascavel', 'Chapecó', 'Novo Hamburgo',
+        'Passo Fundo', 'Americana', 'Franca', 'Limeira', 'Montes Claros',
+        'Volta Redonda', 'Petrópolis', 'Niterói', 'Feira de Santana',
+        'Anápolis', 'Aparecida de Goiânia', 'São Luís',
+    ]
+    ESTADOS = [
+        'SP', 'RJ', 'MG', 'PR', 'SC', 'RS', 'BA', 'GO', 'MT', 'MS',
+        'PE', 'CE', 'PA', 'ES', 'DF', 'AM', 'MA', 'RN', 'PI', 'TO',
+    ]
+    PADROES = [
+        '{seg} {loc} contato site:.com.br',
+        '{seg} {loc} telefone email',
+        '{seg} {loc} quem somos',
+        'empresas de {seg} {loc} site:.com.br',
+        '{seg} {loc} endereço telefone',
+        '{seg} {loc} CNPJ contato',
+        'lista {seg} {loc}',
+        'diretório {seg} {loc}',
+    ]
+
+    todas_cidades = CAPITAIS + INTERIOR
+    termos = set()
+
     for seg in segmentos:
-        for cid in random.sample(cidades, min(3, len(cidades))):
-            termos.append(f'{seg} {cid} contato site:.com.br')
-    random.shuffle(termos)
-    return termos[:50]
+        cids = random.sample(todas_cidades, min(4, len(todas_cidades)))
+        for cid in cids:
+            pat = random.choice(PADROES)
+            termos.add(pat.format(seg=seg, loc=cid))
+        uf = random.choice(ESTADOS)
+        termos.add(f'{seg} {uf} contato site:.com.br')
+
+    while len(termos) < 130:
+        seg = random.choice(segmentos)
+        loc = random.choice(todas_cidades + ESTADOS)
+        pat = random.choice(PADROES)
+        termos.add(pat.format(seg=seg, loc=loc))
+
+    CARGOS = [
+        'Diretor Geral', 'Diretor Comercial', 'Diretor Financeiro',
+        'Diretor de TI', 'Gerente Administrativo', 'Gerente de Compras',
+        'Gerente de TI', 'Gerente Comercial', 'Gerente de Operações',
+        'Proprietário', 'Sócio-diretor', 'CEO', 'COO', 'CFO', 'CTO',
+        'Coordenador Administrativo', 'Supervisor', 'Controller',
+        'Responsável de TI', 'Head de Operações',
+    ]
+
+    lista = list(termos)
+    random.shuffle(lista)
+    return {'termos': lista, 'cargos': CARGOS}
 
 
 # --- API Tokens ---
@@ -2646,7 +2674,7 @@ def api_delete_evento(bot, evento_id):
 
 
 # =============================================================================
-# GERAR MENSAGEM INICIAL COM IA
+# GERAR MENSAGEM WHATSAPP (sem IA)
 # =============================================================================
 
 @app.route('/api/<bot>/config/generate-msg', methods=['POST'])
@@ -2658,264 +2686,125 @@ def api_generate_msg(bot):
     if not descricao:
         return jsonify({'error': 'Preencha a descrição da empresa'}), 400
 
-    api_key = os.environ.get('ANTHROPIC_API_KEY', '')
-    if not api_key:
-        return jsonify({'error': 'ANTHROPIC_API_KEY não configurado'}), 400
+    pitch = _extrair_pitch(descricao)
     tipo = data.get('tipo', 'whatsapp')
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-        if tipo == 'followup':
-            prompt = f"""Escreva um follow-up curto de email B2B para "{empresa}".
 
-PRODUTO: {descricao}
-
-VARIÁVEIS OBRIGATÓRIAS (use com chaves duplas):
-- {{{{nome}}}} → nome da empresa (OBRIGATÓRIO)
-- {{{{link_agenda}}}} → link de agendamento (OBRIGATÓRIO no CTA)
-
-PROIBIDO usar nomes fixos. Use {{{{nome}}}} onde for personalizar.
-
-FORMATO:
-- MÁXIMO 3-4 linhas
-- Referencie um contato anterior ("te mandei uma msg sobre...")
-- 1 frase de valor concreto do produto
-- CTA com {{{{link_agenda}}}}
-- SEM "é essencial", "solução ideal", "desafios constantes"
-- 1 emoji no máximo
-
-Responda SOMENTE com a mensagem."""
-        else:
-            prompt = f"""Escreva UMA mensagem de WhatsApp de prospecção B2B para "{empresa}".
-
-PRODUTO: {descricao}
-
-VARIÁVEIS OBRIGATÓRIAS (use com chaves duplas):
-- {{{{nome}}}} → nome da empresa do lead (OBRIGATÓRIO na saudação)
-- {{{{cal_link}}}} → link de agendamento (OBRIGATÓRIO no final)
-
-PROIBIDO usar nomes fixos de empresa/cidade. Use {{{{nome}}}} onde for personalizar.
-
-FORMATO:
-- MÁXIMO 3-4 linhas curtas (WhatsApp longo = ignorado)
-- Linha 1: "Oi {{{{nome}}}}!" ou "Bom dia, {{{{nome}}}}!"
-- Linha 2: 1 frase curta sobre o benefício concreto do produto
-- Linha 3: CTA direto com {{{{cal_link}}}}
-- Tom direto, profissional, humano
-- 1 emoji no máximo
-- SEM assinatura, SEM "Abraço", SEM "Equipe X"
-- SEM "sabemos que", "solução ideal", "desafios constantes"
-
-Responda SOMENTE com a mensagem."""
-        msg = client.messages.create(
-            model='claude-haiku-4-5-20251001',
-            max_tokens=600,
-            messages=[{'role': 'user', 'content': prompt}]
+    if tipo == 'followup':
+        mensagem = (
+            "Oi {{nome}}, tudo bem?\n\n"
+            "Te enviei uma mensagem sobre como a " + empresa + " pode ajudar "
+            "seu negócio. " + pitch + ".\n\n"
+            "Vale uma conversa rápida de 15 min?\n"
+            "{{link_agenda}}"
         )
-        return jsonify({'ok': True, 'mensagem': msg.content[0].text.strip()})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    else:
+        mensagem = (
+            "Oi {{nome}}, tudo bem? 👋\n\n"
+            "Sou da " + empresa + ". " + pitch + ".\n\n"
+            "Posso te mostrar como funciona em 15 min?\n"
+            "{{cal_link}}"
+        )
+
+    return jsonify({'ok': True, 'mensagem': mensagem})
 
 
 @app.route('/api/<bot>/config/generate-email', methods=['POST'])
 @login_required
 def api_generate_email(bot):
     data = request.get_json(silent=True) or {}
-    empresa = data.get('empresa_nome', '')
+    empresa = data.get('empresa_nome', '') or 'Sua Empresa'
     descricao = data.get('descricao', '')
     website = data.get('website', '').strip()
     if not descricao:
         return jsonify({'error': 'Preencha a descrição da empresa'}), 400
 
-    api_key = os.environ.get('ANTHROPIC_API_KEY', '')
-    if not api_key:
-        return jsonify({'error': 'ANTHROPIC_API_KEY não configurado'}), 400
-
-    # --- Visitar site da empresa para extrair identidade visual ---
-    site_html = ''
+    pitch = _extrair_pitch(descricao)
+    cor_header, cor_btn = _extrair_cores_site(website)
+    footer_extra = ''
     if website:
-        try:
-            import requests as req
-            from bs4 import BeautifulSoup
-            url = website if website.startswith('http') else f'https://{website}'
-            resp = req.get(url, timeout=10,
-                           headers={'User-Agent': 'Mozilla/5.0'})
-            resp.raise_for_status()
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            # Remover scripts e imagens para reduzir tamanho
-            for tag in soup.find_all(['script', 'noscript', 'svg',
-                                      'iframe', 'video', 'audio']):
-                tag.decompose()
-            for img in soup.find_all('img'):
-                img.decompose()
-            # Pegar o HTML limpo (cabeça com styles + body)
-            site_html = str(soup)[:8000]
-        except Exception:
-            site_html = ''
+        site_limpo = re.sub(r'^https?://(www\.)?', '', website).rstrip('/')
+        footer_extra = ' &mdash; ' + site_limpo
 
+    html = (
+        '<!DOCTYPE html>\n'
+        '<html><head><meta charset="utf-8"></head>\n'
+        '<body style="margin:0;padding:0;background:#f4f4f7;">\n'
+        '<div style="max-width:600px;margin:20px auto;background:#ffffff;'
+        'border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">\n'
+        '  <div style="background:' + cor_header + ';padding:24px 32px;">\n'
+        '    <span style="color:#ffffff;font-size:20px;font-weight:700;'
+        "font-family:'Segoe UI',Arial,sans-serif;\">" + empresa + '</span>\n'
+        '  </div>\n'
+        "  <div style=\"padding:32px;font-family:'Segoe UI',Arial,sans-serif;"
+        'font-size:15px;line-height:1.7;color:#333333;">\n'
+        '    <p style="margin:0 0 16px;">Olá <strong>{{nome}}</strong>,</p>\n'
+        '    <p style="margin:0 0 16px;">' + pitch + '. '
+        'Trabalhamos com empresas de <strong>{{segmento}}</strong> em '
+        '<strong>{{cidade}}</strong> e região, e acredito que podemos '
+        'agregar bastante ao seu negócio.</p>\n'
+        '    <p style="margin:0 0 24px;">Gostaria de mostrar como funciona '
+        'na prática. Podemos conversar 15 minutos?</p>\n'
+        '    <p style="text-align:center;margin:0;">\n'
+        '      <a href="{{link_agenda}}" style="display:inline-block;background:'
+        + cor_btn + ';color:#ffffff;font-family:\'Segoe UI\',Arial,sans-serif;'
+        'font-size:15px;font-weight:700;text-decoration:none;padding:14px 32px;'
+        'border-radius:8px;">Agendar 15 min</a>\n'
+        '    </p>\n'
+        '  </div>\n'
+        '  <div style="padding:16px 32px;text-align:center;'
+        "font-family:'Segoe UI',Arial,sans-serif;font-size:11px;"
+        'color:#999999;border-top:1px solid #eee;">\n'
+        '    ' + empresa + footer_extra + '\n'
+        '  </div>\n'
+        '</div>\n'
+        '</body></html>'
+    )
+
+    assunto = '{{nome}}, podemos conversar?'
+    return jsonify({'ok': True, 'html': html, 'assunto': assunto})
+
+
+def _extrair_pitch(descricao, max_chars=200):
+    """Extrai a frase principal de valor a partir da descrição."""
+    frases = re.split(r'(?<=[.!?])\s+', descricao.strip())
+    if not frases:
+        return descricao[:max_chars]
+    pitch = frases[0].rstrip('.')
+    if len(frases) > 1 and len(pitch) < 80:
+        pitch += '. ' + frases[1].rstrip('.')
+    if len(pitch) > max_chars:
+        pitch = pitch[:max_chars].rsplit(' ', 1)[0]
+    return pitch
+
+
+def _extrair_cores_site(website):
+    """Extrai cores primárias do CSS/HTML do site. Retorna (cor_header, cor_btn)."""
+    if not website:
+        return '#1a2332', '#2563eb'
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-
-        # Se temos o HTML do site, primeiro pedir análise da identidade visual
-        analise_site = ''
-        if site_html:
-            analise = client.messages.create(
-                model='claude-haiku-4-5-20251001',
-                max_tokens=400,
-                messages=[{'role': 'user', 'content': f"""Analise o HTML deste site e extraia a identidade visual da empresa.
-
-HTML DO SITE:
-{site_html}
-
-Retorne APENAS um resumo conciso com:
-1. Cores principais (hex exatos encontrados no CSS/HTML)
-2. Cores secundárias/de destaque
-3. Fontes usadas
-4. Tom/estilo visual (moderno, corporativo, minimalista, etc)
-5. Slogan ou frase de efeito se houver
-6. Tipo de negócio/contexto da empresa
-
-Seja direto e objetivo."""}]
-            )
-            analise_site = analise.content[0].text.strip()
-
-        contexto = ''
-        if analise_site:
-            contexto = f"""
-IDENTIDADE VISUAL DA EMPRESA (extraída do site {website}):
-{analise_site}
-
-IMPORTANTE: Replique EXATAMENTE as cores, fontes e estilo visual da empresa no email.
-O email deve parecer que foi feito pelo mesmo designer do site.
-"""
-
-        msg = client.messages.create(
-            model='claude-sonnet-4-6',
-            max_tokens=2000,
-            messages=[{'role': 'user', 'content': f"""Gere um template de email HTML para mala direta B2B.
-
-EMPRESA REMETENTE (quem envia): {empresa}
-SERVIÇO QUE VENDE: {descricao}
-{contexto}
-
-REGRA PRINCIPAL — LEIA COM ATENÇÃO:
-Este HTML é um TEMPLATE reutilizável. Ele será enviado para CENTENAS de empresas
-diferentes. O sistema substitui variáveis antes de enviar. Você DEVE usar as
-variáveis abaixo LITERALMENTE no HTML. NÃO invente nomes, cidades ou segmentos.
-
-VARIÁVEIS OBRIGATÓRIAS (copie e cole EXATAMENTE como estão):
-  LEAD_NOME      = nome da empresa destinatária
-  LEAD_SEGMENTO  = ramo/setor do destinatário
-  LEAD_CIDADE    = cidade do destinatário
-  LINK_AGENDA    = URL de agendamento
-
-EXEMPLO CORRETO:  Olá LEAD_NOME,
-EXEMPLO ERRADO:   Olá Empresa Exemplo,   ← PROIBIDO!
-EXEMPLO ERRADO:   Olá João,              ← PROIBIDO!
-EXEMPLO ERRADO:   empresas de São Paulo  ← PROIBIDO! Use "empresas de LEAD_CIDADE"
-EXEMPLO ERRADO:   setor de Agronegócio   ← PROIBIDO! Use "setor de LEAD_SEGMENTO"
-
-NÃO ESCREVA nenhum nome de empresa fictício, nenhuma cidade real, nenhum segmento
-real no corpo do email. SEMPRE use LEAD_NOME, LEAD_SEGMENTO, LEAD_CIDADE.
-
-ESTRUTURA DO EMAIL (máximo 3 parágrafos curtos):
-1. "Olá LEAD_NOME," + pergunta provocativa sobre uma dor real do LEAD_SEGMENTO
-2. Como {empresa} resolve isso (1-2 frases concretas, sem clichê)
-3. CTA — botão "Agendar 15 min" com href="LINK_AGENDA"
-
-PROIBIDO: bullet points, emojis, badges, cards, ícones, imagens, footer, mais de 3 parágrafos.
-
-HTML:
-- max-width 600px, fundo #fff, CSS todo inline
-- Header: barra #1a2332 com "{empresa}" em branco
-- Body: padding 28px 32px, font 15px/1.6 'Segoe UI',Arial,sans-serif, color #333
-- Botão: background #2563eb, color #fff, border-radius 8px, padding 13px 28px, font-weight 700
-- Footer: 1 linha cinza 11px
-
-Responda SOMENTE o HTML, sem explicações."""}]
-        )
-        html = msg.content[0].text.strip()
-        if html.startswith('```'):
-            html = html.split('\n', 1)[1]
-        if html.endswith('```'):
-            html = html.rsplit('```', 1)[0]
-        html = html.strip()
-
-        # -- Post-processing: garantir variáveis de template --
-        import re
-
-        # 1) Substituir placeholders literais
-        html = (html.replace('LEAD_NOME', '{{nome}}')
-                    .replace('LEAD_SEGMENTO', '{{segmento}}')
-                    .replace('LEAD_CIDADE', '{{cidade}}')
-                    .replace('LINK_AGENDA', '{{link_agenda}}'))
-
-        # 2) Se a IA ignorou as instruções e NÃO colocou {{nome}},
-        #    forçar substituição de padrões comuns de saudação
-        if '{{nome}}' not in html:
-            html = re.sub(
-                r'(Olá|Oi|Prezad[oa]s?|Caro[sa]?)\s+[^,<]{2,40},',
-                r'\1 {{nome}},',
-                html, count=1)
-
-        # 3) Se mencionou alguma cidade/segmento literal da descrição,
-        #    substituir por {{cidade}} / {{segmento}}
-        palavras_desc = set()
-        for p in re.split(r'[,;./\s]+', descricao):
-            p = p.strip()
-            if len(p) >= 4 and p[0].isupper():
-                palavras_desc.add(p)
-
-        for palavra in palavras_desc:
-            pat = re.compile(re.escape(palavra), re.IGNORECASE)
-            ocorrencias = pat.findall(html)
-            for oc in ocorrencias:
-                ctx_antes = html[:html.find(oc)]
-                if empresa.lower() not in oc.lower():
-                    if any(k in ctx_antes[-60:].lower() for k in
-                           ['cidade', 'região', 'empresas de', 'negócios em',
-                            'mercado de', 'em ']):
-                        html = html.replace(oc, '{{cidade}}', 1)
-                    else:
-                        html = html.replace(oc, '{{segmento}}', 1)
-
-        # 4) Fallback: detectar nomes genéricos que a IA adora inventar
-        for falso in ['Empresa Exemplo', 'Empresa X', 'Empresa Y',
-                      'Nome da Empresa', 'Sua Empresa', '[Nome]',
-                      '[Empresa]', 'EMPRESA', 'Fulano']:
-            if falso in html and empresa not in falso:
-                html = html.replace(falso, '{{nome}}')
-
-        # 5) Garantir que o botão de CTA aponta para {{link_agenda}}
-        if '{{link_agenda}}' not in html:
-            html = re.sub(
-                r'href="[^"]*agendar[^"]*"',
-                'href="{{link_agenda}}"',
-                html, flags=re.IGNORECASE)
-            if '{{link_agenda}}' not in html:
-                html = re.sub(
-                    r'href="#"',
-                    'href="{{link_agenda}}"',
-                    html, count=1)
-        assunto_msg = client.messages.create(
-            model='claude-haiku-4-5-20251001',
-            max_tokens=60,
-            messages=[{'role': 'user', 'content': f"""Crie 1 assunto de cold email B2B para a empresa "{empresa}" que vende: {descricao[:200]}
-
-Regras:
-- Máximo 50 caracteres
-- Sem clichês ("proposta", "oportunidade", "parceria")
-- Pareça email pessoal, não marketing
-- Use {{{{nome}}}} se fizer sentido
-- Gere curiosidade ou toque numa dor
-- Responda SOMENTE o assunto, sem aspas"""}]
-        )
-        assunto = assunto_msg.content[0].text.strip().strip('"').strip("'")
-        return jsonify({'ok': True, 'html': html.strip(),
-                        'assunto': assunto})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        import requests as req
+        url = website if website.startswith('http') else f'https://{website}'
+        resp = req.get(url, timeout=8,
+                       headers={'User-Agent': 'Mozilla/5.0'})
+        text = resp.text[:20000]
+        hex_colors = re.findall(r'#([0-9a-fA-F]{6})\b', text)
+        neutrals = {
+            '000000', 'ffffff', '333333', '666666', '999999', 'aaaaaa',
+            'bbbbbb', 'cccccc', 'dddddd', 'eeeeee', 'f0f0f0', 'f5f5f5',
+            'fafafa', 'f8f8f8', 'e5e5e5', 'f4f4f4', 'f9f9f9', 'fbfbfb',
+            'f7f7f7', 'f1f1f1', 'e0e0e0', 'd0d0d0', 'c0c0c0', 'b0b0b0',
+            'a0a0a0', '808080', '404040', '1a1a1a', '2d2d2d', '4a4a4a',
+        }
+        filtered = [c.lower() for c in hex_colors if c.lower() not in neutrals]
+        if filtered:
+            from collections import Counter
+            top = Counter(filtered).most_common(2)
+            cor_header = '#' + top[0][0]
+            cor_btn = '#' + (top[1][0] if len(top) > 1 else top[0][0])
+            return cor_header, cor_btn
+    except Exception:
+        pass
+    return '#1a2332', '#2563eb'
 
 
 # =============================================================================
