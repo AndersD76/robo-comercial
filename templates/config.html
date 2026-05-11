@@ -192,6 +192,29 @@
       <input type="text" id="email_assunto_padrao" value="{{ cfg.email_assunto_padrao|default('',true)|e }}" placeholder="Ex: {nome}, conheça nossa solução para seu negócio">
       <small style="color:var(--muted);font-size:11px">Use <code style="color:#818cf8">{% raw %}{{nome}}{% endraw %}</code> para o nome da empresa</small>
     </div>
+    <div style="display:flex;gap:14px;margin-bottom:18px;flex-wrap:wrap">
+      <div style="flex:1;min-width:140px">
+        <label>Cor do header</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="color" id="email_cor_header" value="{{ cfg.email_cor_header|default('#1a2332',true) }}" style="width:44px;height:38px;padding:2px;border-radius:8px;cursor:pointer;background:var(--surface2);border:1px solid rgba(255,255,255,.08)">
+          <input type="text" id="email_cor_header_hex" value="{{ cfg.email_cor_header|default('#1a2332',true) }}" style="width:90px;font-family:monospace;font-size:12px;padding:9px 10px" oninput="document.getElementById('email_cor_header').value=this.value">
+        </div>
+      </div>
+      <div style="flex:1;min-width:140px">
+        <label>Cor do botão</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="color" id="email_cor_botao" value="{{ cfg.email_cor_botao|default('#2563eb',true) }}" style="width:44px;height:38px;padding:2px;border-radius:8px;cursor:pointer;background:var(--surface2);border:1px solid rgba(255,255,255,.08)">
+          <input type="text" id="email_cor_botao_hex" value="{{ cfg.email_cor_botao|default('#2563eb',true) }}" style="width:90px;font-family:monospace;font-size:12px;padding:9px 10px" oninput="document.getElementById('email_cor_botao').value=this.value">
+        </div>
+      </div>
+      <div style="flex:1;min-width:140px">
+        <label>Cor do texto do header</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="color" id="email_cor_texto" value="{{ cfg.email_cor_texto|default('#ffffff',true) }}" style="width:44px;height:38px;padding:2px;border-radius:8px;cursor:pointer;background:var(--surface2);border:1px solid rgba(255,255,255,.08)">
+          <input type="text" id="email_cor_texto_hex" value="{{ cfg.email_cor_texto|default('#ffffff',true) }}" style="width:90px;font-family:monospace;font-size:12px;padding:9px 10px" oninput="document.getElementById('email_cor_texto').value=this.value">
+        </div>
+      </div>
+    </div>
     <div class="field">
       <label>Template HTML do email <small>— Variáveis: {% raw %}{{nome}}, {{email}}, {{segmento}}, {{cidade}}, {{link_agenda}}{% endraw %}</small></label>
       <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
@@ -247,6 +270,17 @@
 
 <script>
 const BOT = '{{ user.schema_name if user and user.schema_name else "" }}';
+
+// Sync color pickers com hex inputs
+document.querySelectorAll('input[type=color]').forEach(picker => {
+  const hexInput = document.getElementById(picker.id + '_hex');
+  if (hexInput) {
+    picker.addEventListener('input', () => { hexInput.value = picker.value });
+    hexInput.addEventListener('input', () => {
+      if (/^#[0-9a-fA-F]{6}$/.test(hexInput.value)) picker.value = hexInput.value;
+    });
+  }
+});
 
 // Termos — parse seguro via tag JSON
 let terms = [];
@@ -366,7 +400,10 @@ async function generateEmail() {
       body: JSON.stringify({
         empresa_nome: document.getElementById('empresa_nome').value,
         descricao: desc,
-        website: document.getElementById('website').value
+        website: document.getElementById('website').value,
+        cor_header: document.getElementById('email_cor_header').value,
+        cor_botao: document.getElementById('email_cor_botao').value,
+        cor_texto: document.getElementById('email_cor_texto').value
       })
     })
     const d = await r.json()
@@ -404,10 +441,11 @@ function previewCfgHtml() {
     preview.style.display = 'none'
     return
   }
-  const rendered = html.replace(/\{\{nome\}\}/g, 'Empresa Exemplo')
-    .replace(/\{\{email\}\}/g, 'contato@exemplo.com')
-    .replace(/\{\{segmento\}\}/g, 'Agronegócio')
-    .replace(/\{\{cidade\}\}/g, 'São Paulo')
+  const rendered = html.replace(/\{\{nome\}\}/g, '⟨nome do lead⟩')
+    .replace(/\{\{email\}\}/g, '⟨email do lead⟩')
+    .replace(/\{\{segmento\}\}/g, '⟨segmento do lead⟩')
+    .replace(/\{\{cidade\}\}/g, '⟨cidade do lead⟩')
+    .replace(/\{\{link_agenda\}\}/g, '#')
   // Usar iframe para isolamento de estilos
   preview.innerHTML = ''
   const iframe = document.createElement('iframe')
@@ -447,7 +485,10 @@ async function saveConfig(redirect) {
       email_assunto_padrao: document.getElementById('email_assunto_padrao').value,
       email_html_template: document.getElementById('email_html_template').value,
       email_remetente: document.getElementById('email_remetente').value,
-      email_remetente_nome: document.getElementById('email_remetente_nome').value
+      email_remetente_nome: document.getElementById('email_remetente_nome').value,
+      email_cor_header: document.getElementById('email_cor_header').value,
+      email_cor_botao: document.getElementById('email_cor_botao').value,
+      email_cor_texto: document.getElementById('email_cor_texto').value
     }
     var r = await fetch('/api/' + BOT + '/config', {
       method: 'POST',

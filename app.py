@@ -2162,6 +2162,9 @@ def api_save_config(bot):
     email_html = data.get('email_html_template', '')
     email_remetente = data.get('email_remetente', '')
     email_remetente_nome = data.get('email_remetente_nome', '')
+    email_cor_header = data.get('email_cor_header', '#1a2332')
+    email_cor_botao = data.get('email_cor_botao', '#2563eb')
+    email_cor_texto = data.get('email_cor_texto', '#ffffff')
     resend_api_key = data.get('resend_api_key', '')
     smtp_host = data.get('smtp_host', '')
     smtp_port = data.get('smtp_port', 587)
@@ -2193,6 +2196,9 @@ def api_save_config(bot):
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_user TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS serper_api_key TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_cor_header TEXT DEFAULT '#1a2332'",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_cor_botao TEXT DEFAULT '#2563eb'",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_cor_texto TEXT DEFAULT '#ffffff'",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_inicio INTEGER DEFAULT 9",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_fim INTEGER DEFAULT 18",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS duracao_reuniao INTEGER DEFAULT 30",
@@ -2220,6 +2226,7 @@ def api_save_config(bot):
                          linkedin_cargos=%s, msg_inicial=%s,
                          email_assunto_padrao=%s, email_html_template=%s,
                          email_remetente=%s, email_remetente_nome=%s,
+                         email_cor_header=%s, email_cor_botao=%s, email_cor_texto=%s,
                          resend_api_key=%s,
                          smtp_host=%s, smtp_port=%s,
                          smtp_user=%s, smtp_password=%s,
@@ -2231,6 +2238,9 @@ def api_save_config(bot):
                       email_html or None,
                       email_remetente or None,
                       email_remetente_nome or None,
+                      email_cor_header or '#1a2332',
+                      email_cor_botao or '#2563eb',
+                      email_cor_texto or '#ffffff',
                       resend_api_key or None,
                       smtp_host or None, smtp_port or 587,
                       smtp_user or None, smtp_password or None,
@@ -2748,7 +2758,13 @@ def api_generate_email(bot):
 
     pitch = _extrair_pitch(descricao, empresa, max_chars=150)
     pitch_lower = pitch[0].lower() + pitch[1:] if pitch else ''
-    cor_header, cor_btn = _extrair_cores_site(website)
+    cor_header = data.get('cor_header') or '#1a2332'
+    cor_btn = data.get('cor_botao') or '#2563eb'
+    cor_texto = data.get('cor_texto') or '#ffffff'
+    if cor_header == '#1a2332' and website:
+        site_h, site_b = _extrair_cores_site(website)
+        cor_header = site_h
+        cor_btn = site_b if cor_btn == '#2563eb' else cor_btn
     footer_extra = ''
     if website:
         site_limpo = re.sub(r'^https?://(www\.)?', '', website).rstrip('/')
@@ -2757,33 +2773,54 @@ def api_generate_email(bot):
     html = (
         '<!DOCTYPE html>\n'
         '<html><head><meta charset="utf-8"></head>\n'
-        '<body style="margin:0;padding:0;background:#f4f4f7;">\n'
-        '<div style="max-width:600px;margin:20px auto;background:#ffffff;'
-        'border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">\n'
-        '  <div style="background:' + cor_header + ';padding:24px 32px;">\n'
-        '    <span style="color:#ffffff;font-size:20px;font-weight:700;'
-        "font-family:'Segoe UI',Arial,sans-serif;\">" + empresa + '</span>\n'
+        '<body style="margin:0;padding:0;background:#f0f2f5;'
+        "font-family:'Segoe UI',Arial,Helvetica,sans-serif;\">\n"
+        '<div style="max-width:600px;margin:0 auto;background:#f0f2f5;padding:20px 0;">\n'
+        '\n'
+        '  <!-- HEADER -->\n'
+        '  <div style="background:' + cor_header + ';padding:0;'
+        'border-radius:12px 12px 0 0;overflow:hidden;">\n'
+        '    <div style="padding:32px 40px 28px;">\n'
+        '      <h1 style="margin:0;font-size:22px;font-weight:800;'
+        'color:' + cor_texto + ';letter-spacing:-0.3px;">' + empresa + '</h1>\n'
+        '    </div>\n'
+        '    <div style="height:4px;background:' + cor_btn + ';"></div>\n'
         '  </div>\n'
-        "  <div style=\"padding:32px;font-family:'Segoe UI',Arial,sans-serif;"
-        'font-size:15px;line-height:1.7;color:#333333;">\n'
-        '    <p style="margin:0 0 18px;">Olá <strong>{{nome}}</strong>,</p>\n'
-        '    <p style="margin:0 0 18px;">Sou da <strong>' + empresa
-        + '</strong>. Ajudamos empresas de {{segmento}} em {{cidade}} a '
-        + pitch_lower + '.</p>\n'
-        '    <p style="margin:0 0 24px;">Posso te mostrar em 15 minutos '
-        'como funciona na prática?</p>\n'
-        '    <p style="text-align:center;margin:0;">\n'
+        '\n'
+        '  <!-- BODY -->\n'
+        '  <div style="background:#ffffff;padding:36px 40px 32px;">\n'
+        '    <p style="margin:0 0 20px;font-size:16px;line-height:1.7;color:#1a1a1a;">\n'
+        '      Olá <strong>{{nome}}</strong>,\n'
+        '    </p>\n'
+        '    <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#374151;">\n'
+        '      Sou da <strong>' + empresa + '</strong>. Ajudamos empresas de\n'
+        '      <strong>{{segmento}}</strong> em <strong>{{cidade}}</strong> a\n'
+        '      ' + pitch_lower + '.\n'
+        '    </p>\n'
+        '    <p style="margin:0 0 28px;font-size:15px;line-height:1.7;color:#374151;">\n'
+        '      Posso te mostrar em 15 minutos como funciona na prática?\n'
+        '    </p>\n'
+        '\n'
+        '    <!-- CTA -->\n'
+        '    <div style="text-align:center;margin:0 0 8px;">\n'
         '      <a href="{{link_agenda}}" style="display:inline-block;background:'
-        + cor_btn + ';color:#ffffff;font-family:\'Segoe UI\',Arial,sans-serif;'
-        'font-size:15px;font-weight:700;text-decoration:none;padding:14px 32px;'
-        'border-radius:8px;">Agendar 15 min</a>\n'
+        + cor_btn + ';color:#ffffff;font-size:15px;font-weight:700;'
+        "font-family:'Segoe UI',Arial,sans-serif;"
+        'text-decoration:none;padding:15px 40px;border-radius:8px;'
+        'letter-spacing:0.2px;">Agendar conversa de 15 min &rarr;</a>\n'
+        '    </div>\n'
+        '  </div>\n'
+        '\n'
+        '  <!-- FOOTER -->\n'
+        '  <div style="background:#fafafa;padding:20px 40px;'
+        'border-radius:0 0 12px 12px;border-top:1px solid #e5e7eb;">\n'
+        '    <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;'
+        'line-height:1.5;">\n'
+        '      <strong style="color:#6b7280;">' + empresa + '</strong>'
+        + footer_extra + '\n'
         '    </p>\n'
         '  </div>\n'
-        '  <div style="padding:16px 32px;text-align:center;'
-        "font-family:'Segoe UI',Arial,sans-serif;font-size:11px;"
-        'color:#999999;border-top:1px solid #eee;">\n'
-        '    ' + empresa + footer_extra + '\n'
-        '  </div>\n'
+        '\n'
         '</div>\n'
         '</body></html>'
     )
