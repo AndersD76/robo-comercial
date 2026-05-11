@@ -92,15 +92,11 @@ def _patch_modulos(schema: str, cfg: dict):
     if termos:
         _cfg.TERMOS_BUSCA = termos
 
-    # Link de agendamento
-    demo_link = os.environ.get('DEMO_CAL_LINK', '')
-    if demo_link:
-        _cfg.DEMO_CAL_LINK = demo_link
-
     # Mensagens customizadas do usuário
     empresa_nome = cfg.get('empresa_nome') or 'Nossa empresa'
     produto = cfg.get('descricao') or 'nossa solução'
-    cal_link = _cfg.DEMO_CAL_LINK
+    base_url = os.environ.get('BASE_URL', 'https://www.turbovenda.com.br')
+    cal_link = base_url
 
     msg_inicial = cfg.get('msg_inicial')
     msg_followup1 = cfg.get('msg_followup1')
@@ -145,6 +141,36 @@ def _patch_modulos(schema: str, cfg: dict):
 
 
 # =============================================================================
+# LINK DE AGENDA POR LEAD (usa sistema interno, não Google Calendar)
+# =============================================================================
+
+def _get_link_agenda_lead(schema: str, lead_id: int) -> str:
+    """Gera link de agendamento do sistema TurboVenda para um lead específico."""
+    try:
+        conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+        with conn.cursor() as c:
+            c.execute('SET search_path TO %s, public', (schema,))
+        conn.commit()
+        with conn.cursor() as c:
+            c.execute('SELECT agenda_token FROM empresas WHERE id = %s', (lead_id,))
+            row = c.fetchone()
+            if row and row.get('agenda_token'):
+                token = row['agenda_token']
+            else:
+                import secrets as _sec
+                token = _sec.token_urlsafe(16)
+                c.execute('UPDATE empresas SET agenda_token = %s WHERE id = %s',
+                          (token, lead_id))
+                conn.commit()
+        conn.close()
+        base_url = os.environ.get('BASE_URL', 'https://www.turbovenda.com.br')
+        return f'{base_url}/agendar/{token}'
+    except Exception as e:
+        print(f'[{schema}] Erro link agenda: {e}', flush=True)
+        return os.environ.get('BASE_URL', 'https://www.turbovenda.com.br')
+
+
+# =============================================================================
 # SISTEMA DE IA DINÂMICO
 # =============================================================================
 
@@ -159,7 +185,7 @@ class GeradorMensagensDinamico:
         self.schema = schema
         self.empresa_nome = cfg.get('empresa_nome') or 'Nossa empresa'
         self.descricao = cfg.get('descricao') or 'solução para empresas'
-        self.demo_link = os.environ.get('DEMO_CAL_LINK', '')
+        self.base_url = os.environ.get('BASE_URL', 'https://www.turbovenda.com.br')
         self.ai_client = None
 
         api_key = os.environ.get('ANTHROPIC_API_KEY', '')
@@ -173,28 +199,37 @@ class GeradorMensagensDinamico:
         if not self.ai_client:
             print(f'[{schema}] Sem IA — usando templates fixos', flush=True)
 
-    def _system_prompt(self):
+    def _get_lead_link(self, lead):
+        """Retorna link de agendamento do sistema para o lead."""
+        lead_id = lead.get('id')
+        if lead_id:
+            return _get_link_agenda_lead(self.schema, lead_id)
+        return self.base_url
+
+    def _system_prompt(self, link_agenda=''):
         return f"""Você é vendedor da empresa "{self.empresa_nome}".
 
 SOBRE A EMPRESA/PRODUTO:
 {self.descricao}
 
-LINK DE AGENDAMENTO: {self.demo_link}
+LINK DE AGENDAMENTO: {link_agenda}
 
 REGRAS PARA MENSAGENS WHATSAPP:
-1. Máximo 6 linhas (WhatsApp é rápido)
-2. Comece com "Olá!" ou "Oi!"
-3. Mencione o segmento/atividade da empresa do lead
-4. Se tiver link de agendamento, inclua-o
-5. Use 1-2 emojis no máximo
-6. Tom profissional mas amigável
-7. Retorne APENAS a mensagem, sem aspas"""
+1. Máximo 4 linhas (WhatsApp longo = ignorado)
+2. Comece com "Oi!" ou "Bom dia,"
+3. 1 frase de benefício concreto do produto
+4. Inclua o link de agendamento exatamente como fornecido
+5. 1 emoji no máximo
+6. Tom direto e profissional
+7. SEM assinatura, SEM "Abraço", SEM "Equipe"
+8. Retorne APENAS a mensagem, sem aspas"""
 
     def gerar_inicial(self, lead):
         segmento = lead.get('segmento', 'empresa')
         nome_lead = lead.get('nome_fantasia', 'empresa')
         cidade = lead.get('cidade', '')
         estado = lead.get('estado', '')
+        link_agenda = self._get_lead_link(lead)
 
         if self.ai_client:
             try:
@@ -203,7 +238,7 @@ REGRAS PARA MENSAGENS WHATSAPP:
                 r = self.ai_client.messages.create(
                     model='claude-haiku-4-5-20251001',
                     max_tokens=350,
-                    system=self._system_prompt(),
+                    system=self._system_prompt(link_agenda),
                     messages=[{'role': 'user',
                                 'content': f'Crie mensagem inicial de WhatsApp:\n{info}'}]
                 )
@@ -213,14 +248,14 @@ REGRAS PARA MENSAGENS WHATSAPP:
             except Exception as e:
                 print(f'[{self.schema}] IA erro: {e}', flush=True)
 
-        # Fallback template
-        from config import MENSAGENS, DEMO_CAL_LINK
+        from config import MENSAGENS
         tpl = random.choice(MENSAGENS['inicial']) if isinstance(MENSAGENS['inicial'], list) else MENSAGENS['inicial']
-        return tpl.format(segmento=segmento, cal_link=DEMO_CAL_LINK,
+        return tpl.format(segmento=segmento, cal_link=link_agenda,
                           empresa=self.empresa_nome)
 
     def gerar_resposta(self, lead, mensagem_recebida, historico=None, estagio='inicial'):
         intencao = self.detectar_intencao(mensagem_recebida, estagio)
+        link_agenda = self._get_lead_link(lead)
 
         if self.ai_client:
             try:
@@ -233,7 +268,7 @@ REGRAS PARA MENSAGENS WHATSAPP:
                 r = self.ai_client.messages.create(
                     model='claude-haiku-4-5-20251001',
                     max_tokens=300,
-                    system=self._system_prompt(),
+                    system=self._system_prompt(link_agenda),
                     messages=[{'role': 'user',
                                 'content': (
                                     f'Lead: {lead.get("nome_fantasia")}\n'
@@ -250,16 +285,17 @@ REGRAS PARA MENSAGENS WHATSAPP:
             except Exception as e:
                 print(f'[{self.schema}] IA resp erro: {e}', flush=True)
 
-        return self._resposta_fallback(intencao, estagio), intencao
+        return self._resposta_fallback(intencao, estagio, link_agenda), intencao
 
     def gerar_followup(self, lead, numero_followup):
-        from config import MENSAGENS, DEMO_CAL_LINK
+        from config import MENSAGENS
+        link_agenda = self._get_lead_link(lead)
         key = f'followup{numero_followup}'
         tpl = MENSAGENS.get(key, '')
         if isinstance(tpl, list):
             tpl = random.choice(tpl)
         return tpl.format(
-            cal_link=DEMO_CAL_LINK,
+            cal_link=link_agenda,
             empresa=self.empresa_nome,
             segmento=lead.get('segmento', 'empresa')
         )
@@ -278,8 +314,8 @@ REGRAS PARA MENSAGENS WHATSAPP:
             nivel = 'media'
         return {'nivel': nivel, 'msg_original': msg}
 
-    def _resposta_fallback(self, intencao, estagio):
-        from config import MENSAGENS, DEMO_CAL_LINK
+    def _resposta_fallback(self, intencao, estagio, link_agenda=''):
+        from config import MENSAGENS
         nivel = intencao.get('nivel', 'media')
         if nivel in ('demo', 'agendamento'):
             msg = MENSAGENS.get('demo_proposta', '')
@@ -288,10 +324,10 @@ REGRAS PARA MENSAGENS WHATSAPP:
         elif nivel == 'alta':
             msg = MENSAGENS.get('interesse', '')
         else:
-            msg = f'Obrigado pelo contato! Qualquer dúvida é só chamar. Agende aqui: {DEMO_CAL_LINK}'
+            msg = f'Obrigado pelo contato! Qualquer dúvida é só chamar. Agende aqui: {link_agenda}'
         if isinstance(msg, list):
             msg = random.choice(msg)
-        return msg.format(cal_link=DEMO_CAL_LINK, empresa=self.empresa_nome)
+        return msg.format(cal_link=link_agenda, empresa=self.empresa_nome)
 
 
 # =============================================================================
