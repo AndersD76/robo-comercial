@@ -1882,7 +1882,6 @@ function loadWaStats(){
     const el=document.getElementById('wa-lead-count');
     if(el) el.textContent=comWa;
   }).catch(()=>{});
-  // Check WA bot status
   fetch(`/api/${BOT}/status`).then(r=>r.json()).then(d=>{
     const st=document.getElementById('wa-conn-status');
     const btnStart=document.getElementById('btn-wa-start');
@@ -1893,48 +1892,95 @@ function loadWaStats(){
       btnStart.innerHTML='<i class="fab fa-whatsapp"></i> Conectado';
       btnStart.disabled=true;
       btnStop.disabled=false;
-      document.getElementById('wa-action-status').textContent='';
     } else {
       st.innerHTML='<i class="fa fa-circle-xmark"></i> Desconectado';
       st.style.color='var(--muted)';
       btnStart.innerHTML='<i class="fab fa-whatsapp"></i> Conectar e Enviar';
       btnStart.disabled=false;
       btnStop.disabled=true;
+      if(d.wa_exit!==null&&d.wa_exit!==undefined){
+        const statusEl=document.getElementById('wa-action-status');
+        statusEl.textContent='Último processo encerrou com código '+d.wa_exit;
+        statusEl.style.color='#ef4444';
+      }
     }
   }).catch(()=>{});
 }
 function startWaBot(btn){
   btn.disabled=true;
   btn.innerHTML='<i class="fa fa-spinner fa-spin"></i> Conectando...';
+  const statusEl=document.getElementById('wa-action-status');
   const msg=document.getElementById('wa-msg-template').value.trim();
   fetch(`/api/${BOT}/start`,{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({canal:'wa',wa_msg:msg||null})
   }).then(r=>r.json()).then(d=>{
     if(d.status==='started'){
-      document.getElementById('wa-action-status').textContent='Robô iniciado! Aguarde o QR Code...';
-      document.getElementById('wa-action-status').style.color='#22c55e';
+      statusEl.textContent='Robô iniciado! Aguarde o QR Code...';
+      statusEl.style.color='#22c55e';
       startQrPolling();
-      setTimeout(loadWaStats,3000);
+      setTimeout(()=>_checkWaAlive(btn),5000);
+    } else if(d.status==='already_running'){
+      btn.disabled=false;
+      btn.innerHTML='<i class="fab fa-whatsapp"></i> Conectar e Enviar';
+      statusEl.textContent='Já está rodando';
+      statusEl.style.color='#f59e0b';
     } else {
       btn.disabled=false;
       btn.innerHTML='<i class="fab fa-whatsapp"></i> Conectar e Enviar';
-      document.getElementById('wa-action-status').textContent=d.status==='already_running'?'Já está rodando':'Erro';
+      statusEl.textContent='Erro: '+(d.error||'falha ao iniciar');
+      statusEl.style.color='#ef4444';
     }
-  }).catch(()=>{
+  }).catch(e=>{
     btn.disabled=false;
     btn.innerHTML='<i class="fab fa-whatsapp"></i> Conectar e Enviar';
+    statusEl.textContent='Erro de conexão';
+    statusEl.style.color='#ef4444';
   });
 }
+function _checkWaAlive(btn){
+  fetch(`/api/${BOT}/status`).then(r=>r.json()).then(d=>{
+    if(!d.wa){
+      btn.disabled=false;
+      btn.innerHTML='<i class="fab fa-whatsapp"></i> Conectar e Enviar';
+      stopQrPolling();
+      const statusEl=document.getElementById('wa-action-status');
+      statusEl.style.color='#ef4444';
+      if(d.wa_exit!==null&&d.wa_exit!==undefined){
+        statusEl.textContent='Robô caiu (código '+d.wa_exit+'). Veja o console para detalhes.';
+      } else {
+        statusEl.textContent='Robô parou inesperadamente. Veja o console.';
+      }
+      fetch(`/api/${BOT}/console?canal=wa&n=10`).then(r=>r.json()).then(c=>{
+        if(c.lines&&c.lines.length){
+          const last=c.lines.slice(-5).join('\n');
+          statusEl.textContent+='\n'+last;
+          statusEl.style.whiteSpace='pre-wrap';
+        }
+      }).catch(()=>{});
+    } else {
+      loadWaStats();
+    }
+  }).catch(()=>{});
+}
 function stopWaBot(btn){
+  btn.disabled=true;
+  btn.innerHTML='<i class="fa fa-spinner fa-spin"></i> Parando...';
   fetch(`/api/${BOT}/stop`,{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({canal:'wa'})
-  }).then(r=>r.json()).then(()=>{
+  }).then(r=>r.json()).then(d=>{
+    stopQrPolling();
     loadWaStats();
-    document.getElementById('wa-action-status').textContent='WhatsApp parado';
-    document.getElementById('wa-action-status').style.color='var(--muted)';
+    const statusEl=document.getElementById('wa-action-status');
+    statusEl.textContent=d.was_running?'WhatsApp parado com sucesso':'WhatsApp não estava rodando';
+    statusEl.style.color=d.was_running?'#f59e0b':'var(--muted)';
     document.getElementById('btn-wa-start').disabled=false;
     document.getElementById('btn-wa-start').innerHTML='<i class="fab fa-whatsapp"></i> Conectar e Enviar';
-  }).catch(()=>{});
+    btn.disabled=false;
+    btn.innerHTML='<i class="fa fa-stop"></i> Parar';
+  }).catch(()=>{
+    btn.disabled=false;
+    btn.innerHTML='<i class="fa fa-stop"></i> Parar';
+  });
 }
 
 // ── Respostas ─────────────────────────────────────────────────────────────

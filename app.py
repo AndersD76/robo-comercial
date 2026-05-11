@@ -1023,9 +1023,16 @@ def api_logs(bot):
 @login_required
 def api_bot_status(bot):
     schema = _get_schema() or bot
+    wa_proc = _procs.get(schema, {}).get('wa')
+    wa_running = wa_proc is not None and wa_proc.poll() is None
+    wa_exit = None
+    if wa_proc is not None and wa_proc.poll() is not None:
+        wa_exit = wa_proc.returncode
+        _procs.setdefault(schema, {})['wa'] = None
     return jsonify({
         'busca': _proc_running(schema, 'busca'),
-        'wa': _proc_running(schema, 'wa'),
+        'wa': wa_running,
+        'wa_exit': wa_exit,
         'linkedin': _proc_running(schema, 'linkedin'),
     })
 
@@ -1078,10 +1085,16 @@ def api_bot_stop(bot):
     data = request.get_json(silent=True) or {}
     canal = data.get('canal', 'busca')
     proc = _procs.get(schema, {}).get(canal)
+    was_running = False
     if proc and proc.poll() is None:
         proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            proc.kill()
+        was_running = True
     _procs.setdefault(schema, {})[canal] = None
-    return jsonify({'status': 'stopped', 'canal': canal})
+    return jsonify({'status': 'stopped', 'canal': canal, 'was_running': was_running})
 
 
 @app.route('/api/<bot>/console')
