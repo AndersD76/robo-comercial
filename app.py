@@ -2804,6 +2804,16 @@ def api_generate_email(bot):
 def _build_email_html(*, empresa, pitch, cor_header, cor_btn, cor_texto,
                       site_link_inline, site_footer, site_url):
     """Monta o HTML profissional do email de prospecção."""
+    site_display = site_url.replace("https://", "").replace("http://", "").rstrip("/") if site_url else ''
+    header_subtitle = ''
+    if site_url:
+        header_subtitle = (
+            '<p style="margin:8px 0 0;font-family:Segoe UI,Arial,sans-serif;'
+            'font-size:13px;color:' + cor_texto + ';opacity:0.7;">'
+            + site_display + '</p>')
+    footer_line = ''
+    if site_footer:
+        footer_line = ' &mdash; ' + site_footer
     return f'''<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -2828,7 +2838,7 @@ def _build_email_html(*, empresa, pitch, cor_header, cor_btn, cor_texto,
             <h1 style="margin:0;font-family:'Segoe UI',Arial,Helvetica,sans-serif;
                         font-size:26px;font-weight:800;color:{cor_texto};
                         letter-spacing:-0.5px;">{empresa}</h1>
-            {('<p style="margin:8px 0 0;font-family:\'Segoe UI\',Arial,sans-serif;font-size:13px;color:' + cor_texto + ';opacity:0.7;">' + site_url.replace("https://","").replace("http://","").rstrip("/") + '</p>') if site_url else ''}
+            {header_subtitle}
           </td>
         </tr>
 
@@ -2887,7 +2897,7 @@ def _build_email_html(*, empresa, pitch, cor_header, cor_btn, cor_texto,
             <p style="margin:0;font-family:'Segoe UI',Arial,sans-serif;
                        font-size:12px;color:#9ca3af;text-align:center;line-height:1.6;">
               <strong style="color:#6b7280;">{empresa}</strong>
-              {(' &mdash; ' + site_footer) if site_footer else ''}
+              {footer_line}
             </p>
           </td>
         </tr>
