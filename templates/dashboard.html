@@ -1945,12 +1945,16 @@ function loadWaStats(){
         if(empty)empty.style.display='';
       } else {
         if(empty)empty.style.display='none';
-        tb.innerHTML=comWa.slice(0,200).map(l=>{
+        const waPend=comWa.filter(l=>!l.wa_enviado&&!['contactada','respondeu','qualificado','convertido','robo_wa','bounce','spam','encerrado'].includes(l.status));
+        const waJaEnv=comWa.filter(l=>l.wa_enviado||['contactada','respondeu','qualificado','convertido','robo_wa','bounce','spam','encerrado'].includes(l.status));
+        const waOrd=[...waPend,...waJaEnv];
+        if(el) el.textContent=waPend.length+' pendentes / '+comWa.length+' total';
+        tb.innerHTML=waOrd.slice(0,200).map(l=>{
           const waEnv=l.wa_enviado?new Date(l.wa_enviado).toLocaleDateString('pt-BR'):'';
-          const enviado=l.wa_enviado||l.status==='contactada'||l.status==='respondeu'||l.status==='qualificado'||l.status==='convertido'||l.status==='robo_wa';
+          const enviado=l.wa_enviado||['contactada','respondeu','qualificado','convertido','robo_wa','bounce','spam','encerrado'].includes(l.status);
           const envChip=enviado?'<span style="color:#22c55e"><i class="fab fa-whatsapp"></i> '+(waEnv||'Enviado')+'</span>'
             :'<span style="color:var(--muted)">Pendente</span>';
-          return `<tr>
+          return `<tr style="${enviado?'opacity:.45':''}">
             <td><b>${l.nome_fantasia||'—'}</b><br><small style="color:var(--muted)">${l.segmento||''}</small></td>
             <td style="font-size:12px;color:var(--muted)">${l.whatsapp||'—'}</td>
             <td>${statusChip(l.status,l.demo_status)}</td>
@@ -2160,13 +2164,17 @@ function loadEmailLeads(){
       tb.innerHTML='<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted)">Nenhum lead com email</td></tr>';
       return;
     }
-    tb.innerHTML=comEmail.slice(0,300).map(l=>{
+    const pendentes=comEmail.filter(l=>!l.email_enviado&&!['contactada','respondeu','qualificado','convertido','bounce','spam','encerrado'].includes(l.status));
+    const jaEnviados=comEmail.filter(l=>l.email_enviado||['contactada','respondeu','qualificado','convertido','bounce','spam','encerrado'].includes(l.status));
+    const ordenados=[...pendentes,...jaEnviados];
+    document.getElementById('email-lead-count').textContent=pendentes.length+' pendentes / '+comEmail.length+' total';
+    tb.innerHTML=ordenados.slice(0,300).map(l=>{
       const envDt=l.email_enviado?new Date(l.email_enviado).toLocaleDateString('pt-BR'):'';
-      const enviado=l.email_enviado||l.status==='contactada'||l.status==='respondeu'||l.status==='qualificado'||l.status==='convertido';
+      const enviado=l.email_enviado||['contactada','respondeu','qualificado','convertido','bounce','spam','encerrado'].includes(l.status);
       const envChip=enviado?'<span style="color:#fb923c;font-size:11px"><i class="fa fa-check"></i> '+(envDt||'Enviado')+'</span>'
         :'<span style="color:var(--muted);font-size:11px">Pendente</span>';
-      return `<tr>
-        <td><input type="checkbox" class="email-chk" value="${l.id}"></td>
+      return `<tr style="${enviado?'opacity:.45':''}">
+        <td>${enviado?'<i class="fa fa-check" style="color:#fb923c;font-size:11px"></i>':'<input type="checkbox" class="email-chk" value="'+l.id+'">'}</td>
         <td><b>${l.nome_fantasia||'—'}</b><br><small style="color:var(--muted)">${l.segmento||''} ${l.cidade?'- '+l.cidade:''}</small></td>
         <td style="font-size:12px;color:var(--muted)">${l.email}</td>
         <td>${statusChip(l.status,l.demo_status)}</td>

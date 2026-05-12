@@ -2038,12 +2038,20 @@ def api_send_emails(bot):
     conn = _conn(schema)
     c = conn.cursor()
     ph = ','.join(['%s'] * len(lead_ids))
-    c.execute(f"SELECT id, nome_fantasia, email FROM empresas WHERE id IN ({ph}) AND email IS NOT NULL",
-              lead_ids)
+    try:
+        c.execute(f"SELECT id, nome_fantasia, email FROM empresas WHERE id IN ({ph}) AND email IS NOT NULL"
+                  f" AND (email_enviado IS NULL)"
+                  f" AND status NOT IN ('contactada','respondeu','qualificado','convertido','bounce','spam','encerrado')",
+                  lead_ids)
+    except Exception:
+        conn.rollback()
+        c.execute(f"SELECT id, nome_fantasia, email FROM empresas WHERE id IN ({ph}) AND email IS NOT NULL"
+                  f" AND status NOT IN ('contactada','respondeu','qualificado','convertido','bounce','spam','encerrado')",
+                  lead_ids)
     leads = c.fetchall()
     conn.close()
     if not leads:
-        return jsonify({'error': 'nenhum lead com email'}), 400
+        return jsonify({'error': 'Todos os leads selecionados já foram contactados ou não têm email'}), 400
 
     empresa_nome = user['empresa_nome'] if user else ''
     base_url = os.environ.get('BASE_URL', request.host_url.rstrip('/'))
@@ -2112,9 +2120,18 @@ def api_email_campanha(bot):
     try:
         conn = _conn(schema)
         c = conn.cursor()
-        c.execute("""SELECT id, nome_fantasia, email, segmento, cidade, estado
-                     FROM empresas WHERE email IS NOT NULL AND email != ''
-                     ORDER BY score DESC LIMIT 500""")
+        try:
+            c.execute("""SELECT id, nome_fantasia, email, segmento, cidade, estado
+                         FROM empresas WHERE email IS NOT NULL AND email != ''
+                         AND email_enviado IS NULL
+                         AND status NOT IN ('contactada','respondeu','qualificado','convertido','bounce','spam','encerrado')
+                         ORDER BY score DESC LIMIT 500""")
+        except Exception:
+            conn.rollback()
+            c.execute("""SELECT id, nome_fantasia, email, segmento, cidade, estado
+                         FROM empresas WHERE email IS NOT NULL AND email != ''
+                         AND status NOT IN ('contactada','respondeu','qualificado','convertido','bounce','spam','encerrado')
+                         ORDER BY score DESC LIMIT 500""")
         leads = c.fetchall()
         conn.close()
     except Exception as e:
