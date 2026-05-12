@@ -767,21 +767,42 @@
           </div>
           <div>
             <div style="font-size:16px;font-weight:700">Controle de Respostas</div>
-            <div style="font-size:12px;color:var(--muted)">Acompanhe quem respondeu e qualifique seus leads</div>
+            <div style="font-size:12px;color:var(--muted)">Acompanhe quem abriu, clicou e respondeu seus emails</div>
+          </div>
+        </div>
+
+        <!-- KPIs de email tracking -->
+        <div id="resp-kpis" style="display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap">
+          <div style="background:rgba(251,146,60,.08);border:1px solid rgba(251,146,60,.2);border-radius:10px;padding:12px 20px;min-width:110px;text-align:center">
+            <div style="font-size:22px;font-weight:800;color:#fb923c" id="kpi-emails-env">0</div>
+            <div style="font-size:11px;color:var(--muted)">Enviados</div>
+          </div>
+          <div style="background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.2);border-radius:10px;padding:12px 20px;min-width:110px;text-align:center">
+            <div style="font-size:22px;font-weight:800;color:#60a5fa" id="kpi-emails-abr">0</div>
+            <div style="font-size:11px;color:var(--muted)">Abriram</div>
+          </div>
+          <div style="background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.2);border-radius:10px;padding:12px 20px;min-width:110px;text-align:center">
+            <div style="font-size:22px;font-weight:800;color:#34d399" id="kpi-emails-cli">0</div>
+            <div style="font-size:11px;color:var(--muted)">Clicaram</div>
+          </div>
+          <div style="background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.2);border-radius:10px;padding:12px 20px;min-width:110px;text-align:center">
+            <div style="font-size:22px;font-weight:800;color:#a78bfa" id="kpi-emails-resp">0</div>
+            <div style="font-size:11px;color:var(--muted)">Responderam</div>
           </div>
         </div>
 
         <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
           <button class="tab-btn on" onclick="filterRespostas('todos',this)" style="font-size:12px;padding:6px 14px">Todos</button>
+          <button class="tab-btn" onclick="filterRespostas('clicou',this)" style="font-size:12px;padding:6px 14px"><i class="fa fa-mouse-pointer" style="color:#34d399"></i> Clicaram</button>
+          <button class="tab-btn" onclick="filterRespostas('abriu',this)" style="font-size:12px;padding:6px 14px"><i class="fa fa-envelope-open" style="color:#60a5fa"></i> Abriram</button>
           <button class="tab-btn" onclick="filterRespostas('respondeu',this)" style="font-size:12px;padding:6px 14px"><i class="fa fa-reply" style="color:#a78bfa"></i> Responderam</button>
-          <button class="tab-btn" onclick="filterRespostas('email_enviado',this)" style="font-size:12px;padding:6px 14px"><i class="fa fa-envelope" style="color:#fb923c"></i> Email enviado</button>
           <button class="tab-btn" onclick="filterRespostas('qualificado',this)" style="font-size:12px;padding:6px 14px"><i class="fa fa-star" style="color:#fbbf24"></i> Qualificados</button>
         </div>
 
         <div class="scroll-box" style="max-height:60vh">
           <table>
             <thead><tr>
-              <th>Empresa</th><th>Canal</th><th>Contato</th><th>Status</th><th>Data</th><th style="width:120px">Ação</th>
+              <th>Empresa</th><th>Canal</th><th>Contato</th><th>Tracking</th><th>Status</th><th>Data</th><th style="width:120px">Acao</th>
             </tr></thead>
             <tbody id="resp-tb"></tbody>
           </table>
@@ -951,6 +972,8 @@ function statusChip(s,d){
   if(s==='contactada') return '<span class="chip c-cont">Contactado</span>';
   if(s==='robo_wa')    return '<span class="chip" style="background:#78716c;color:#fff;padding:2px 8px;font-size:10px;border-radius:6px">🤖 Robô</span>';
   if(s==='sem_whatsapp')return '<span class="chip" style="background:#57534e;color:#d6d3d1;padding:2px 8px;font-size:10px;border-radius:6px">Sem WA</span>';
+  if(s==='bounce')     return '<span class="chip" style="background:#ef4444;color:#fff;padding:2px 8px;font-size:10px;border-radius:6px">Bounce</span>';
+  if(s==='spam')       return '<span class="chip" style="background:#f97316;color:#fff;padding:2px 8px;font-size:10px;border-radius:6px">Spam</span>';
   return '<span class="chip c-novo">Novo</span>';
 }
 function lbCls(t=''){
@@ -1993,13 +2016,35 @@ function filterRespostas(filter,btn){
   }
   loadRespostas();
 }
+function _trackingChip(l){
+  if(l.email_clicado) return '<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:600;background:rgba(52,211,153,.15);color:#34d399"><i class="fa fa-mouse-pointer"></i> Clicou</span>';
+  if(l.email_aberto) return '<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:600;background:rgba(96,165,250,.15);color:#60a5fa"><i class="fa fa-envelope-open"></i> Abriu</span>';
+  if(l.email_enviado) return '<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:600;background:rgba(251,146,60,.15);color:#fb923c"><i class="fa fa-paper-plane"></i> Enviado</span>';
+  if(l.wa_enviado) return '<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:600;background:rgba(34,197,94,.15);color:#22c55e"><i class="fab fa-whatsapp"></i> WA</span>';
+  return '<span style="color:var(--muted);font-size:10px">—</span>';
+}
 function loadRespostas(){
-  fetch(`/api/${BOT}/leads?limite=500`).then(r=>r.json()).then(d=>{
+  fetch(`/api/${BOT}/leads?limite=2000`).then(r=>r.json()).then(d=>{
+    // Update KPIs
+    const envCount=d.filter(l=>l.email_enviado).length;
+    const abrCount=d.filter(l=>l.email_aberto).length;
+    const cliCount=d.filter(l=>l.email_clicado).length;
+    const respCount=d.filter(l=>l.status==='respondeu'||l.status==='qualificado').length;
+    document.getElementById('kpi-emails-env').textContent=envCount;
+    document.getElementById('kpi-emails-abr').textContent=abrCount;
+    document.getElementById('kpi-emails-cli').textContent=cliCount;
+    document.getElementById('kpi-emails-resp').textContent=respCount;
+
     let leads=d;
-    if(_respFilter==='respondeu') leads=d.filter(l=>l.status==='respondeu'||l.status==='qualificado');
-    else if(_respFilter==='email_enviado') leads=d.filter(l=>l.email_enviado);
+    if(_respFilter==='clicou') leads=d.filter(l=>l.email_clicado);
+    else if(_respFilter==='abriu') leads=d.filter(l=>l.email_aberto);
+    else if(_respFilter==='respondeu') leads=d.filter(l=>l.status==='respondeu'||l.status==='qualificado');
     else if(_respFilter==='qualificado') leads=d.filter(l=>l.status==='qualificado'||l.status==='convertido');
-    else leads=d.filter(l=>l.email_enviado||l.status!=='novo');
+    else leads=d.filter(l=>l.email_enviado||l.wa_enviado||l.status!=='novo');
+
+    // Sort: qualificado > respondeu > clicou > abriu > enviado
+    const _sc=x=>(x.status==='qualificado'?16:0)+(x.status==='respondeu'?8:0)+(x.email_clicado?4:0)+(x.email_aberto?2:0);
+    leads.sort((a,b)=>_sc(b)-_sc(a));
 
     const tb=document.getElementById('resp-tb');
     const empty=document.getElementById('resp-empty');
@@ -2011,15 +2056,18 @@ function loadRespostas(){
     empty.style.display='none';
     tb.innerHTML=leads.map(l=>{
       const canal=l.email_enviado?'<span style="color:#fb923c"><i class="fa fa-envelope"></i> Email</span>'
-        :(l.whatsapp?'<span style="color:#22c55e"><i class="fab fa-whatsapp"></i> WA</span>'
+        :(l.wa_enviado?'<span style="color:#22c55e"><i class="fab fa-whatsapp"></i> WA</span>'
         :'<span style="color:var(--muted)">—</span>');
       const contato=l.email||l.whatsapp||l.telefone||'—';
-      const dt=l.email_enviado?new Date(l.email_enviado).toLocaleDateString('pt-BR')
-        :(l.encontrado_em?new Date(l.encontrado_em).toLocaleDateString('pt-BR'):'—');
+      const dt=l.email_clicado?new Date(l.email_clicado).toLocaleDateString('pt-BR')
+        :(l.email_aberto?new Date(l.email_aberto).toLocaleDateString('pt-BR')
+        :(l.email_enviado?new Date(l.email_enviado).toLocaleDateString('pt-BR')
+        :(l.encontrado_em?new Date(l.encontrado_em).toLocaleDateString('pt-BR'):'—')));
       return `<tr>
         <td><b>${l.nome_fantasia||'—'}</b><br><small style="color:var(--muted)">${l.segmento||''}</small></td>
         <td>${canal}</td>
         <td style="font-size:11px;color:var(--muted)">${contato}</td>
+        <td>${_trackingChip(l)}</td>
         <td>${statusChip(l.status,l.demo_status)}</td>
         <td style="font-size:11px;color:var(--muted)">${dt}</td>
         <td style="white-space:nowrap">

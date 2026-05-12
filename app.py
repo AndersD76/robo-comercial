@@ -12,10 +12,11 @@ import re
 import secrets
 import subprocess
 import sys
+from urllib.parse import quote as _urlquote
 import psycopg2
 import psycopg2.extras
 from functools import wraps
-from flask import (Flask, jsonify, redirect, render_template,
+from flask import (Flask, jsonify, make_response, redirect, render_template,
                    request, send_file, session, url_for)
 
 app = Flask(__name__)
@@ -296,6 +297,9 @@ def _init_user_schema(schema: str):
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_fim INTEGER DEFAULT 18",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS duracao_reuniao INTEGER DEFAULT 30",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS dias_semana TEXT DEFAULT '1,2,3,4,5'",
+        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS email_aberto TIMESTAMP",
+        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS email_clicado TIMESTAMP",
+        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS email_track_token TEXT",
     ]:
         try:
             c.execute(stmt)
@@ -409,7 +413,8 @@ def token_required(f):
 def get_stats(schema: str) -> dict:
     z = {'total_leads': 0, 'contactadas': 0, 'responderam': 0,
          'demos': 0, 'buscas_hoje': 0, 'emails_enviados': 0,
-         'linkedin_total': 0, 'msgs_hoje': 0, 'qualificados': 0}
+         'linkedin_total': 0, 'msgs_hoje': 0, 'qualificados': 0,
+         'emails_abertos': 0, 'emails_clicados': 0}
     if not DATABASE_URL or not schema:
         return z
     try:
@@ -437,6 +442,12 @@ def get_stats(schema: str) -> dict:
                   "WHERE email_enviado IS NOT NULL")
         z['emails_enviados'] = c.fetchone()['n']
         c.execute("SELECT COUNT(*) AS n FROM empresas "
+                  "WHERE email_aberto IS NOT NULL")
+        z['emails_abertos'] = c.fetchone()['n']
+        c.execute("SELECT COUNT(*) AS n FROM empresas "
+                  "WHERE email_clicado IS NOT NULL")
+        z['emails_clicados'] = c.fetchone()['n']
+        c.execute("SELECT COUNT(*) AS n FROM empresas "
                   "WHERE email_enviado::date = CURRENT_DATE")
         z['msgs_hoje'] = c.fetchone()['n']
         try:
@@ -461,6 +472,7 @@ def get_leads(schema: str, limite: int = 5000) -> list:
                             e.encontrado_em, e.cnpj, e.razao_social, e.website,
                             e.linkedin, e.instagram, e.fonte, e.porte,
                             e.email_enviado, e.wa_enviado, e.observacoes,
+                            e.email_aberto, e.email_clicado,
                             (SELECT ct.nome || ' - ' || ct.cargo
                              FROM contatos ct WHERE ct.empresa_id = e.id AND ct.decisor = 1
                              LIMIT 1) AS _decisor
@@ -1731,22 +1743,26 @@ def _processar_sequencias_schema(schema):
             passo = passos[idx]
             nome = p['nome_fantasia'] or 'empresa'
             link_agenda = _get_link_agenda(schema, p['empresa_id'])
+            track_token = _get_email_track_token(schema, p['empresa_id'])
+            seq_base_url = os.environ.get('BASE_URL', 'https://turbovenda.com.br')
+            track_open_url = f'{seq_base_url}/t/{track_token}/open.png'
+            track_click_url = f'{seq_base_url}/t/{track_token}/click?url={_urlquote(link_agenda, safe="")}'
             assunto = (passo.get('assunto', '')
                 .replace('{{nome}}', nome)
                 .replace('{nome}', nome)
-                .replace('{{link_agenda}}', link_agenda)
-                .replace('{link_agenda}', link_agenda))
+                .replace('{{link_agenda}}', track_click_url)
+                .replace('{link_agenda}', track_click_url))
             raw_msg = passo.get('mensagem') or passo.get('html_template') or ''
             raw_msg = (raw_msg
                 .replace('{{nome}}', nome)
                 .replace('{nome}', nome)
-                .replace('{{link_agenda}}', link_agenda)
-                .replace('{link_agenda}', link_agenda))
-            # Auto-wrap plain text in HTML
+                .replace('{{link_agenda}}', track_click_url)
+                .replace('{link_agenda}', track_click_url))
             if '<html' not in raw_msg.lower() and '<body' not in raw_msg.lower():
                 html = '<div style="font-family:sans-serif;font-size:14px;color:#333">' + raw_msg.replace('\n', '<br>') + '</div>'
             else:
                 html = raw_msg
+            html = _inject_tracking_pixel(html, track_open_url)
             try:
                 ok = _send_email(ecfg, p['email'], nome,
                                  assunto, html)
@@ -2017,15 +2033,20 @@ def api_send_emails(bot):
         return jsonify({'error': 'nenhum lead com email'}), 400
 
     empresa_nome = user['empresa_nome'] if user else ''
+    base_url = os.environ.get('BASE_URL', request.host_url.rstrip('/'))
     enviados = erros = 0
     for lead in leads:
         nome = lead['nome_fantasia'] or 'empresa'
         link_agenda = _get_link_agenda(schema, lead['id'])
+        track_token = _get_email_track_token(schema, lead['id'])
+        track_open_url = f'{base_url}/t/{track_token}/open.png'
+        track_click_url = f'{base_url}/t/{track_token}/click?url={_urlquote(link_agenda, safe="")}'
         html = (tpl_html.replace('{{nome}}', nome)
-                        .replace('{{DEMO_CAL_LINK}}', link_agenda)
-                        .replace('{{cal_link}}', link_agenda)
-                        .replace('{{link_agenda}}', link_agenda)
+                        .replace('{{DEMO_CAL_LINK}}', track_click_url)
+                        .replace('{{cal_link}}', track_click_url)
+                        .replace('{{link_agenda}}', track_click_url)
                         .replace('{{EMPRESA}}', empresa_nome))
+        html = _inject_tracking_pixel(html, track_open_url)
         try:
             ok = _send_email(ecfg, lead['email'], nome,
                              f'{nome}, conheça {empresa_nome}', html)
@@ -2089,18 +2110,22 @@ def api_email_campanha(bot):
     if not leads:
         return jsonify({'error': 'nenhum lead com email cadastrado'}), 400
 
+    base_url = os.environ.get('BASE_URL', request.host_url.rstrip('/'))
     enviados = erros = 0
     for lead in leads:
         nome = lead['nome_fantasia'] or 'empresa'
         link_agenda = _get_link_agenda(schema, lead['id'])
+        track_token = _get_email_track_token(schema, lead['id'])
+        track_open_url = f'{base_url}/t/{track_token}/open.png'
+        track_click_url = f'{base_url}/t/{track_token}/click?url={_urlquote(link_agenda, safe="")}'
         vars_map = {
             '{{nome}}': nome,
             '{{email}}': lead['email'] or '',
             '{{segmento}}': lead.get('segmento') or '',
             '{{cidade}}': lead.get('cidade') or '',
-            '{{link_agenda}}': link_agenda,
-            '{{cal_link}}': link_agenda,
-            '{{DEMO_CAL_LINK}}': link_agenda,
+            '{{link_agenda}}': track_click_url,
+            '{{cal_link}}': track_click_url,
+            '{{DEMO_CAL_LINK}}': track_click_url,
         }
         if html_template:
             html = html_template
@@ -2112,6 +2137,7 @@ def api_email_campanha(bot):
             for k, v in vars_map.items():
                 corpo_html = corpo_html.replace(k, v)
             html = f'<div style="font-family:sans-serif;font-size:15px;line-height:1.6;color:#333">{corpo_html}</div>'
+        html = _inject_tracking_pixel(html, track_open_url)
 
         subj = assunto
         for k, v in vars_map.items():
@@ -3148,6 +3174,157 @@ def _get_agenda_token(schema, lead_id):
     conn.commit()
     conn.close()
     return token
+
+
+def _get_email_track_token(schema, lead_id):
+    """Gera ou retorna token de tracking de email para o lead."""
+    conn = _conn(schema)
+    c = conn.cursor()
+    c.execute('SELECT email_track_token FROM empresas WHERE id=%s', (lead_id,))
+    row = c.fetchone()
+    if row and row.get('email_track_token'):
+        conn.close()
+        return row['email_track_token']
+    token = secrets.token_urlsafe(16)
+    c.execute('UPDATE empresas SET email_track_token=%s WHERE id=%s',
+              (token, lead_id))
+    conn.commit()
+    conn.close()
+    return token
+
+
+def _find_lead_by_email_token(token):
+    """Busca lead e schema pelo token de tracking de email."""
+    if not DATABASE_URL or not token:
+        return None, None
+    try:
+        conn = psycopg2.connect(
+            DATABASE_URL,
+            cursor_factory=psycopg2.extras.RealDictCursor)
+        c = conn.cursor()
+        c.execute('SELECT id, schema_name FROM users')
+        users = c.fetchall()
+        conn.close()
+        for u in users:
+            sch = u.get('schema_name')
+            if not sch:
+                continue
+            try:
+                conn2 = _conn(sch)
+                c2 = conn2.cursor()
+                c2.execute(
+                    'SELECT id FROM empresas WHERE email_track_token=%s',
+                    (token,))
+                row = c2.fetchone()
+                conn2.close()
+                if row:
+                    return sch, row['id']
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return None, None
+
+
+def _inject_tracking_pixel(html, track_url):
+    """Injeta pixel de tracking antes do </body>."""
+    pixel = (f'<img src="{track_url}" width="1" height="1" '
+             f'style="display:block;width:1px;height:1px;border:0" alt="">')
+    if '</body>' in html:
+        return html.replace('</body>', pixel + '</body>')
+    return html + pixel
+
+
+# ── Email Tracking Endpoints (públicos, sem auth) ──
+
+@app.route('/t/<token>/open.png')
+def email_track_open(token):
+    """Pixel 1x1 — registra abertura de email."""
+    schema, lead_id = _find_lead_by_email_token(token)
+    if schema and lead_id:
+        try:
+            conn = _conn(schema)
+            c = conn.cursor()
+            c.execute("""UPDATE empresas
+                SET email_aberto = COALESCE(email_aberto, NOW())
+                WHERE id = %s""", (lead_id,))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f'[track/open] {e}', flush=True)
+    import base64
+    pixel = base64.b64decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQAB'
+        'Nl7BcQAAAABJRU5ErkJggg==')
+    resp = make_response(pixel)
+    resp.headers['Content-Type'] = 'image/png'
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+    return resp
+
+
+@app.route('/t/<token>/click')
+def email_track_click(token):
+    """Redireciona para o link de agendamento, registra clique."""
+    schema, lead_id = _find_lead_by_email_token(token)
+    redirect_url = request.args.get('url', '/')
+    if schema and lead_id:
+        try:
+            conn = _conn(schema)
+            c = conn.cursor()
+            c.execute("""UPDATE empresas
+                SET email_clicado = COALESCE(email_clicado, NOW()),
+                    email_aberto = COALESCE(email_aberto, NOW())
+                WHERE id = %s""", (lead_id,))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f'[track/click] {e}', flush=True)
+    return redirect(redirect_url)
+
+
+@app.route('/webhook/email', methods=['POST'])
+def webhook_email():
+    """Webhook do Resend para eventos de email (bounce, complaint, etc)."""
+    data = request.get_json(silent=True) or {}
+    event_type = data.get('type', '')
+    payload = data.get('data', {})
+    to_email = ''
+    if isinstance(payload.get('to'), list) and payload['to']:
+        to_email = payload['to'][0]
+    elif isinstance(payload.get('to'), str):
+        to_email = payload['to']
+    print(f'[WEBHOOK] {event_type} to={to_email}', flush=True)
+    if event_type in ('email.bounced', 'email.complained'):
+        try:
+            conn = psycopg2.connect(
+                DATABASE_URL,
+                cursor_factory=psycopg2.extras.RealDictCursor)
+            c = conn.cursor()
+            c.execute('SELECT id, schema_name FROM users')
+            users = c.fetchall()
+            conn.close()
+            for u in users:
+                sch = u.get('schema_name')
+                if not sch:
+                    continue
+                try:
+                    conn2 = _conn(sch)
+                    c2 = conn2.cursor()
+                    bounce_status = 'bounce' if 'bounce' in event_type else 'spam'
+                    c2.execute(
+                        "UPDATE empresas SET status = %s "
+                        "WHERE email = %s AND status IN ('novo','contactada')",
+                        (bounce_status, to_email))
+                    if c2.rowcount > 0:
+                        conn2.commit()
+                        conn2.close()
+                        break
+                    conn2.close()
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f'[WEBHOOK] erro: {e}', flush=True)
+    return jsonify({'ok': True})
 
 
 def _enriquecer_cnpj(schema, lead_id):
