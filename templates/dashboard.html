@@ -1946,12 +1946,15 @@ function loadWaStats(){
       } else {
         if(empty)empty.style.display='none';
         tb.innerHTML=comWa.slice(0,200).map(l=>{
-          const waEnv=l.wa_enviado?new Date(l.wa_enviado).toLocaleDateString('pt-BR'):'—';
+          const waEnv=l.wa_enviado?new Date(l.wa_enviado).toLocaleDateString('pt-BR'):'';
+          const enviado=l.wa_enviado||l.status==='contactada'||l.status==='respondeu'||l.status==='qualificado'||l.status==='convertido'||l.status==='robo_wa';
+          const envChip=enviado?'<span style="color:#22c55e"><i class="fab fa-whatsapp"></i> '+(waEnv||'Enviado')+'</span>'
+            :'<span style="color:var(--muted)">Pendente</span>';
           return `<tr>
             <td><b>${l.nome_fantasia||'—'}</b><br><small style="color:var(--muted)">${l.segmento||''}</small></td>
             <td style="font-size:12px;color:var(--muted)">${l.whatsapp||'—'}</td>
             <td>${statusChip(l.status,l.demo_status)}</td>
-            <td style="font-size:11px;color:var(--muted)">${l.wa_enviado?'<span style="color:#22c55e"><i class="fab fa-whatsapp"></i> '+waEnv+'</span>':'<span style="color:var(--muted)">Pendente</span>'}</td>
+            <td style="font-size:11px;color:var(--muted)">${envChip}</td>
           </tr>`;
         }).join('');
       }
@@ -2159,7 +2162,8 @@ function loadEmailLeads(){
     }
     tb.innerHTML=comEmail.slice(0,300).map(l=>{
       const envDt=l.email_enviado?new Date(l.email_enviado).toLocaleDateString('pt-BR'):'';
-      const envChip=l.email_enviado?'<span style="color:#fb923c;font-size:11px"><i class="fa fa-check"></i> '+envDt+'</span>'
+      const enviado=l.email_enviado||l.status==='contactada'||l.status==='respondeu'||l.status==='qualificado'||l.status==='convertido';
+      const envChip=enviado?'<span style="color:#fb923c;font-size:11px"><i class="fa fa-check"></i> '+(envDt||'Enviado')+'</span>'
         :'<span style="color:var(--muted);font-size:11px">Pendente</span>';
       return `<tr>
         <td><input type="checkbox" class="email-chk" value="${l.id}"></td>
