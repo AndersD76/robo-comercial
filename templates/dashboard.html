@@ -757,6 +757,21 @@
             </ol>
           </div>
         </div>
+
+        <div style="margin-top:20px">
+          <div style="font-size:14px;font-weight:700;margin-bottom:10px;color:var(--muted2)">Leads com WhatsApp</div>
+          <div class="scroll-box" style="max-height:45vh">
+            <table>
+              <thead><tr>
+                <th>Empresa</th><th>WhatsApp</th><th>Status</th><th>WA Enviado</th>
+              </tr></thead>
+              <tbody id="wa-leads-tb"></tbody>
+            </table>
+          </div>
+          <div id="wa-leads-empty" style="display:none;text-align:center;padding:20px;color:var(--muted);font-size:12px">
+            Nenhum lead com WhatsApp
+          </div>
+        </div>
       </div>
 
       <!-- ABA RESPOSTAS -->
@@ -813,26 +828,43 @@
         </div>
       </div>
       <div id="tab-email" style="display:none;padding:20px">
-        <div style="max-width:700px">
-          <p style="font-size:13px;color:var(--muted2);margin-bottom:18px">
-            Envie uma campanha de email para os leads que possuem email cadastrado.
-          </p>
-
-          <div id="email-preview-box" style="display:none;margin-bottom:18px;background:#fff;border-radius:8px;padding:16px;max-height:350px;overflow:auto"></div>
-          <span id="email-cfg-from" style="display:none"></span>
-          <span id="email-cfg-assunto" style="display:none"></span>
-          <span id="email-cfg-tpl" style="display:none"></span>
-
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-            <button onclick="previewEmailTpl()" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--muted2);padding:8px 16px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit">
-              <i class="fa fa-eye"></i> Pré-visualizar
-            </button>
-            <button onclick="enviarMalaDireta(this)" style="background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
-              <i class="fa fa-paper-plane"></i> Enviar para todos com email
-            </button>
-            <a href="/configurar" style="font-size:11px;color:#818cf8;text-decoration:none">Editar em Configurações</a>
-            <span id="email-status" style="font-size:12px;color:var(--muted2)"></span>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <div style="width:48px;height:48px;border-radius:12px;background:rgba(251,146,60,.12);display:flex;align-items:center;justify-content:center">
+            <i class="fa fa-envelope" style="font-size:20px;color:#fb923c"></i>
           </div>
+          <div style="flex:1">
+            <div style="font-size:16px;font-weight:700">Mala Direta</div>
+            <div style="font-size:12px;color:var(--muted)">Envie emails para leads com email cadastrado</div>
+          </div>
+          <span id="email-lead-count" style="font-size:13px;color:var(--muted2);font-weight:600">0 leads com email</span>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px">
+          <button onclick="previewEmailTpl()" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--muted2);padding:8px 16px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit">
+            <i class="fa fa-eye"></i> Pre-visualizar
+          </button>
+          <button onclick="enviarMalaDireta(this)" style="background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
+            <i class="fa fa-paper-plane"></i> Enviar para todos com email
+          </button>
+          <button onclick="enviarEmailSelMala()" style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--muted2);padding:8px 16px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit">
+            <i class="fa fa-check-double"></i> Enviar selecionados
+          </button>
+          <a href="/configurar" style="font-size:11px;color:#818cf8;text-decoration:none">Editar em Configuracoes</a>
+          <span id="email-status" style="font-size:12px;color:var(--muted2)"></span>
+        </div>
+        <div id="email-preview-box" style="display:none;margin-bottom:18px;background:#fff;border-radius:8px;padding:16px;max-height:350px;overflow:auto"></div>
+        <span id="email-cfg-from" style="display:none"></span>
+        <span id="email-cfg-assunto" style="display:none"></span>
+        <span id="email-cfg-tpl" style="display:none"></span>
+
+        <div class="scroll-box" style="max-height:55vh">
+          <table>
+            <thead><tr>
+              <th style="width:30px"><input type="checkbox" id="sel-all-email" onchange="toggleSelectAllEmail(this)"></th>
+              <th>Empresa</th><th>Email</th><th>Status</th><th>Enviado</th>
+            </tr></thead>
+            <tbody id="email-tb"></tbody>
+          </table>
         </div>
       </div>
 
@@ -955,7 +987,7 @@ function goTab(panel,btn){
   btn.classList.add('on');
   if(panel==='wa')  loadWA();
   if(panel==='log') loadLog();
-  if(panel==='email') loadEmailConfig();
+  if(panel==='email'){ loadEmailConfig(); loadEmailLeads(); }
   if(panel==='respostas') loadRespostas();
   if(panel==='whatsapp') loadWaStats();
   if(panel==='agenda') loadAgenda();
@@ -1901,9 +1933,29 @@ function delWA(id){
 // ── WhatsApp ──────────────────────────────────────────────────────────────
 function loadWaStats(){
   fetch(`/api/${BOT}/leads?limite=9999`).then(r=>r.json()).then(d=>{
-    const comWa=d.filter(l=>l.whatsapp).length;
+    const comWa=d.filter(l=>l.whatsapp);
     const el=document.getElementById('wa-lead-count');
-    if(el) el.textContent=comWa;
+    if(el) el.textContent=comWa.length;
+    // Render WA leads list
+    const tb=document.getElementById('wa-leads-tb');
+    const empty=document.getElementById('wa-leads-empty');
+    if(tb){
+      if(!comWa.length){
+        tb.innerHTML='';
+        if(empty)empty.style.display='';
+      } else {
+        if(empty)empty.style.display='none';
+        tb.innerHTML=comWa.slice(0,200).map(l=>{
+          const waEnv=l.wa_enviado?new Date(l.wa_enviado).toLocaleDateString('pt-BR'):'—';
+          return `<tr>
+            <td><b>${l.nome_fantasia||'—'}</b><br><small style="color:var(--muted)">${l.segmento||''}</small></td>
+            <td style="font-size:12px;color:var(--muted)">${l.whatsapp||'—'}</td>
+            <td>${statusChip(l.status,l.demo_status)}</td>
+            <td style="font-size:11px;color:var(--muted)">${l.wa_enviado?'<span style="color:#22c55e"><i class="fab fa-whatsapp"></i> '+waEnv+'</span>':'<span style="color:var(--muted)">Pendente</span>'}</td>
+          </tr>`;
+        }).join('');
+      }
+    }
   }).catch(()=>{});
   fetch(`/api/${BOT}/status`).then(r=>r.json()).then(d=>{
     const st=document.getElementById('wa-conn-status');
@@ -2090,6 +2142,69 @@ function marcarStatus(leadId,status){
       loadPipe();
     }
   }).catch(()=>{});
+}
+
+// ── Email Leads List ──────────────────────────────────────────────────────
+let _emailLeadsAll=[];
+function loadEmailLeads(){
+  fetch(`/api/${BOT}/leads?limite=9999`).then(r=>r.json()).then(d=>{
+    const comEmail=d.filter(l=>l.email);
+    _emailLeadsAll=comEmail;
+    document.getElementById('email-lead-count').textContent=comEmail.length+' leads com email';
+    const tb=document.getElementById('email-tb');
+    if(!tb) return;
+    if(!comEmail.length){
+      tb.innerHTML='<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted)">Nenhum lead com email</td></tr>';
+      return;
+    }
+    tb.innerHTML=comEmail.slice(0,300).map(l=>{
+      const envDt=l.email_enviado?new Date(l.email_enviado).toLocaleDateString('pt-BR'):'';
+      const envChip=l.email_enviado?'<span style="color:#fb923c;font-size:11px"><i class="fa fa-check"></i> '+envDt+'</span>'
+        :'<span style="color:var(--muted);font-size:11px">Pendente</span>';
+      return `<tr>
+        <td><input type="checkbox" class="email-chk" value="${l.id}"></td>
+        <td><b>${l.nome_fantasia||'—'}</b><br><small style="color:var(--muted)">${l.segmento||''} ${l.cidade?'- '+l.cidade:''}</small></td>
+        <td style="font-size:12px;color:var(--muted)">${l.email}</td>
+        <td>${statusChip(l.status,l.demo_status)}</td>
+        <td>${envChip}</td>
+      </tr>`;
+    }).join('');
+  }).catch(()=>{});
+}
+function toggleSelectAllEmail(master){
+  document.querySelectorAll('.email-chk').forEach(c=>c.checked=master.checked);
+}
+function getSelectedEmailIds(){
+  const master=document.getElementById('sel-all-email');
+  if(master&&master.checked) return _emailLeadsAll.map(l=>l.id);
+  return [...document.querySelectorAll('.email-chk:checked')].map(c=>parseInt(c.value));
+}
+function enviarEmailSelMala(){
+  const ids=getSelectedEmailIds();
+  if(!ids.length){ alert('Selecione ao menos 1 lead com checkbox'); return; }
+  const idSet=new Set(ids);
+  const comEmail=_emailLeadsAll.filter(l=>idSet.has(l.id)&&l.email&&l.email.includes('@')).length;
+  if(!comEmail){ alert('Nenhum lead selecionado tem email válido'); return; }
+  if(!confirm(`Enviar email para ${comEmail} lead(s)?\n\n(${ids.length} selecionados, ${ids.length-comEmail} sem email serão ignorados)`)) return;
+  const btn=document.querySelector('[onclick="enviarEmailSelMala()"]');
+  const oldHtml=btn.innerHTML;
+  btn.innerHTML='<i class="fa fa-spinner fa-spin"></i> Enviando...';
+  btn.disabled=true;
+  fetch(`/api/${BOT}/send-emails`,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ids})
+  }).then(r=>r.json()).then(d=>{
+    btn.innerHTML=oldHtml; btn.disabled=false;
+    if(d.ok){
+      alert(`✓ ${d.enviados} email(s) enviado(s)${d.erros?', '+d.erros+' erro(s)':''}`);
+      loadEmailLeads();
+    } else {
+      alert('Erro: '+(d.error||'falha no envio'));
+    }
+  }).catch(e=>{
+    btn.innerHTML=oldHtml; btn.disabled=false;
+    alert('Erro de conexão: '+e.message);
+  });
 }
 
 // ── Email Mode ────────────────────────────────────────────────────────────
