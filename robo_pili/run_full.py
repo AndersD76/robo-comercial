@@ -576,15 +576,11 @@ async def _ciclo_respostas(bot, gerador, schema,
         if ok:
             registrar(empresa['id'], None, 'whatsapp', 'resposta', resposta)
             nivel = intencao.get('nivel', 'media')
-            if nivel in ('demo', 'agendamento'):
-                marcar_demo(empresa['id'])
-                atualizar(empresa['id'], 'respondeu')
-            elif nivel == 'confirmacao':
-                marcar_confirmado(empresa['id'])
-                atualizar(empresa['id'], 'convertido')
-            elif nivel == 'baixa':
+            if nivel == 'baixa':
                 atualizar(empresa['id'], 'encerrado')
-            log('info', f'Resposta: {nome} | {msg_lead[:50]}')
+            else:
+                atualizar(empresa['id'], 'respondeu')
+            log('info', f'Resposta: {nome} | {nivel} | {msg_lead[:50]}')
 
         await asyncio.sleep(5)
 
