@@ -441,12 +441,18 @@ def get_stats(schema: str) -> dict:
         c.execute("SELECT COUNT(*) AS n FROM empresas "
                   "WHERE email_enviado IS NOT NULL")
         z['emails_enviados'] = c.fetchone()['n']
-        c.execute("SELECT COUNT(*) AS n FROM empresas "
-                  "WHERE email_aberto IS NOT NULL")
-        z['emails_abertos'] = c.fetchone()['n']
-        c.execute("SELECT COUNT(*) AS n FROM empresas "
-                  "WHERE email_clicado IS NOT NULL")
-        z['emails_clicados'] = c.fetchone()['n']
+        try:
+            c.execute("SELECT COUNT(*) AS n FROM empresas "
+                      "WHERE email_aberto IS NOT NULL")
+            z['emails_abertos'] = c.fetchone()['n']
+        except Exception:
+            conn.rollback()
+        try:
+            c.execute("SELECT COUNT(*) AS n FROM empresas "
+                      "WHERE email_clicado IS NOT NULL")
+            z['emails_clicados'] = c.fetchone()['n']
+        except Exception:
+            conn.rollback()
         c.execute("SELECT COUNT(*) AS n FROM empresas "
                   "WHERE email_enviado::date = CURRENT_DATE")
         z['msgs_hoje'] = c.fetchone()['n']
@@ -467,16 +473,23 @@ def get_leads(schema: str, limite: int = 5000) -> list:
     try:
         conn = _conn(schema)
         c = conn.cursor()
-        c.execute("""SELECT e.id, e.nome_fantasia, e.whatsapp, e.telefone, e.email, e.score,
-                            e.status, e.segmento, e.demo_status, e.cidade, e.estado,
-                            e.encontrado_em, e.cnpj, e.razao_social, e.website,
-                            e.linkedin, e.instagram, e.fonte, e.porte,
-                            e.email_enviado, e.wa_enviado, e.observacoes,
-                            e.email_aberto, e.email_clicado,
-                            (SELECT ct.nome || ' - ' || ct.cargo
-                             FROM contatos ct WHERE ct.empresa_id = e.id AND ct.decisor = 1
-                             LIMIT 1) AS _decisor
-                     FROM empresas e ORDER BY e.encontrado_em DESC LIMIT %s""", (limite,))
+        _sub = """(SELECT ct.nome || ' - ' || ct.cargo
+                   FROM contatos ct WHERE ct.empresa_id = e.id AND ct.decisor = 1
+                   LIMIT 1) AS _decisor"""
+        _base = """e.id, e.nome_fantasia, e.whatsapp, e.telefone, e.email, e.score,
+                   e.status, e.segmento, e.demo_status, e.cidade, e.estado,
+                   e.encontrado_em, e.cnpj, e.razao_social, e.website,
+                   e.linkedin, e.instagram, e.fonte, e.porte,
+                   e.email_enviado, e.wa_enviado, e.observacoes"""
+        try:
+            c.execute(f"SELECT {_base}, e.email_aberto, e.email_clicado, {_sub}"
+                      " FROM empresas e ORDER BY e.encontrado_em DESC LIMIT %s",
+                      (limite,))
+        except Exception:
+            conn.rollback()
+            c.execute(f"SELECT {_base}, NULL as email_aberto, NULL as email_clicado, {_sub}"
+                      " FROM empresas e ORDER BY e.encontrado_em DESC LIMIT %s",
+                      (limite,))
         rows = [_serialize_row(dict(r)) for r in c.fetchall()]
         conn.close()
         return rows
@@ -3180,15 +3193,26 @@ def _get_email_track_token(schema, lead_id):
     """Gera ou retorna token de tracking de email para o lead."""
     conn = _conn(schema)
     c = conn.cursor()
-    c.execute('SELECT email_track_token FROM empresas WHERE id=%s', (lead_id,))
-    row = c.fetchone()
-    if row and row.get('email_track_token'):
-        conn.close()
-        return row['email_track_token']
+    try:
+        c.execute('SELECT email_track_token FROM empresas WHERE id=%s', (lead_id,))
+        row = c.fetchone()
+        if row and row.get('email_track_token'):
+            conn.close()
+            return row['email_track_token']
+    except Exception:
+        conn.rollback()
+        try:
+            c.execute("ALTER TABLE empresas ADD COLUMN IF NOT EXISTS email_track_token TEXT")
+            conn.commit()
+        except Exception:
+            conn.rollback()
     token = secrets.token_urlsafe(16)
-    c.execute('UPDATE empresas SET email_track_token=%s WHERE id=%s',
-              (token, lead_id))
-    conn.commit()
+    try:
+        c.execute('UPDATE empresas SET email_track_token=%s WHERE id=%s',
+                  (token, lead_id))
+        conn.commit()
+    except Exception:
+        conn.rollback()
     conn.close()
     return token
 
