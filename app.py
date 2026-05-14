@@ -23,6 +23,9 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'mv-saas-2025-change-in-prod')
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+app.config['PREFERRED_URL_SCHEME'] = 'https'
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 GA_MEASUREMENT_ID = os.environ.get('GA_MEASUREMENT_ID', 'G-NGSNSF3SPM')
 
@@ -2054,7 +2057,7 @@ def api_send_emails(bot):
         return jsonify({'error': 'Todos os leads selecionados já foram contactados ou não têm email'}), 400
 
     empresa_nome = user['empresa_nome'] if user else ''
-    base_url = os.environ.get('BASE_URL', request.host_url.rstrip('/'))
+    base_url = os.environ.get('BASE_URL', request.host_url.rstrip('/')).replace('http://', 'https://')
     enviados = erros = 0
     for lead in leads:
         nome = lead['nome_fantasia'] or 'empresa'
@@ -2140,7 +2143,7 @@ def api_email_campanha(bot):
     if not leads:
         return jsonify({'error': 'nenhum lead com email cadastrado'}), 400
 
-    base_url = os.environ.get('BASE_URL', request.host_url.rstrip('/'))
+    base_url = os.environ.get('BASE_URL', request.host_url.rstrip('/')).replace('http://', 'https://')
     enviados = erros = 0
     for lead in leads:
         nome = lead['nome_fantasia'] or 'empresa'
@@ -3380,6 +3383,21 @@ def _inject_tracking_pixel(html, track_url):
 
 
 # ── Email Tracking Endpoints (públicos, sem auth) ──
+
+@app.route('/t/test')
+def email_track_test():
+    """Diagnóstico do tracking — acesse para verificar se está funcionando."""
+    base = os.environ.get('BASE_URL', request.host_url.rstrip('/'))
+    base_https = base.replace('http://', 'https://')
+    return jsonify({
+        'ok': True,
+        'base_url_env': os.environ.get('BASE_URL', '(não definido)'),
+        'request_host_url': request.host_url,
+        'base_url_final': base_https,
+        'pixel_example': f'{base_https}/t/TEST_TOKEN/open.png',
+        'scheme': request.scheme,
+        'x_forwarded_proto': request.headers.get('X-Forwarded-Proto', '(nenhum)'),
+    })
 
 @app.route('/t/<token>/open.png')
 def email_track_open(token):
