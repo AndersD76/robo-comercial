@@ -2044,17 +2044,17 @@ def api_send_emails(bot):
     try:
         c.execute(f"SELECT id, nome_fantasia, email FROM empresas WHERE id IN ({ph}) AND email IS NOT NULL"
                   f" AND (email_enviado IS NULL)"
-                  f" AND status NOT IN ('contactada','respondeu','qualificado','convertido','bounce','spam','encerrado')",
+                  f" AND status NOT IN ('bounce','spam')",
                   lead_ids)
     except Exception:
         conn.rollback()
         c.execute(f"SELECT id, nome_fantasia, email FROM empresas WHERE id IN ({ph}) AND email IS NOT NULL"
-                  f" AND status NOT IN ('contactada','respondeu','qualificado','convertido','bounce','spam','encerrado')",
+                  f" AND status NOT IN ('bounce','spam')",
                   lead_ids)
     leads = c.fetchall()
     conn.close()
     if not leads:
-        return jsonify({'error': 'Todos os leads selecionados já foram contactados ou não têm email'}), 400
+        return jsonify({'error': 'Todos os leads selecionados já receberam email ou são bounce/spam'}), 400
 
     empresa_nome = user['empresa_nome'] if user else ''
     base_url = os.environ.get('BASE_URL', request.host_url.rstrip('/')).replace('http://', 'https://')
@@ -2127,13 +2127,13 @@ def api_email_campanha(bot):
             c.execute("""SELECT id, nome_fantasia, email, segmento, cidade, estado
                          FROM empresas WHERE email IS NOT NULL AND email != ''
                          AND email_enviado IS NULL
-                         AND status NOT IN ('contactada','respondeu','qualificado','convertido','bounce','spam','encerrado')
+                         AND status NOT IN ('bounce','spam')
                          ORDER BY score DESC LIMIT 500""")
         except Exception:
             conn.rollback()
             c.execute("""SELECT id, nome_fantasia, email, segmento, cidade, estado
                          FROM empresas WHERE email IS NOT NULL AND email != ''
-                         AND status NOT IN ('contactada','respondeu','qualificado','convertido','bounce','spam','encerrado')
+                         AND status NOT IN ('bounce','spam')
                          ORDER BY score DESC LIMIT 500""")
         leads = c.fetchall()
         conn.close()
