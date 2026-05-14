@@ -183,6 +183,7 @@ class GeradorMensagensDinamico:
     def __init__(self, cfg: dict, schema: str):
         self.cfg = cfg
         self.schema = schema
+        self.msg_inicial_custom = cfg.get('msg_inicial') or ''
         self.empresa_nome = cfg.get('empresa_nome') or 'Nossa empresa'
         self.descricao = cfg.get('descricao') or 'solução para empresas'
         self.base_url = os.environ.get('BASE_URL', 'https://www.turbovenda.com.br')
@@ -231,6 +232,24 @@ REGRAS PARA MENSAGENS WHATSAPP:
         estado = lead.get('estado', '')
         link_agenda = self._get_lead_link(lead)
 
+        # Se o usuário configurou msg_inicial, USAR ELA (não gerar com IA)
+        if self.msg_inicial_custom:
+            msg = self.msg_inicial_custom
+            msg = msg.replace('{{nome}}', nome_lead)
+            msg = msg.replace('{{segmento}}', segmento)
+            msg = msg.replace('{{cidade}}', cidade)
+            msg = msg.replace('{{estado}}', estado)
+            msg = msg.replace('{{cal_link}}', link_agenda)
+            msg = msg.replace('{{empresa}}', self.empresa_nome)
+            msg = msg.replace('{nome}', nome_lead)
+            msg = msg.replace('{segmento}', segmento)
+            msg = msg.replace('{cidade}', cidade)
+            msg = msg.replace('{estado}', estado)
+            msg = msg.replace('{cal_link}', link_agenda)
+            msg = msg.replace('{empresa}', self.empresa_nome)
+            return msg
+
+        # Sem msg_inicial configurada — gerar com IA
         if self.ai_client:
             try:
                 info = (f"Empresa: {nome_lead}\nSegmento: {segmento}\n"

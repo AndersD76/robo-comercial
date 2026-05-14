@@ -2040,6 +2040,14 @@ function _checkWaAlive(btn){
         }
       }).catch(()=>{});
     } else {
+      // Bot está rodando — atualizar UI
+      stopQrPolling();
+      btn.innerHTML='<i class="fab fa-whatsapp"></i> Conectado';
+      btn.disabled=true;
+      document.getElementById('btn-wa-stop').disabled=false;
+      const statusEl=document.getElementById('wa-action-status');
+      statusEl.textContent='WhatsApp conectado e enviando mensagens';
+      statusEl.style.color='#22c55e';
       loadWaStats();
     }
   }).catch(()=>{});
