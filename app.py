@@ -517,15 +517,47 @@ def get_logs(schema: str, limite: int = 60) -> list:
 
 
 def get_bot_config(schema: str) -> dict:
+    if not schema:
+        return {}
+    conn = None
     try:
         conn = _conn(schema)
         c = conn.cursor()
+        c.execute("""CREATE TABLE IF NOT EXISTS bot_config (
+            id           SERIAL PRIMARY KEY,
+            empresa_nome TEXT, website TEXT, descricao TEXT,
+            termos_busca JSONB DEFAULT '[]',
+            linkedin_email TEXT, linkedin_password TEXT,
+            linkedin_cargos JSONB DEFAULT '[]',
+            msg_inicial TEXT,
+            email_assunto_padrao TEXT,
+            email_html_template TEXT,
+            email_remetente TEXT,
+            email_remetente_nome TEXT,
+            resend_api_key TEXT,
+            smtp_host TEXT, smtp_port INTEGER DEFAULT 587,
+            smtp_user TEXT, smtp_password TEXT,
+            serper_api_key TEXT,
+            horario_inicio INTEGER DEFAULT 9,
+            horario_fim INTEGER DEFAULT 18,
+            duracao_reuniao INTEGER DEFAULT 30,
+            dias_semana TEXT DEFAULT '1,2,3,4,5',
+            atualizado_em TIMESTAMP DEFAULT NOW()
+        )""")
+        conn.commit()
         c.execute('SELECT * FROM bot_config ORDER BY id DESC LIMIT 1')
         row = c.fetchone()
         conn.close()
         return _serialize_row(dict(row)) if row else {}
     except Exception as e:
-        print(f'[bot_config/{schema}] {e}')
+        import traceback
+        traceback.print_exc()
+        print(f'[bot_config/{schema}] ERRO: {e}', flush=True)
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
         return {}
 
 
@@ -977,7 +1009,9 @@ def dashboard():
 @login_required
 def config_page():
     user = get_current_user()
-    schema = user.get('schema_name') if user else None
+    schema = _get_schema()
+    if not schema and user:
+        schema = user.get('schema_name')
     cfg = get_bot_config(schema) if schema else {}
     return render_template('config.html', user=user, cfg=cfg)
 
