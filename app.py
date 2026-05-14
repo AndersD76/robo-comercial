@@ -2386,9 +2386,27 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
     """Gera termos de busca dinamicamente a partir da descricao do usuario."""
     desc_lower = descricao.lower()
 
+    # ── 0. Detectar se descricao e sobre PRODUTOS vendidos ──
+    _VERBOS_PRODUTO = ['vendemos', 'fabricamos', 'produzimos', 'oferecemos',
+                       'desenvolvemos', 'criamos', 'fornecemos', 'trabalhamos com']
+    _is_product_desc = any(v in desc_lower for v in _VERBOS_PRODUTO)
+
+    # Encontrar a frase do produto (tudo entre verbo e primeiro ponto/virgula)
+    _produto_frase = ''
+    for v in _VERBOS_PRODUTO:
+        idx = desc_lower.find(v)
+        if idx >= 0:
+            rest = desc_lower[idx + len(v):]
+            end = len(rest)
+            for sep in ['.', ';', ' para ', ' nos ', ' no ', ' na ', ' em ']:
+                p = rest.find(sep)
+                if p > 0:
+                    end = min(end, p)
+            _produto_frase = rest[:end].strip(' ,')
+            break
+
     # ── 1. Extrair SEGMENTOS-ALVO (tipos de empresa cliente) ──
 
-    # Regex para tipos de organizacao (substantivos que descrevem empresas)
     _ORG = (
         r'cooperativa|cerealista|agroindustria|agroindústria|industria|indústria|'
         r'fabrica|fábrica|usina|hospital|clinica|clínica|escola|faculdade|'
@@ -2414,10 +2432,8 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
             return
         if s in seen_segs:
             return
-        # Filtra: nao pode ser nome da propria empresa
         if empresa_nome and empresa_nome.lower() in s:
             return
-        # Filtra: nao pode ser regiao/estado/preposicao/adjetivo
         rejects = [
             'brasil', 'norte', 'sul', 'sudeste', 'nordeste', 'centro-oeste',
             'grande porte', 'medio porte', 'pequeno porte',
@@ -2429,10 +2445,8 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
         for r in rejects:
             if sl.startswith(r) or sl == r:
                 return
-        # Filtra frases com pronome relativo ou verbos
         if re.search(r'\b(?:que|quem|onde|como|quando)\b', sl):
             return
-        # Filtra estados como segmento
         estados_nomes = [
             'sao paulo', 'minas gerais', 'rio de janeiro', 'parana',
             'santa catarina', 'rio grande do sul', 'bahia', 'goias',
@@ -2443,19 +2457,18 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
         seen_segs.add(s)
         segmentos.append(s)
 
-    # a) Extrai tipos de organizacao do texto completo
+    # a) Extrai tipos de organizacao — mas ignora se esta na frase de produto
     for m in re.finditer(
         r'\b(' + _ORG + r')(?:\s+(?:de\s+|da\s+|do\s+|das\s+|dos\s+)?[a-záàâãéêíóôõúüç]+){0,2}',
         desc_lower
     ):
         seg = m.group(0).strip()
-        # Nao capturar se faz parte de "fabricamos" ou "vendemos X para"
-        # Verifica se o contexto e "nosso produto" vs "nosso cliente"
         pos = m.start()
-        antes = desc_lower[max(0, pos-30):pos].strip()
-        verbos_proprios = ['fabricamos', 'vendemos', 'produzimos',
-                           'oferecemos', 'desenvolvemos', 'criamos']
-        is_proprio = any(v in antes for v in verbos_proprios)
+        # Verifica se esta dentro da frase de produto (olha a FRASE, nao so 30 chars)
+        # Encontra inicio da frase (ultimo ponto ou inicio)
+        frase_start = max(desc_lower.rfind('.', 0, pos), desc_lower.rfind(';', 0, pos), 0)
+        frase = desc_lower[frase_start:pos]
+        is_proprio = any(v in frase for v in _VERBOS_PRODUTO)
         if not is_proprio:
             _add_seg(seg)
 
@@ -2466,7 +2479,6 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
     )
     if cliente_match:
         trecho = cliente_match.group(1)
-        # Remove cargos
         trecho = re.sub(
             r'(?:gerente|diretor|coordenador|responsavel|chefe|head|'
             r'supervisor|dono|proprietario|socio)\s+(?:de\s+)?[^,]+,?\s*',
@@ -2475,7 +2487,6 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
         partes = re.split(r'\s*,\s*|\s+e\s+', trecho)
         for parte in partes:
             parte = re.sub(r'^(?:os?|as?|de|da|do|das|dos|uns?|umas?)\s+', '', parte.strip())
-            # So aceita se contem uma palavra de tipo de org
             if re.search(_ORG, parte):
                 _add_seg(parte)
 
@@ -2488,7 +2499,80 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
             if re.search(_ORG, parte):
                 _add_seg(parte)
 
-    # d) Se vazio, tenta extrair palavras-chave relevantes do contexto
+    # d) INFERIR clientes a partir do contexto de produto/industria
+    _INDUSTRY_CLIENTS = {
+        'agro': {
+            'keywords': ['grão', 'graos', 'grãos', 'soja', 'milho', 'trigo', 'arroz',
+                         'tombador', 'calador', 'secador', 'armazenagem', 'armazenamento',
+                         'silo', 'moega', 'expedição', 'expedicao', 'colheita',
+                         'cereal', 'fertilizante', 'adubo', 'defensivo', 'semente',
+                         'irrigação', 'irrigacao', 'plantio', 'safra', 'agro',
+                         'agricola', 'agrícola', 'pecuaria', 'pecuária'],
+            'clients': ['cooperativa agricola', 'cerealista', 'armazem de graos',
+                        'trading agricola', 'agroindustria', 'fazenda',
+                        'empresa de armazenagem', 'beneficiadora de graos',
+                        'exportadora de graos', 'silo de armazenagem',
+                        'unidade de recebimento de graos'],
+        },
+        'construcao': {
+            'keywords': ['construção', 'construcao', 'cimento', 'concreto', 'aço', 'aco',
+                         'estrutura metalica', 'estrutura metálica', 'telhado', 'cobertura',
+                         'obra', 'edificio', 'edifício', 'pavimentação', 'pavimentacao'],
+            'clients': ['construtora', 'incorporadora', 'empreiteira',
+                        'empresa de engenharia', 'condominio', 'shopping'],
+        },
+        'industrial': {
+            'keywords': ['hidraulic', 'hidráulic', 'pneumatic', 'pneumátic',
+                         'motor', 'valvula', 'válvula', 'bomba', 'compressor',
+                         'maquina', 'máquina', 'equipamento industrial',
+                         'torno', 'fresa', 'solda', 'metalurgia', 'usinagem',
+                         'automação', 'automacao', 'esteira', 'correia'],
+            'clients': ['industria', 'fabrica', 'mineradora', 'usina',
+                        'metalurgica', 'siderurgica', 'frigorifico'],
+        },
+        'alimenticio': {
+            'keywords': ['alimento', 'alimentício', 'alimenticio', 'embalagem de alimento',
+                         'frigorifico', 'frigorífico', 'carne', 'laticinio', 'laticínio',
+                         'bebida', 'processamento de alimento'],
+            'clients': ['frigorifico', 'laticinio', 'fabrica de alimentos',
+                        'industria alimenticia', 'supermercado', 'atacadista'],
+        },
+        'saude': {
+            'keywords': ['saude', 'saúde', 'medico', 'médico', 'hospitalar', 'cirurg',
+                         'diagnóstico', 'diagnostico', 'laboratorial', 'clinico', 'clínico',
+                         'implante', 'protese', 'prótese', 'odonto'],
+            'clients': ['hospital', 'clinica', 'laboratorio', 'farmacia'],
+        },
+        'logistica': {
+            'keywords': ['logistica', 'logística', 'transporte', 'frete', 'carga',
+                         'armazem geral', 'armazém geral', 'embalagem', 'palete',
+                         'container', 'contêiner', 'rastreamento'],
+            'clients': ['transportadora', 'distribuidora', 'atacadista',
+                        'operador logistico', 'centro de distribuicao'],
+        },
+        'energia': {
+            'keywords': ['energia', 'solar', 'fotovoltaic', 'eolica', 'eólica',
+                         'eletric', 'elétric', 'gerador', 'transformador',
+                         'subestação', 'subestacao', 'quadro eletrico'],
+            'clients': ['industria', 'fabrica', 'condominio', 'shopping',
+                        'cooperativa de energia', 'usina'],
+        },
+        'ti': {
+            'keywords': ['software', 'sistema', 'aplicativo', 'app', 'plataforma',
+                         'erp', 'crm', 'saas', 'cloud', 'nuvem', 'dados',
+                         'inteligencia artificial', 'automação', 'automacao'],
+            'clients': ['empresa de tecnologia', 'startup', 'escritorio',
+                        'industria', 'consultoria', 'agencia'],
+        },
+    }
+
+    if _is_product_desc and len(segmentos) < 3:
+        for industry, data in _INDUSTRY_CLIENTS.items():
+            if any(kw in desc_lower for kw in data['keywords']):
+                for client in data['clients']:
+                    _add_seg(client)
+
+    # e) Fallback: palavras-chave frequentes — mas EXCLUI termos de produto
     if not segmentos:
         from collections import Counter
         stops = {
@@ -2500,8 +2584,12 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
             'qual', 'quando', 'onde', 'porque', 'pois', 'ainda',
             'vendemos', 'oferecemos', 'somos', 'temos', 'fazemos',
             'atendemos', 'trabalhamos', 'atuamos', 'produzimos',
+            'fabricamos', 'fornecemos', 'criamos', 'desenvolvemos',
             'servico', 'produto', 'solucao', 'sistema', 'plataforma',
             'brasil', 'nacional', 'porte',
+            'qualidade', 'performance', 'alta', 'melhor', 'custo',
+            'beneficio', 'desde', 'estados', 'estado',
+            'equipamento', 'equipamentos', 'recebimento', 'expedicao',
         }
         palavras = re.findall(r'[a-záàâãéêíóôõúüç]{5,}', desc_lower)
         freq = Counter(p for p in palavras if p not in stops)
@@ -2539,6 +2627,21 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
     for regiao in TODAS_CIDADES:
         if re.search(r'\b' + re.escape(regiao) + r'\b', desc_lower):
             regioes_match.append(regiao)
+
+    # Estados por sigla (2 letras maiusculas no texto original)
+    _UF_REGIAO = {
+        'PR': 'sul', 'SC': 'sul', 'RS': 'sul',
+        'GO': 'centro-oeste', 'MT': 'centro-oeste', 'MS': 'centro-oeste', 'DF': 'centro-oeste',
+        'SP': 'sudeste', 'MG': 'sudeste', 'RJ': 'sudeste', 'ES': 'sudeste',
+        'BA': 'nordeste', 'PE': 'nordeste', 'CE': 'nordeste', 'MA': 'nordeste',
+        'RN': 'nordeste', 'PB': 'nordeste', 'SE': 'nordeste', 'AL': 'nordeste', 'PI': 'nordeste',
+        'AM': 'norte', 'PA': 'norte', 'TO': 'norte', 'RO': 'norte',
+        'AC': 'norte', 'RR': 'norte', 'AP': 'norte',
+    }
+    for uf, reg in _UF_REGIAO.items():
+        if re.search(r'\b' + uf + r'\b', descricao):
+            if reg not in regioes_match:
+                regioes_match.append(reg)
 
     # Estados por nome completo (word boundary)
     uf_map = {
