@@ -2174,7 +2174,7 @@ function loadEmailLeads(){
       const envChip=l.email_enviado?'<span style="color:#fb923c;font-size:11px"><i class="fa fa-check"></i> '+envDt+'</span>'
         :'<span style="color:var(--muted);font-size:11px">Pendente</span>';
       return `<tr style="${l.email_enviado?'opacity:.45':''}">
-        <td>${l.email_enviado?'<i class="fa fa-check" style="color:#fb923c;font-size:11px"></i>':'<input type="checkbox" class="email-chk" value="'+l.id+'">'}</td>
+        <td><input type="checkbox" class="email-chk" value="${l.id}" ${l.email_enviado?'':'checked'}></td>
         <td><b>${l.nome_fantasia||'—'}</b><br><small style="color:var(--muted)">${l.segmento||''} ${l.cidade?'- '+l.cidade:''}</small></td>
         <td style="font-size:12px;color:var(--muted)">${l.email}</td>
         <td>${statusChip(l.status,l.demo_status)} ${waEnv}</td>
@@ -2195,16 +2195,28 @@ function enviarEmailSelMala(){
   const ids=getSelectedEmailIds();
   if(!ids.length){ alert('Selecione ao menos 1 lead com checkbox'); return; }
   const idSet=new Set(ids);
-  const comEmail=_emailLeadsAll.filter(l=>idSet.has(l.id)&&l.email&&l.email.includes('@')).length;
-  if(!comEmail){ alert('Nenhum lead selecionado tem email válido'); return; }
-  if(!confirm(`Enviar email para ${comEmail} lead(s)?\n\n(${ids.length} selecionados, ${ids.length-comEmail} sem email serão ignorados)`)) return;
+  const selecionados=_emailLeadsAll.filter(l=>idSet.has(l.id)&&l.email&&l.email.includes('@'));
+  if(!selecionados.length){ alert('Nenhum lead selecionado tem email válido'); return; }
+  const novos=selecionados.filter(l=>!l.email_enviado).length;
+  const jaEnv=selecionados.length-novos;
+  let reenviar=false;
+  if(jaEnv>0&&novos>0){
+    const escolha=prompt(`${novos} novos + ${jaEnv} já receberam email\n\nDigite:\n1 = Só novos (${novos})\n2 = Todos incluindo reenvio (${selecionados.length})`);
+    if(!escolha) return;
+    if(escolha.trim()==='2') reenviar=true;
+  } else if(jaEnv>0&&novos===0){
+    if(!confirm(`Reenviar email para ${jaEnv} lead(s) que já receberam?`)) return;
+    reenviar=true;
+  } else {
+    if(!confirm(`Enviar email para ${novos} lead(s)?`)) return;
+  }
   const btn=document.querySelector('[onclick="enviarEmailSelMala()"]');
   const oldHtml=btn.innerHTML;
   btn.innerHTML='<i class="fa fa-spinner fa-spin"></i> Enviando...';
   btn.disabled=true;
   fetch(`/api/${BOT}/send-emails`,{
     method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({ids})
+    body:JSON.stringify({ids,reenviar})
   }).then(r=>r.json()).then(d=>{
     btn.innerHTML=oldHtml; btn.disabled=false;
     if(d.ok){
@@ -2458,7 +2470,18 @@ async function enviarMalaDireta(btn) {
   if (!_emailCfg.resend_api_key) { status.style.color='#f87171'; status.textContent='Configure a API Key do Resend em Configurações'; return }
   if (!assunto) { status.style.color='#fbbf24'; status.textContent='Configure o assunto do email em Configurações'; return }
   if (!html_template) { status.style.color='#fbbf24'; status.textContent='Configure o template HTML em Configurações'; return }
-  if (!confirm(`Enviar email para todos os leads com email cadastrado?\n\nAssunto: ${assunto}\nRemetente: ${_emailCfg.email_remetente}`)) return
+  const novos=_emailLeadsAll.filter(l=>!l.email_enviado).length;
+  const total=_emailLeadsAll.length;
+  const jaEnv=total-novos;
+  let reenviar=false;
+  if(jaEnv>0){
+    const escolha=prompt(`${novos} leads novos (sem email)\n${jaEnv} leads já receberam email\n\nDigite:\n1 = Só novos (${novos})\n2 = Reenviar para TODOS (${total})\n\nOu cancele para não enviar`);
+    if(!escolha) return;
+    if(escolha.trim()==='2') reenviar=true;
+    else if(escolha.trim()!=='1') return;
+  } else {
+    if(!confirm(`Enviar email para ${novos} leads?\n\nAssunto: ${assunto}`)) return;
+  }
   btn.disabled = true
   const oldHtml = btn.innerHTML
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Enviando...'
@@ -2467,13 +2490,13 @@ async function enviarMalaDireta(btn) {
     const r = await fetch(`/api/${BOT}/email/campanha`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({assunto, html_template})
+      body: JSON.stringify({assunto, html_template, reenviar})
     })
     const d = await r.json()
     if (d.ok) {
       status.style.color = '#4ade80'
-      status.textContent = `${d.enviados} email(s) enviado(s)${d.erros ? ', ' + d.erros + ' erro(s)' : ''}`
-      loadWA()
+      status.textContent = `${d.enviados} email(s) enviado(s)${d.erros ? ', ' + d.erros + ' erro(s)' : ''}${d.ignorados ? ', ' + d.ignorados + ' já enviado(s)' : ''}`
+      loadEmailLeads()
     } else {
       status.style.color = '#f87171'
       status.textContent = 'Erro: ' + (d.error || 'falha')

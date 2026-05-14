@@ -2018,6 +2018,7 @@ def api_send_emails(bot):
     schema = _get_schema() or bot
     data = request.get_json(silent=True) or {}
     lead_ids = data.get('ids', [])
+    reenviar = data.get('reenviar', False)
     if not lead_ids:
         return jsonify({'error': 'nenhum lead selecionado'}), 400
     ecfg = _get_email_config(schema)
@@ -2041,20 +2042,25 @@ def api_send_emails(bot):
     conn = _conn(schema)
     c = conn.cursor()
     ph = ','.join(['%s'] * len(lead_ids))
-    try:
-        c.execute(f"SELECT id, nome_fantasia, email FROM empresas WHERE id IN ({ph}) AND email IS NOT NULL"
-                  f" AND (email_enviado IS NULL)"
-                  f" AND status NOT IN ('bounce','spam')",
-                  lead_ids)
-    except Exception:
-        conn.rollback()
+    if reenviar:
         c.execute(f"SELECT id, nome_fantasia, email FROM empresas WHERE id IN ({ph}) AND email IS NOT NULL"
                   f" AND status NOT IN ('bounce','spam')",
                   lead_ids)
+    else:
+        try:
+            c.execute(f"SELECT id, nome_fantasia, email FROM empresas WHERE id IN ({ph}) AND email IS NOT NULL"
+                      f" AND (email_enviado IS NULL)"
+                      f" AND status NOT IN ('bounce','spam')",
+                      lead_ids)
+        except Exception:
+            conn.rollback()
+            c.execute(f"SELECT id, nome_fantasia, email FROM empresas WHERE id IN ({ph}) AND email IS NOT NULL"
+                      f" AND status NOT IN ('bounce','spam')",
+                      lead_ids)
     leads = c.fetchall()
     conn.close()
     if not leads:
-        return jsonify({'error': 'Todos os leads selecionados já receberam email ou são bounce/spam'}), 400
+        return jsonify({'error': 'Nenhum lead elegível (todos bounce/spam ou sem email)'}), 400
 
     empresa_nome = user['empresa_nome'] if user else ''
     base_url = os.environ.get('BASE_URL', request.host_url.rstrip('/')).replace('http://', 'https://')
@@ -2107,6 +2113,7 @@ def api_email_campanha(bot):
     assunto = data.get('assunto', '').strip()
     corpo = data.get('corpo', '').strip()
     html_template = data.get('html_template', '').strip()
+    reenviar = data.get('reenviar', False)
     if not assunto:
         return jsonify({'error': 'assunto é obrigatório'}), 400
     if not corpo and not html_template:
@@ -2123,18 +2130,24 @@ def api_email_campanha(bot):
     try:
         conn = _conn(schema)
         c = conn.cursor()
-        try:
-            c.execute("""SELECT id, nome_fantasia, email, segmento, cidade, estado
-                         FROM empresas WHERE email IS NOT NULL AND email != ''
-                         AND email_enviado IS NULL
-                         AND status NOT IN ('bounce','spam')
-                         ORDER BY score DESC LIMIT 500""")
-        except Exception:
-            conn.rollback()
+        if reenviar:
             c.execute("""SELECT id, nome_fantasia, email, segmento, cidade, estado
                          FROM empresas WHERE email IS NOT NULL AND email != ''
                          AND status NOT IN ('bounce','spam')
                          ORDER BY score DESC LIMIT 500""")
+        else:
+            try:
+                c.execute("""SELECT id, nome_fantasia, email, segmento, cidade, estado
+                             FROM empresas WHERE email IS NOT NULL AND email != ''
+                             AND email_enviado IS NULL
+                             AND status NOT IN ('bounce','spam')
+                             ORDER BY score DESC LIMIT 500""")
+            except Exception:
+                conn.rollback()
+                c.execute("""SELECT id, nome_fantasia, email, segmento, cidade, estado
+                             FROM empresas WHERE email IS NOT NULL AND email != ''
+                             AND status NOT IN ('bounce','spam')
+                             ORDER BY score DESC LIMIT 500""")
         leads = c.fetchall()
         conn.close()
     except Exception as e:
