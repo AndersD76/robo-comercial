@@ -1091,10 +1091,34 @@ def api_bot_status(bot):
     if wa_proc is not None and wa_proc.poll() is not None:
         wa_exit = wa_proc.returncode
         _procs.setdefault(schema, {})['wa'] = None
+    # Estado real do WhatsApp (não só se o processo está vivo)
+    wa_real_status = None
+    wa_detail = None
+    if wa_running:
+        try:
+            base = os.path.dirname(os.path.abspath(__file__))
+            sf = os.path.join(base, 'robo_pili', 'wa_status.json')
+            with open(sf, 'r', encoding='utf-8') as f:
+                ws = json.load(f)
+            wa_real_status = ws.get('status')
+            wa_detail = ws.get('detail')
+        except Exception:
+            wa_real_status = 'iniciando'
+    elif not wa_running:
+        # Limpa status file quando processo não está rodando
+        try:
+            base = os.path.dirname(os.path.abspath(__file__))
+            sf = os.path.join(base, 'robo_pili', 'wa_status.json')
+            if os.path.exists(sf):
+                os.remove(sf)
+        except Exception:
+            pass
     return jsonify({
         'busca': _proc_running(schema, 'busca'),
         'wa': wa_running,
         'wa_exit': wa_exit,
+        'wa_status': wa_real_status,
+        'wa_detail': wa_detail,
         'linkedin': _proc_running(schema, 'linkedin'),
     })
 

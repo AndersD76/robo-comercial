@@ -23,6 +23,24 @@ _BRT = timezone(timedelta(hours=-3))
 # Diretório para salvar sessão e evitar QR toda vez
 SESSION_DIR = './whatsapp_session'
 
+import os as _os_mod
+import json as _json_mod
+
+_STATUS_FILE = _os_mod.path.join(
+    _os_mod.path.dirname(_os_mod.path.abspath(__file__)), 'wa_status.json'
+)
+
+def _write_wa_status(status: str, detail: str = ''):
+    try:
+        with open(_STATUS_FILE, 'w', encoding='utf-8') as f:
+            _json_mod.dump({
+                'status': status,
+                'detail': detail,
+                'ts': datetime.now(_BRT).isoformat()
+            }, f)
+    except Exception:
+        pass
+
 
 def _ts() -> str:
     """Timestamp BRT formatado para logs."""
@@ -50,6 +68,7 @@ class WhatsAppBot:
         import os
         from playwright.async_api import async_playwright
 
+        _write_wa_status('iniciando', 'Abrindo navegador...')
         print(
             f"[WA/Pili {_ts()}] ℹ Iniciando WhatsApp bot...", flush=True
         )
@@ -87,6 +106,7 @@ class WhatsAppBot:
                 {get: () => undefined});
         """)
 
+        _write_wa_status('iniciando', 'Abrindo WhatsApp Web...')
         print(
             f"[WA/Pili {_ts()}] ℹ Abrindo WhatsApp Web...",
             flush=True
@@ -96,6 +116,7 @@ class WhatsAppBot:
         # Verifica se já está conectado (sessão salva)
         ja_conectado = await self._verificar_ja_conectado()
         if not ja_conectado:
+            _write_wa_status('aguardando_qr', 'Escaneie o QR Code no dashboard')
             print(
                 f"[WA/Pili {_ts()}] ⚠ Sessão não encontrada — "
                 "escaneie o QR Code no dashboard",
@@ -116,6 +137,7 @@ class WhatsAppBot:
             except OSError:
                 pass
         else:
+            _write_wa_status('conectado', 'Sessão salva detectada')
             print(
                 f"[WA/Pili {_ts()}] ✓ Sessão salva detectada",
                 flush=True
@@ -124,12 +146,14 @@ class WhatsAppBot:
 
         if conectado:
             self.conectado = True
+            _write_wa_status('conectado', 'WhatsApp conectado e enviando')
             print(
                 f"[WA/Pili {_ts()}] ✓ WhatsApp conectado e pronto!",
                 flush=True
             )
             return True
         else:
+            _write_wa_status('falhou', 'WhatsApp não conectou em 5 min')
             print(
                 f"[WA/Pili {_ts()}] ✗ WhatsApp não conectou em 5 min",
                 flush=True

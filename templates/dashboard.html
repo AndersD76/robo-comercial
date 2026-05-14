@@ -1968,12 +1968,32 @@ function loadWaStats(){
     const st=document.getElementById('wa-conn-status');
     const btnStart=document.getElementById('btn-wa-start');
     const btnStop=document.getElementById('btn-wa-stop');
+    const actionSt=document.getElementById('wa-action-status');
     if(d.wa){
-      st.innerHTML='<i class="fa fa-circle-check" style="color:#22c55e"></i> Conectado e enviando';
-      st.style.color='#22c55e';
-      btnStart.innerHTML='<i class="fab fa-whatsapp"></i> Conectado';
       btnStart.disabled=true;
       btnStop.disabled=false;
+      // Usar status REAL do WhatsApp
+      const rs=d.wa_status||'iniciando';
+      if(rs==='conectado'){
+        st.innerHTML='<i class="fa fa-circle-check" style="color:#22c55e"></i> Conectado e enviando';
+        st.style.color='#22c55e';
+        btnStart.innerHTML='<i class="fab fa-whatsapp"></i> Conectado';
+        actionSt.textContent=d.wa_detail||'WhatsApp conectado';
+        actionSt.style.color='#22c55e';
+        stopQrPolling();
+      } else if(rs==='aguardando_qr'){
+        st.innerHTML='<i class="fa fa-qrcode" style="color:#fbbf24"></i> Aguardando QR Code';
+        st.style.color='#fbbf24';
+        btnStart.innerHTML='<i class="fa fa-qrcode"></i> Aguardando QR';
+        actionSt.textContent='Escaneie o QR Code no celular';
+        actionSt.style.color='#fbbf24';
+      } else {
+        st.innerHTML='<i class="fa fa-spinner fa-spin" style="color:#818cf8"></i> Iniciando...';
+        st.style.color='#818cf8';
+        btnStart.innerHTML='<i class="fa fa-spinner fa-spin"></i> Iniciando...';
+        actionSt.textContent=d.wa_detail||'Abrindo navegador...';
+        actionSt.style.color='#818cf8';
+      }
     } else {
       st.innerHTML='<i class="fa fa-circle-xmark"></i> Desconectado';
       st.style.color='var(--muted)';
@@ -1981,9 +2001,8 @@ function loadWaStats(){
       btnStart.disabled=false;
       btnStop.disabled=true;
       if(d.wa_exit!==null&&d.wa_exit!==undefined){
-        const statusEl=document.getElementById('wa-action-status');
-        statusEl.textContent='Último processo encerrou com código '+d.wa_exit;
-        statusEl.style.color='#ef4444';
+        actionSt.textContent='Último processo encerrou com código '+d.wa_exit;
+        actionSt.style.color='#ef4444';
       }
     }
   }).catch(()=>{});
@@ -2040,15 +2059,13 @@ function _checkWaAlive(btn){
         }
       }).catch(()=>{});
     } else {
-      // Bot está rodando — atualizar UI
-      stopQrPolling();
-      btn.innerHTML='<i class="fab fa-whatsapp"></i> Conectado';
-      btn.disabled=true;
-      document.getElementById('btn-wa-stop').disabled=false;
-      const statusEl=document.getElementById('wa-action-status');
-      statusEl.textContent='WhatsApp conectado e enviando mensagens';
-      statusEl.style.color='#22c55e';
+      // Bot está rodando — loadWaStats vai atualizar com status real
       loadWaStats();
+      // Se ainda não conectou de verdade, verificar de novo em 5s
+      const rs=d.wa_status||'iniciando';
+      if(rs!=='conectado'){
+        setTimeout(()=>_checkWaAlive(btn),5000);
+      }
     }
   }).catch(()=>{});
 }
