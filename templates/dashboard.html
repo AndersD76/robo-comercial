@@ -1315,12 +1315,39 @@ function pipePage(st,dir){
 }
 
 function dropLead(leadId,newStatus){
+  // Optimistic: mover card no DOM imediatamente
+  const card=document.querySelector(`.lcard[ondragstart*="'${leadId}'"]`);
+  const targetCol=document.getElementById(`kb-${newStatus}`);
+  if(card&&targetCol){
+    const oldCol=card.parentElement;
+    const empty=targetCol.querySelector('.col-empty');
+    if(empty) empty.remove();
+    targetCol.prepend(card);
+    // Atualizar contadores
+    STAGES.forEach(st=>{
+      const col=document.getElementById(`kb-${st}`);
+      const cnt=document.getElementById(`cnt-${st}`);
+      if(col&&cnt) cnt.textContent=col.querySelectorAll('.lcard').length;
+    });
+    // Atualizar total
+    const totalEl=document.getElementById('pipe-total');
+    if(totalEl){
+      let t=0; STAGES.forEach(st=>{const c=document.getElementById(`cnt-${st}`);if(c)t+=parseInt(c.textContent)||0;});
+      totalEl.textContent=t?`${t} lead${t!==1?'s':''}`:' ';
+    }
+    // Se coluna antiga ficou vazia, mostrar placeholder
+    if(oldCol&&!oldCol.querySelectorAll('.lcard').length){
+      oldCol.innerHTML='<div class="col-empty">Arraste leads aqui</div>';
+    }
+  }
+  // Salvar no servidor
   fetch(`/api/${BOT}/lead/${leadId}`,{
     method:'PUT',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({status:newStatus})
   }).then(r=>r.json()).then(d=>{
-    if(d.ok){ loadPipe(); loadWA(); refreshStats(); }
-  });
+    if(d.ok){ refreshStats(); }
+    else { loadPipe(); } // rollback se falhou
+  }).catch(()=>loadPipe());
 }
 
 function botFetch(canal,action){
