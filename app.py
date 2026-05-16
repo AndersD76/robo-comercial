@@ -359,6 +359,9 @@ def _check_lead_limit(schema, uid=None):
     uid = uid or session.get('user_id')
     if not uid:
         return True, ''
+    # Admin logado = sem limite
+    if session.get('admin_auth'):
+        return True, ''
     try:
         conn = _conn()
         c = conn.cursor()
@@ -4273,7 +4276,7 @@ a{{color:#818cf8;text-decoration:none}}
 def api_meu_plano():
     """Retorna info do plano do user logado."""
     user = get_current_user()
-    plano = user.get('plano', 'trial')
+    plano = user.get('plano') or 'trial'
     expira = user.get('plano_expira')
     ativo = plano != 'trial'
     if expira:
