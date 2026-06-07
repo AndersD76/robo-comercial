@@ -5,6 +5,7 @@ Prospecção IA + CRM + Email + WhatsApp + Agendamento
 """
 
 import hashlib
+import hmac as _hmac
 import json
 import os
 import random
@@ -12,22 +13,62 @@ import re
 import secrets
 import subprocess
 import sys
-from urllib.parse import quote as _urlquote
+from urllib.parse import quote as _urlquote, urlparse as _urlparse
+import bcrypt
 import psycopg2
 import psycopg2.extras
+from psycopg2 import sql as psql
 from functools import wraps
 from flask import (Flask, jsonify, make_response, redirect, render_template,
                    request, send_file, session, url_for)
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'mv-saas-2025-change-in-prod')
+
+_secret = os.environ.get('SECRET_KEY', '')
+if not _secret or _secret == 'mv-saas-2025-change-in-prod':
+    _secret = secrets.token_hex(32)
+    print('[WARN] SECRET_KEY não definido — gerado temporário (sessões perdidas ao reiniciar)', flush=True)
+app.secret_key = _secret
+
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 app.config['PREFERRED_URL_SCHEME'] = 'https'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = 86400
+
 from werkzeug.middleware.proxy_fix import ProxyFix
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
+limiter = Limiter(get_remote_address, app=app, default_limits=["200 per minute"],
+                  storage_uri="memory://")
+
 GA_MEASUREMENT_ID = os.environ.get('GA_MEASUREMENT_ID', 'G-NGSNSF3SPM')
+
+
+@app.after_request
+def _set_security_headers(resp):
+    resp.headers['X-Content-Type-Options'] = 'nosniff'
+    resp.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    resp.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    resp.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+    resp.headers.pop('Server', None)
+    if request.is_secure:
+        resp.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    return resp
+
+
+@app.errorhandler(429)
+def _rate_limit_handler(e):
+    return jsonify({'error': 'Muitas tentativas. Aguarde um momento.'}), 429
+
+
+@app.errorhandler(500)
+def _internal_error(e):
+    return jsonify({'error': 'Erro interno'}), 500
 
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 if not DATABASE_URL:
@@ -155,9 +196,11 @@ def _init_public_schema():
 
 
 def _init_user_schema(schema: str):
+    if not re.match(r'^emp_\d+$', schema):
+        raise ValueError(f'Schema inválido: {schema}')
     conn = _conn()
     c = conn.cursor()
-    c.execute('CREATE SCHEMA IF NOT EXISTS ' + schema)
+    c.execute(psql.SQL('CREATE SCHEMA IF NOT EXISTS {}').format(psql.Identifier(schema)))
     c.execute('SET search_path TO %s, public', (schema,))
     conn.commit()
     c.execute("""CREATE TABLE IF NOT EXISTS empresas (
@@ -317,7 +360,14 @@ def _init_user_schema(schema: str):
 # =============================================================================
 
 def _hash_pw(pw: str) -> str:
-    return hashlib.sha256(pw.encode()).hexdigest()
+    return bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
+
+
+def _verify_pw(pw: str, stored_hash: str) -> bool:
+    """Verifica senha — suporta bcrypt e legacy SHA-256 (migra automaticamente)."""
+    if stored_hash.startswith('$2'):
+        return bcrypt.checkpw(pw.encode(), stored_hash.encode())
+    return hashlib.sha256(pw.encode()).hexdigest() == stored_hash
 
 
 def login_required(f):
@@ -407,7 +457,7 @@ def token_required(f):
                 return jsonify({'error': 'token inválido'}), 401
             request.token_user = dict(row)
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
         return f(*args, **kwargs)
     return decorated
 
@@ -593,6 +643,7 @@ def _proc_running(schema: str, canal: str) -> bool:
 # =============================================================================
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("10 per minute", methods=["POST"])
 def login():
     if session.get('user_id'):
         return redirect(url_for('dashboard'))
@@ -606,8 +657,17 @@ def login():
             c.execute('SELECT * FROM users WHERE email = %s AND ativo = TRUE', (email,))
             user = c.fetchone()
             conn.close()
-            if user and user['password_hash'] == _hash_pw(pw):
+            if user and _verify_pw(pw, user['password_hash']):
                 session['user_id'] = user['id']
+                session.permanent = True
+                # Migra hash SHA-256 legado para bcrypt
+                if not user['password_hash'].startswith('$2'):
+                    conn_up = _conn()
+                    cu = conn_up.cursor()
+                    cu.execute('UPDATE users SET password_hash=%s WHERE id=%s',
+                               (_hash_pw(pw), user['id']))
+                    conn_up.commit()
+                    conn_up.close()
                 schema = user.get('schema_name') or f'emp_{user["id"]}'
                 if not user.get('schema_name'):
                     c2 = _conn()
@@ -623,11 +683,13 @@ def login():
                 return redirect(url_for('dashboard'))
             error = 'Email ou senha incorretos'
         except Exception as e:
-            error = f'Erro: {e}'
+            print(f'[login] erro: {e}', flush=True)
+            error = 'Erro interno. Tente novamente.'
     return render_template('login.html', error=error)
 
 
 @app.route('/cadastro', methods=['GET', 'POST'])
+@limiter.limit("5 per minute", methods=["POST"])
 def cadastro():
     if session.get('user_id'):
         return redirect(url_for('dashboard'))
@@ -667,15 +729,17 @@ def cadastro():
                     session['user_id'] = uid
                     return redirect(url_for('config_page'))
             except Exception as e:
-                error = f'Erro: {e}'
+                print(f'[cadastro] erro: {e}', flush=True)
+                error = 'Erro interno. Tente novamente.'
     return render_template('register.html', error=error)
 
 
 @app.route('/admin/users')
 def admin_users():
-    secret = request.args.get('key', '')
-    admin_key = os.environ.get('ADMIN_KEY', 'trocar123')
-    if secret != admin_key:
+    if not session.get('admin_auth'):
+        return jsonify({'error': 'unauthorized'}), 401
+    admin_key = os.environ.get('ADMIN_KEY', '')
+    if not admin_key:
         return jsonify({'error': 'unauthorized'}), 401
     try:
         conn = _conn()
@@ -688,7 +752,7 @@ def admin_users():
                 u['criado_em'] = str(u['criado_em'])
         return jsonify(users)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/logout')
@@ -1067,7 +1131,7 @@ def api_pipeline():
         return jsonify(result)
     except Exception as e:
         print(f'[pipeline/{schema}] {e}')
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/leads')
@@ -1161,7 +1225,7 @@ def api_bot_start(bot):
         )
     except Exception as e:
         log_file.close()
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
     _procs.setdefault(schema, {})
     _procs[schema][canal] = proc
     return jsonify({'status': 'started', 'pid': proc.pid, 'canal': canal})
@@ -1200,7 +1264,7 @@ def api_bot_console(bot):
     except FileNotFoundError:
         return jsonify({'lines': []})
     except Exception as e:
-        return jsonify({'lines': [], 'error': str(e)})
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'lines': [], 'error': 'Erro interno'})
 
 
 # --- Lead CRUD ---
@@ -1240,7 +1304,7 @@ def api_add_lead(bot):
         conn.close()
         return jsonify({'ok': True, 'id': new_id})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/lead/<int:lead_id>', methods=['PUT'])
@@ -1303,7 +1367,7 @@ def api_update_lead(bot, lead_id):
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/lead/<int:lead_id>', methods=['DELETE'])
@@ -1320,7 +1384,7 @@ def api_delete_lead(bot, lead_id):
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/clear-all', methods=['POST'])
@@ -1344,7 +1408,7 @@ def api_clear_all(bot):
         conn.close()
         return jsonify({'ok': True, 'msg': 'Tudo limpo'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 # --- Atividades (Timeline) ---
@@ -1363,7 +1427,7 @@ def api_lead_atividades(bot, lead_id):
         conn.close()
         return jsonify(rows)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/lead/<int:lead_id>/atividade', methods=['POST'])
@@ -1386,7 +1450,7 @@ def api_add_atividade(bot, lead_id):
         conn.close()
         return jsonify({'ok': True, 'id': aid})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 # --- Tarefas ---
@@ -1405,7 +1469,7 @@ def api_lead_tarefas(bot, lead_id):
         conn.close()
         return jsonify(rows)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/lead/<int:lead_id>/tarefa', methods=['POST'])
@@ -1428,7 +1492,7 @@ def api_add_tarefa(bot, lead_id):
         conn.close()
         return jsonify({'ok': True, 'id': tid})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/tarefa/<int:tarefa_id>', methods=['PUT'])
@@ -1451,7 +1515,7 @@ def api_update_tarefa(bot, tarefa_id):
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/tarefa/<int:tarefa_id>', methods=['DELETE'])
@@ -1466,7 +1530,7 @@ def api_delete_tarefa(bot, tarefa_id):
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/tarefas/pendentes')
@@ -1485,7 +1549,7 @@ def api_tarefas_pendentes(bot):
         conn.close()
         return jsonify(rows)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 # --- Enriquecimento CNPJ ---
@@ -1620,7 +1684,7 @@ def api_relatorios(bot):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 # --- Sequências de Email ---
@@ -1643,7 +1707,7 @@ def api_list_sequencias(bot):
         conn.close()
         return jsonify(rows)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/sequencias', methods=['POST'])
@@ -1666,7 +1730,7 @@ def api_create_sequencia(bot):
         conn.close()
         return jsonify({'ok': True, 'id': seq_id})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/sequencia/<int:seq_id>', methods=['PUT'])
@@ -1695,7 +1759,7 @@ def api_update_sequencia(bot, seq_id):
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/sequencia/<int:seq_id>', methods=['DELETE'])
@@ -1710,7 +1774,7 @@ def api_delete_sequencia(bot, seq_id):
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/sequencia/<int:seq_id>/enroll',
@@ -1753,7 +1817,7 @@ def api_enroll_leads(bot, seq_id):
         conn.close()
         return jsonify({'ok': True, 'enrolled': enrolled})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/sequencia/<int:seq_id>/leads')
@@ -1772,7 +1836,7 @@ def api_sequencia_leads(bot, seq_id):
         conn.close()
         return jsonify(rows)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/sequencias/processar', methods=['POST'])
@@ -1886,7 +1950,7 @@ def _processar_sequencias_schema(schema):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 # --- CSV Export ---
@@ -1929,7 +1993,7 @@ def api_export_leads(bot):
                         mimetype='text/csv',
                         headers={'Content-Disposition': 'attachment;filename=leads.csv'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 # --- Bulk Actions ---
@@ -1975,7 +2039,7 @@ def api_bulk_action(bot):
             conn.close()
             return jsonify({'error': 'action inválida'}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 # --- Email em massa ---
@@ -2212,7 +2276,7 @@ def api_email_campanha(bot):
         leads = c.fetchall()
         conn.close()
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
     if not leads:
         return jsonify({'error': 'nenhum lead com email cadastrado'}), 400
@@ -2438,7 +2502,7 @@ def api_save_config(bot):
         import traceback
         traceback.print_exc()
         print(f'[save_config/{schema}] ERRO: {e}', flush=True)
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
     finally:
         if conn:
             try:
@@ -2834,7 +2898,7 @@ def api_list_tokens(bot):
         conn.close()
         return jsonify(rows)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/tokens', methods=['POST'])
@@ -2855,7 +2919,7 @@ def api_create_token(bot):
         return jsonify({'ok': True, 'id': tid, 'token': token,
                         'aviso': 'Salve este token — não será exibido novamente'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/tokens/<int:token_id>', methods=['DELETE'])
@@ -2870,7 +2934,7 @@ def api_revoke_token(bot, token_id):
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 # =============================================================================
@@ -2900,7 +2964,7 @@ def public_list_leads():
         conn.close()
         return jsonify({'leads': rows, 'total': len(rows)})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/v1/leads', methods=['POST'])
@@ -2928,7 +2992,7 @@ def public_create_lead():
         conn.close()
         return jsonify({'ok': True, 'id': new_id}), 201
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/v1/leads/<int:lead_id>', methods=['PUT'])
@@ -2949,7 +3013,7 @@ def public_update_lead(lead_id):
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 # =============================================================================
@@ -2978,7 +3042,7 @@ def api_agenda(bot):
         conn.close()
         return jsonify(rows)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/agenda', methods=['POST'])
@@ -3010,7 +3074,7 @@ def api_add_evento(bot):
         conn.close()
         return jsonify({'ok': True, 'id': eid})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/agenda/<int:evento_id>', methods=['PUT'])
@@ -3034,7 +3098,7 @@ def api_update_evento(bot, evento_id):
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/agenda/<int:evento_id>', methods=['DELETE'])
@@ -3049,7 +3113,7 @@ def api_delete_evento(bot, evento_id):
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 # =============================================================================
@@ -3459,18 +3523,16 @@ def _inject_tracking_pixel(html, track_url):
 # ── Email Tracking Endpoints (públicos, sem auth) ──
 
 @app.route('/t/test')
+@login_required
 def email_track_test():
-    """Diagnóstico do tracking — acesse para verificar se está funcionando."""
+    """Diagnóstico do tracking — protegido, só admin/logado vê."""
     base = os.environ.get('BASE_URL', request.host_url.rstrip('/'))
     base_https = base.replace('http://', 'https://')
     return jsonify({
         'ok': True,
-        'base_url_env': os.environ.get('BASE_URL', '(não definido)'),
-        'request_host_url': request.host_url,
         'base_url_final': base_https,
         'pixel_example': f'{base_https}/t/TEST_TOKEN/open.png',
         'scheme': request.scheme,
-        'x_forwarded_proto': request.headers.get('X-Forwarded-Proto', '(nenhum)'),
     })
 
 @app.route('/t/<token>/open.png')
@@ -3503,6 +3565,10 @@ def email_track_click(token):
     """Redireciona para o link de agendamento, registra clique."""
     schema, lead_id = _find_lead_by_email_token(token)
     redirect_url = request.args.get('url', '/')
+    # Anti-open-redirect: só permitir URLs internas ou do próprio domínio
+    parsed = _urlparse(redirect_url)
+    if parsed.netloc and parsed.netloc not in ('turbovenda.com.br', request.host):
+        redirect_url = '/'
     if schema and lead_id:
         try:
             conn = _conn(schema)
@@ -3521,6 +3587,28 @@ def email_track_click(token):
 @app.route('/webhook/email', methods=['POST'])
 def webhook_email():
     """Webhook do Resend para eventos de email (bounce, complaint, etc)."""
+    # Verificar assinatura do Resend (svix-signature)
+    resend_wh_secret = os.environ.get('RESEND_WEBHOOK_SECRET', '')
+    if resend_wh_secret:
+        svix_sig = request.headers.get('svix-signature', '')
+        svix_ts = request.headers.get('svix-timestamp', '')
+        svix_id = request.headers.get('svix-id', '')
+        if not svix_sig or not svix_ts:
+            return jsonify({'error': 'missing signature'}), 401
+        body = request.get_data(as_text=True)
+        to_sign = f'{svix_id}.{svix_ts}.{body}'
+        import base64
+        secret_bytes = base64.b64decode(resend_wh_secret.split('_')[-1]
+                                        if '_' in resend_wh_secret
+                                        else resend_wh_secret)
+        sig = base64.b64encode(
+            _hmac.new(secret_bytes, to_sign.encode(), 'sha256').digest()
+        ).decode()
+        sigs = [s.split(',')[-1] for s in svix_sig.split(' ')]
+        if not any(_hmac.compare_digest(sig, s) for s in sigs):
+            print('[EMAIL] Webhook assinatura inválida', flush=True)
+            return jsonify({'error': 'invalid signature'}), 401
+
     data = request.get_json(silent=True) or {}
     event_type = data.get('type', '')
     payload = data.get('data', {})
@@ -3618,7 +3706,7 @@ def _enriquecer_cnpj(schema, lead_id):
         return {'ok': True, 'razao_social': razao, 'porte': porte,
                 'cidade': mun, 'estado': uf, 'situacao': situacao}
     except Exception as e:
-        return {'ok': False, 'error': str(e)}
+        print(f'[ERR] agendar: {e}', flush=True); return {'ok': False, 'error': 'Erro interno'}
 
 
 def _get_link_agenda(schema, lead_id):
@@ -3785,7 +3873,7 @@ def api_agenda_confirmar(token):
         return jsonify({'ok': True, 'id': evt_id,
                         'data': data_str, 'hora': hora_str})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/lead/<int:lead_id>/link-agenda')
@@ -3890,13 +3978,30 @@ def api_checkout():
         return jsonify({
             'error': resp.get('message', 'Erro MP')}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/webhook/mercadopago', methods=['POST'])
 def webhook_mercadopago():
     """Webhook do Mercado Pago — atualiza plano do user."""
     import requests as http
+    # Verificar assinatura do webhook (x-signature header do MP)
+    mp_webhook_secret = os.environ.get('MP_WEBHOOK_SECRET', '')
+    if mp_webhook_secret:
+        x_sig = request.headers.get('x-signature', '')
+        x_req_id = request.headers.get('x-request-id', '')
+        # MP envia ts=xxx,v1=hash no x-signature
+        sig_parts = dict(p.split('=', 1) for p in x_sig.split(',') if '=' in p)
+        ts = sig_parts.get('ts', '')
+        v1 = sig_parts.get('v1', '')
+        data_id = request.args.get('data.id', request.args.get('id', ''))
+        manifest = f'id:{data_id};request-id:{x_req_id};ts:{ts};'
+        expected = _hmac.new(mp_webhook_secret.encode(), manifest.encode(),
+                             'sha256').hexdigest()
+        if not _hmac.compare_digest(v1, expected):
+            print(f'[MP] Webhook assinatura inválida', flush=True)
+            return jsonify({'error': 'invalid signature'}), 401
+
     data = request.get_json(silent=True) or {}
     if data.get('type') != 'payment':
         return jsonify({'ok': True})
@@ -4024,7 +4129,7 @@ def api_pagamento_pix():
             'error': pay.get('message',
                 str(pay.get('cause', 'Erro')))}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/pagamento/cartao', methods=['POST'])
@@ -4167,7 +4272,7 @@ def api_pagamento_cartao():
                 'error': msgs.get(detail,
                     f'Pagamento recusado ({detail})')}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/pagamento/boleto', methods=['POST'])
@@ -4235,7 +4340,7 @@ def api_pagamento_boleto():
             'error': pay.get('message',
                 str(pay.get('cause', 'Erro')))}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/pagamento/<resultado>')
@@ -4322,15 +4427,19 @@ def admin_required(f):
 
 
 @app.route('/admin', methods=['GET', 'POST'])
+@limiter.limit("5 per minute", methods=["POST"])
 def admin_login():
     error = None
     if request.method == 'POST':
         key = request.form.get('admin_key', '')
-        admin_key = os.environ.get('ADMIN_KEY', 'trocar123')
-        if key == admin_key:
+        admin_key = os.environ.get('ADMIN_KEY', '')
+        if not admin_key:
+            error = 'ADMIN_KEY não configurado no servidor'
+        elif _hmac.compare_digest(key, admin_key):
             session['admin_auth'] = True
             return redirect(url_for('admin_dashboard'))
-        error = 'Senha incorreta'
+        else:
+            error = 'Senha incorreta'
     if session.get('admin_auth'):
         return redirect(url_for('admin_dashboard'))
     return render_template('admin.html', error=error)
@@ -4368,16 +4477,19 @@ def admin_api_stats():
         users = c.fetchall()
         for u in users:
             schema = u['schema_name']
+            if not re.match(r'^emp_\d+$', schema):
+                continue
             try:
-                c.execute(
-                    'SELECT COUNT(*) AS cnt FROM {}.empresas'.format(schema))
+                c.execute(psql.SQL('SELECT COUNT(*) AS cnt FROM {}.empresas').format(
+                    psql.Identifier(schema)))
                 total_leads += c.fetchone()['cnt']
             except Exception:
                 conn.rollback()
             try:
-                c.execute(
-                    "SELECT COUNT(*) AS cnt FROM {}.empresas "
-                    "WHERE email_enviado IS NOT NULL".format(schema))
+                c.execute(psql.SQL(
+                    'SELECT COUNT(*) AS cnt FROM {}.empresas '
+                    'WHERE email_enviado IS NOT NULL').format(
+                    psql.Identifier(schema)))
                 total_emails += c.fetchone()['cnt']
             except Exception:
                 conn.rollback()
@@ -4390,7 +4502,7 @@ def admin_api_stats():
             'total_payments': total_payments,
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/admin/api/users')
@@ -4410,11 +4522,10 @@ def admin_api_users_list():
             # Count leads for this user
             schema = row.get('schema_name')
             lead_count = 0
-            if schema:
+            if schema and re.match(r'^emp_\d+$', schema):
                 try:
-                    c.execute(
-                        'SELECT COUNT(*) AS cnt FROM {}.empresas'.format(
-                            schema))
+                    c.execute(psql.SQL('SELECT COUNT(*) AS cnt FROM {}.empresas').format(
+                        psql.Identifier(schema)))
                     lead_count = c.fetchone()['cnt']
                 except Exception:
                     conn.rollback()
@@ -4424,7 +4535,7 @@ def admin_api_users_list():
         conn.close()
         return jsonify(result)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/admin/api/users/<int:uid>/toggle', methods=['POST'])
@@ -4443,7 +4554,7 @@ def admin_api_toggle_user(uid):
         conn.close()
         return jsonify({'ok': True, 'ativo': row['ativo']})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/admin/api/users/<int:uid>/plano', methods=['POST'])
@@ -4466,7 +4577,7 @@ def admin_api_change_plan(uid):
         conn.close()
         return jsonify({'ok': True, 'plano': plano})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/admin/api/users/<int:uid>/impersonate', methods=['POST'])
@@ -4488,7 +4599,7 @@ def admin_api_impersonate(uid):
             pass
         return jsonify({'ok': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/admin/api/payments')
@@ -4512,7 +4623,7 @@ def admin_api_payments():
             result.append(row)
         return jsonify(result)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
 
 # =============================================================================
