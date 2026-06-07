@@ -32,14 +32,7 @@
     body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
 
     /* ════ HEADER ════ */
-    header {
-      background:rgba(10,16,30,.95); backdrop-filter:blur(12px);
-      height:56px; display:flex; align-items:center; justify-content:space-between;
-      padding:0 28px; position:sticky; top:0; z-index:200;
-      border-bottom:1px solid var(--border);
-    }
     .hdr-left { display:flex; align-items:center; gap:14px; }
-    .hdr-brand { font-size:18px; font-weight:800; color:var(--accent); letter-spacing:-.3px; }
     .hdr-badge { font-size:10px; font-weight:700; background:var(--accent); color:#fff; padding:2px 8px; border-radius:6px; letter-spacing:.5px; }
     .hdr-right a { color:var(--sub); font-size:13px; text-decoration:none; padding:6px 14px; border-radius:8px; border:1px solid var(--border); transition:all .15s; }
     .hdr-right a:hover { color:var(--text); background:var(--surf2); border-color:var(--border2); }
@@ -197,6 +190,7 @@
   </style>
 </head>
 <body>
+<a href="#main" class="skip-link">Pular para conteúdo</a>
 
 {% if not session.get('admin_auth') %}
 <!-- ════════════════ LOGIN ════════════════ -->
@@ -214,9 +208,9 @@
 
 {% else %}
 <!-- ════════════════ DASHBOARD ════════════════ -->
-<header>
+<header class="tv-header">
   <div class="hdr-left">
-    <span class="hdr-brand">TurboVenda</span>
+    <span class="tv-logo">Turbo<span>Venda</span></span>
     <span class="hdr-badge">ADMIN</span>
   </div>
   <div class="hdr-right">
@@ -224,7 +218,7 @@
   </div>
 </header>
 
-<main>
+<main id="main">
   <!-- KPIs -->
   <div class="sec-title">Metricas Gerais</div>
   <div class="kpi-row" id="kpi-row">

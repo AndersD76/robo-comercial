@@ -13,12 +13,7 @@
     :root{--bg:#060b18;--surface:#0d1526;--surface2:#111d35;
           --border:rgba(99,102,241,.18);--accent:#6366f1;--text:#f1f5f9;--muted:#64748b;--muted2:#94a3b8}
     body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-    header{height:56px;display:flex;align-items:center;justify-content:space-between;
-        padding:0 28px;border-bottom:1px solid rgba(255,255,255,.05);background:var(--surface)}
-    .hdr-logo{font-size:16px;font-weight:900;letter-spacing:-.3px}
-    .hdr-logo span{color:var(--accent)}
-    .hdr-right{display:flex;align-items:center;gap:12px}
-    .hdr-user{font-size:13px;color:var(--muted2)}
+    .tv-header-right{display:flex;align-items:center;gap:12px}
     .btn-sm{padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;
         cursor:pointer;border:none;text-decoration:none;font-family:'Inter',sans-serif;transition:.2s}
     .btn-dash{background:rgba(99,102,241,.15);color:#818cf8}
@@ -110,16 +105,17 @@
   </style>
 </head>
 <body>
-<header>
-  <div class="hdr-logo">Turbo<span>Venda</span></div>
-  <div class="hdr-right">
-    <span class="hdr-user">{{ user.empresa_nome or user.email }}</span>
+<a href="#main" class="skip-link">Pular para conteúdo</a>
+<header class="tv-header">
+  <a href="/dashboard" class="tv-logo">Turbo<span>Venda</span></a>
+  <div class="tv-header-right">
+    <span class="tv-header-user">{{ user.empresa_nome or user.email }}</span>
     <a href="/dashboard" class="btn-sm btn-dash"><i class="fa fa-gauge"></i> Dashboard</a>
     <a href="/logout" class="btn-sm btn-logout">Sair</a>
   </div>
 </header>
 
-<main>
+<main id="main">
   <div class="page-title">Configurar Robô</div>
   <p class="page-sub">Configure sua empresa e deixe a IA gerar os termos de busca para encontrar seus clientes.</p>
 

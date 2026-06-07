@@ -367,6 +367,7 @@
   </style>
 </head>
 <body>
+<a href="#main" class="skip-link">Pular para conteúdo</a>
 
 <!-- ════ HEADER ════ -->
 <header>
@@ -382,7 +383,7 @@
   </div>
 </header>
 
-<main>
+<main id="main">
 
   <!-- ════ BOTS ════ -->
   <div class="sec-title"><i class="fa fa-robot" style="font-size:10px"></i>Agentes de prospecção</div>
@@ -469,11 +470,11 @@
       <div class="tab-pane">
         <div id="prisma-wa" class="scroll-box">
           <table><thead><tr><th>Empresa</th><th>Segmento</th><th>Status</th><th>Pts</th></tr></thead>
-          <tbody id="prisma-wa-tb"></tbody></table>
+          <tbody id="prisma-wa-tb"><tr><td colspan="4"><div class="state-loading"><i class="fa fa-spinner fa-spin"></i> Carregando...</div></td></tr></tbody></table>
         </div>
         <div id="prisma-li" style="display:none" class="scroll-box">
           <table><thead><tr><th>Nome</th><th>Cargo</th><th>Empresa</th><th>Status</th></tr></thead>
-          <tbody id="prisma-li-tb"></tbody></table>
+          <tbody id="prisma-li-tb"><tr><td colspan="4"><div class="state-loading"><i class="fa fa-spinner fa-spin"></i> Carregando...</div></td></tr></tbody></table>
         </div>
         <div id="prisma-log" style="display:none" class="scroll-box">
           <ul id="prisma-log-ul" style="list-style:none"></ul>
@@ -562,11 +563,11 @@
       <div class="tab-pane">
         <div id="pili-wa" class="scroll-box">
           <table><thead><tr><th>Empresa</th><th>Segmento</th><th>Status</th><th>Pts</th></tr></thead>
-          <tbody id="pili-wa-tb"></tbody></table>
+          <tbody id="pili-wa-tb"><tr><td colspan="4"><div class="state-loading"><i class="fa fa-spinner fa-spin"></i> Carregando...</div></td></tr></tbody></table>
         </div>
         <div id="pili-li" style="display:none" class="scroll-box">
           <table><thead><tr><th>Nome</th><th>Cargo</th><th>Empresa</th><th>Status</th></tr></thead>
-          <tbody id="pili-li-tb"></tbody></table>
+          <tbody id="pili-li-tb"><tr><td colspan="4"><div class="state-loading"><i class="fa fa-spinner fa-spin"></i> Carregando...</div></td></tr></tbody></table>
         </div>
         <div id="pili-log" style="display:none" class="scroll-box">
           <ul id="pili-log-ul" style="list-style:none"></ul>
@@ -664,7 +665,7 @@ function loadWA(bot){
   fetch(`/api/${bot}/leads`).then(r=>r.json()).then(d=>{
     const tb=document.getElementById(`${bot}-wa-tb`);
     if(!d.length){
-      tb.innerHTML='<tr><td colspan="4"><div class="empty-state"><i class="fa fa-inbox"></i>Nenhum lead ainda</div></td></tr>';
+      tb.innerHTML='<tr><td colspan="4"><div class="state-empty"><i class="fa fa-inbox"></i>Nenhum lead ainda</div></td></tr>';
       return;
     }
     tb.innerHTML=d.map(l=>`<tr>
@@ -673,7 +674,10 @@ function loadWA(bot){
       <td>${statusChip(l.status,l.demo_status)}</td>
       <td style="color:var(--muted)">${l.score||0}</td>
     </tr>`).join('');
-  }).catch(()=>{});
+  }).catch(()=>{
+    const tb=document.getElementById(`${bot}-wa-tb`);
+    tb.innerHTML='<tr><td colspan="4"><div class="state-error"><i class="fa fa-circle-exclamation"></i>Erro ao carregar</div></td></tr>';
+  });
 }
 
 // Load  leads
@@ -681,7 +685,7 @@ function loadLI(bot){
   fetch(`/api/${bot}/linkedin`).then(r=>r.json()).then(d=>{
     const tb=document.getElementById(`${bot}-li-tb`);
     if(!d.length){
-      tb.innerHTML='<tr><td colspan="4"><div class="empty-state"><i class="fa-brands fa-linkedin"></i> não iniciou</div></td></tr>';
+      tb.innerHTML='<tr><td colspan="4"><div class="state-empty"><i class="fa-brands fa-linkedin"></i>LinkedIn não iniciou</div></td></tr>';
       return;
     }
     tb.innerHTML=d.map(l=>`<tr>
@@ -690,7 +694,10 @@ function loadLI(bot){
       <td style="color:var(--muted);font-size:11px">${l.empresa||'—'}</td>
       <td>${liChip(l.status)}</td>
     </tr>`).join('');
-  }).catch(()=>{});
+  }).catch(()=>{
+    const tb=document.getElementById(`${bot}-li-tb`);
+    tb.innerHTML='<tr><td colspan="4"><div class="state-error"><i class="fa fa-circle-exclamation"></i>Erro ao carregar</div></td></tr>';
+  });
 }
 
 // Load logs
@@ -698,7 +705,7 @@ function loadLog(bot){
   fetch(`/api/${bot}/logs`).then(r=>r.json()).then(d=>{
     const ul=document.getElementById(`${bot}-log-ul`);
     if(!d.length){
-      ul.innerHTML='<li style="color:var(--muted);padding:20px;text-align:center;font-size:12px">Sem logs</li>';
+      ul.innerHTML='<li class="state-empty"><i class="fa fa-list-ul"></i>Sem logs</li>';
       return;
     }
     ul.innerHTML=d.map(l=>{
@@ -709,7 +716,10 @@ function loadLog(bot){
         <span class="log-ts">${ts}</span>
       </li>`;
     }).join('');
-  }).catch(()=>{});
+  }).catch(()=>{
+    const ul=document.getElementById(`${bot}-log-ul`);
+    ul.innerHTML='<li class="state-error"><i class="fa fa-circle-exclamation"></i>Erro ao carregar logs</li>';
+  });
 }
 
 // Pipeline
@@ -748,7 +758,12 @@ function renderPipe(data){
   if(el) el.textContent=total?`${total} lead${total!==1?'s':''}`:' ';
 }
 function loadPipe(){
-  fetch('/api/pipeline').then(r=>r.json()).then(renderPipe).catch(()=>{});
+  fetch('/api/pipeline').then(r=>r.json()).then(renderPipe).catch(()=>{
+    STAGES.forEach(st=>{
+      const col=document.getElementById(`kb-${st}`);
+      if(col) col.innerHTML='<div class="col-empty state-error" style="font-size:10px"><i class="fa fa-circle-exclamation"></i></div>';
+    });
+  });
 }
 
 // Modal
