@@ -1,0 +1,173 @@
+/* ════════════════════════════════════════════════════════════════
+   TURBOVENDA — Design Tokens (fonte unica de verdade)
+   Todas as cores, tipografia, espacamento, raios e sombras do app.
+   NENHUM hex/px hardcoded fora deste arquivo.
+   ════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Cores base ── */
+  --bg:        #060b18;
+  --bg-alt:    #0d1117;
+  --surface:   #0d1526;
+  --surface2:  #111d35;
+  --surface3:  #162032;
+
+  /* ── Bordas ── */
+  --border:    rgba(99,102,241,.18);
+  --border2:   rgba(255,255,255,.08);
+  --border3:   rgba(255,255,255,.06);
+
+  /* ── Texto ── */
+  --text:      #f1f5f9;
+  --text2:     #e2e8f0;
+  --muted:     #64748b;
+  --muted2:    #94a3b8;
+  --muted3:    #475569;
+
+  /* ── Accent (indigo) ── */
+  --accent:    #6366f1;
+  --accent-dim:rgba(99,102,241,.08);
+  --accent-lo: rgba(99,102,241,.15);
+  --accent-hi: #818cf8;
+  --accent-bd: rgba(99,102,241,.18);
+
+  /* ── Feedback ── */
+  --success:   #22c55e;
+  --success-lo:rgba(34,197,94,.12);
+  --success-bd:rgba(34,197,94,.25);
+  --success-dk:#16a34a;
+
+  --error:     #ef4444;
+  --error-lo:  rgba(239,68,68,.12);
+  --error-bd:  rgba(239,68,68,.25);
+  --error-lt:  #fca5a5;
+
+  --warn:      #f59e0b;
+  --warn-lo:   rgba(251,191,36,.12);
+  --warn-bd:   rgba(251,191,36,.25);
+  --warn-lt:   #fbbf24;
+
+  --info:      #3b82f6;
+  --info-lo:   rgba(59,130,246,.12);
+
+  /* ── Canais ── */
+  --whatsapp:  #22c55e;
+  --linkedin:  #0a66c2;
+  --email-ch:  #f97316;
+
+  /* ── Tipografia ── */
+  --font:      'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'Courier New', ui-monospace, monospace;
+
+  --fs-xs:     10px;
+  --fs-sm:     11px;
+  --fs-base:   13px;
+  --fs-md:     14px;
+  --fs-lg:     15px;
+  --fs-xl:     16px;
+  --fs-2xl:    20px;
+  --fs-3xl:    24px;
+  --fs-4xl:    26px;
+  --fs-5xl:    32px;
+  --fs-hero:   42px;
+
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semi:   600;
+  --fw-bold:   700;
+  --fw-extra:  800;
+  --fw-black:  900;
+
+  --lh-tight:  1.25;
+  --lh-normal: 1.5;
+  --lh-relaxed:1.7;
+
+  /* ── Espacamento (grid 4px) ── */
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3:  12px;
+  --sp-4:  16px;
+  --sp-5:  20px;
+  --sp-6:  24px;
+  --sp-7:  28px;
+  --sp-8:  32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* ── Raios ── */
+  --radius-sm: 6px;
+  --radius:    8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full:9999px;
+
+  /* ── Sombras ── */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.3);
+  --shadow:    0 4px 16px rgba(0,0,0,.3);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,.4);
+  --shadow-xl: 0 16px 48px rgba(0,0,0,.5);
+
+  /* ── Z-index ── */
+  --z-dropdown: 100;
+  --z-sticky:   200;
+  --z-modal:    500;
+  --z-overlay:  600;
+  --z-toast:    700;
+
+  /* ── Transition ── */
+  --ease:  .2s ease;
+  --ease-fast: .15s ease;
+  --ease-slow: .3s ease;
+}
+
+/* ── Reset leve ── */
+*,*::before,*::after { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  line-height: var(--lh-normal);
+}
+
+/* ── Scrollbar global ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.2); }
+
+/* ── Focus ring consistente ── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Skip link (a11y) ── */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: var(--sp-4);
+  background: var(--accent);
+  color: #fff;
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--radius);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semi);
+  z-index: var(--z-toast);
+  transition: top var(--ease);
+}
+.skip-link:focus { top: var(--sp-4); }
+
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
