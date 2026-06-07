@@ -1081,6 +1081,14 @@ def robots_txt():
         "Disallow: /dashboard\n"
         "Disallow: /configurar\n"
         "Disallow: /logout\n\n"
+        "User-agent: GPTBot\n"
+        "Allow: /\n\n"
+        "User-agent: ClaudeBot\n"
+        "Allow: /\n\n"
+        "User-agent: PerplexityBot\n"
+        "Allow: /\n\n"
+        "User-agent: Google-Extended\n"
+        "Allow: /\n\n"
         "Sitemap: https://turbovenda.com.br/sitemap.xml\n"
     )
     return app.response_class(txt, mimetype='text/plain')
@@ -1089,24 +1097,112 @@ def robots_txt():
 @app.route('/sitemap.xml')
 def sitemap_xml():
     urls = [
-        ('https://turbovenda.com.br/', 'weekly', '1.0'),
-        ('https://turbovenda.com.br/cadastro', 'monthly', '0.8'),
-        ('https://turbovenda.com.br/blog', 'weekly', '0.9'),
-        ('https://turbovenda.com.br/login', 'monthly', '0.6'),
+        ('https://turbovenda.com.br/', '2026-06-01', 'weekly', '1.0'),
+        ('https://turbovenda.com.br/cadastro', '2026-06-01', 'monthly', '0.8'),
+        ('https://turbovenda.com.br/blog', '2026-06-01', 'weekly', '0.9'),
+        ('https://turbovenda.com.br/login', '2026-05-01', 'monthly', '0.6'),
+        ('https://turbovenda.com.br/precos', '2026-06-01', 'monthly', '0.8'),
+        ('https://turbovenda.com.br/termos', '2026-06-01', 'yearly', '0.3'),
+        ('https://turbovenda.com.br/privacidade', '2026-06-01', 'yearly', '0.3'),
     ]
     for p in BLOG_POSTS:
         urls.append((
             f"https://turbovenda.com.br/blog/{p['slug']}",
-            'monthly', '0.7'
+            p['data'], 'monthly', '0.7'
         ))
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
     xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-    for loc, freq, pri in urls:
+    for loc, lastmod, freq, pri in urls:
         xml += (f'  <url>\n    <loc>{loc}</loc>\n'
+                f'    <lastmod>{lastmod}</lastmod>\n'
                 f'    <changefreq>{freq}</changefreq>\n'
                 f'    <priority>{pri}</priority>\n  </url>\n')
     xml += '</urlset>\n'
     return app.response_class(xml, mimetype='application/xml')
+
+
+_INDEXNOW_KEY = 'b4f7e2a1c9d84f6e8a3b5c7d9e1f0a2b'
+
+
+@app.route('/llms.txt')
+def llms_txt():
+    txt = (
+        "# TurboVenda\n"
+        "> Plataforma de prospecção B2B automática com IA\n\n"
+        "## O que é\n"
+        "TurboVenda é um SaaS que automatiza a prospecção comercial B2B.\n"
+        "Encontra leads qualificados por segmento, cidade e palavras-chave,\n"
+        "envia e-mails e WhatsApp personalizados com IA, e gerencia o pipeline\n"
+        "comercial em um CRM com Kanban visual.\n\n"
+        "## Público-alvo\n"
+        "Equipes comerciais e vendedores B2B de PMEs brasileiras.\n\n"
+        "## Funcionalidades principais\n"
+        "- Prospecção automática (Google Maps, LinkedIn, buscadores)\n"
+        "- CRM com pipeline Kanban\n"
+        "- E-mail marketing com IA (personalização por lead)\n"
+        "- WhatsApp Business integrado\n"
+        "- Agendamento automático de reuniões\n"
+        "- Relatórios e métricas de conversão\n\n"
+        "## Planos\n"
+        "- Grátis: 50 leads\n"
+        "- Starter (R$97/mês): 500 leads/mês\n"
+        "- Pro (R$297/mês): Leads ilimitados + WhatsApp + prioridade\n\n"
+        "## Links\n"
+        "- Site: https://turbovenda.com.br\n"
+        "- Criar conta: https://turbovenda.com.br/cadastro\n"
+        "- Blog: https://turbovenda.com.br/blog\n"
+        "- Preços: https://turbovenda.com.br/precos\n"
+    )
+    return app.response_class(txt, mimetype='text/plain')
+
+
+@app.route(f'/{_INDEXNOW_KEY}.txt')
+def indexnow_key():
+    return app.response_class(_INDEXNOW_KEY, mimetype='text/plain')
+
+
+@app.route('/manifest.json')
+def manifest_json():
+    m = {
+        "name": "TurboVenda",
+        "short_name": "TurboVenda",
+        "description": "Prospecção B2B automática com IA",
+        "start_url": "/dashboard",
+        "display": "standalone",
+        "background_color": "#060b18",
+        "theme_color": "#6366f1",
+        "icons": [
+            {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png"},
+            {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png"}
+        ]
+    }
+    return jsonify(m)
+
+
+@app.route('/.well-known/security.txt')
+def security_txt():
+    txt = (
+        "Contact: mailto:suporte@turbovenda.com.br\n"
+        "Preferred-Languages: pt-BR, en\n"
+        "Canonical: https://turbovenda.com.br/.well-known/security.txt\n"
+        "Expires: 2027-06-01T00:00:00.000Z\n"
+    )
+    return app.response_class(txt, mimetype='text/plain')
+
+
+@app.route('/termos')
+def termos():
+    return render_template('termos.html', ga_id=GA_MEASUREMENT_ID)
+
+
+@app.route('/privacidade')
+def privacidade():
+    return render_template('privacidade.html', ga_id=GA_MEASUREMENT_ID)
+
+
+@app.route('/precos')
+def precos():
+    return render_template('precos.html', ga_id=GA_MEASUREMENT_ID)
 
 
 @app.route('/dashboard')

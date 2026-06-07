@@ -9,6 +9,8 @@
   <meta name="author" content="TurboVenda">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://turbovenda.com.br/">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect rx='20' width='100' height='100' fill='%236366f1'/><text x='50' y='72' font-size='60' text-anchor='middle' fill='white'>⚡</text></svg>">
+  <link rel="manifest" href="/manifest.json">
 
   <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website">
@@ -80,7 +82,7 @@
     "@type": "Organization",
     "name": "TurboVenda",
     "url": "https://turbovenda.com.br",
-    "logo": "https://turbovenda.com.br/static/logo.png",
+    "logo": "https://turbovenda.com.br/static/og-image.png",
     "contactPoint": {
       "@type": "ContactPoint",
       "email": "suporte@turbovenda.com.br",
@@ -88,6 +90,19 @@
       "availableLanguage": "Portuguese"
     },
     "sameAs": []
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "TurboVenda",
+    "url": "https://turbovenda.com.br",
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": "https://turbovenda.com.br/blog?q={search_term_string}",
+      "query-input": "required name=search_term_string"
+    }
   }
   </script>
 
@@ -304,7 +319,7 @@
   <div class="nav-links">
     <a href="#features">Recursos</a>
     <a href="#how">Como funciona</a>
-    <a href="#pricing">Planos</a>
+    <a href="/precos">Planos</a>
     <a href="/blog">Blog</a>
     <a href="/login">Entrar</a>
     <a href="/cadastro" class="btn-nav">Começar grátis</a>
@@ -585,7 +600,12 @@
 <footer>
   <div class="footer-logo">Turbo<span>Venda</span></div>
   <p>&copy; 2026 TurboVenda. Todos os direitos reservados.</p>
-  <p style="color:#475569;font-size:12px">Powered by Claude AI</p>
+  <div style="margin-top:12px;display:flex;gap:20px;justify-content:center">
+    <a href="/precos" style="color:#94a3b8;text-decoration:none;font-size:13px">Preços</a>
+    <a href="/blog" style="color:#94a3b8;text-decoration:none;font-size:13px">Blog</a>
+    <a href="/termos" style="color:#64748b;text-decoration:none;font-size:13px">Termos</a>
+    <a href="/privacidade" style="color:#64748b;text-decoration:none;font-size:13px">Privacidade</a>
+  </div>
 </footer>
 
 <script>

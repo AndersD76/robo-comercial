@@ -8,13 +8,15 @@
   <meta name="keywords" content="{{ post.keywords }}">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://turbovenda.com.br/blog/{{ post.slug }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect rx='20' width='100' height='100' fill='%236366f1'/><text x='50' y='72' font-size='60' text-anchor='middle' fill='white'>⚡</text></svg>">
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://turbovenda.com.br/blog/{{ post.slug }}">
   <meta property="og:title" content="{{ post.titulo }}">
   <meta property="og:description" content="{{ post.desc }}">
+  <meta property="og:image" content="https://turbovenda.com.br/static/og-image.png">
   <meta property="og:locale" content="pt_BR">
   <meta property="og:site_name" content="TurboVenda">
-  <meta name="twitter:card" content="summary">
+  <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="{{ post.titulo }}">
   <meta name="twitter:description" content="{{ post.desc }}">
   <script type="application/ld+json">
@@ -24,13 +26,27 @@
     "headline": "{{ post.titulo }}",
     "description": "{{ post.desc }}",
     "datePublished": "{{ post.data }}",
-    "author": {"@type": "Organization", "name": "TurboVenda"},
+    "dateModified": "{{ post.data }}",
+    "author": {"@type": "Organization", "name": "TurboVenda", "url": "https://turbovenda.com.br"},
     "publisher": {
       "@type": "Organization",
       "name": "TurboVenda",
-      "url": "https://turbovenda.com.br"
+      "url": "https://turbovenda.com.br",
+      "logo": {"@type": "ImageObject", "url": "https://turbovenda.com.br/static/og-image.png"}
     },
+    "image": "https://turbovenda.com.br/static/og-image.png",
     "mainEntityOfPage": "https://turbovenda.com.br/blog/{{ post.slug }}"
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {"@type": "ListItem", "position": 1, "name": "Home", "item": "https://turbovenda.com.br/"},
+      {"@type": "ListItem", "position": 2, "name": "Blog", "item": "https://turbovenda.com.br/blog"},
+      {"@type": "ListItem", "position": 3, "name": "{{ post.titulo }}"}
+    ]
   }
   </script>
   <script async src="https://www.googletagmanager.com/gtag/js?id={{ ga_id }}"></script>
