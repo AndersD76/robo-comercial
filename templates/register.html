@@ -77,6 +77,7 @@
   {% endif %}
 
   <form method="POST">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <div class="field">
       <label>Nome da empresa <small>*</small></label>
       <input type="text" name="empresa_nome" placeholder="Nome da sua empresa" required>

@@ -196,6 +196,7 @@
 <!-- ════════════════ LOGIN ════════════════ -->
 <div class="login-wrap">
   <form class="login-box" method="POST" action="/admin">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <h1>TurboVenda</h1>
     <p>Painel Administrativo</p>
     {% if error %}

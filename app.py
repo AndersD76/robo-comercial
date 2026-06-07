@@ -15,6 +15,7 @@ import subprocess
 import sys
 from urllib.parse import quote as _urlquote, urlparse as _urlparse
 import bcrypt
+from cryptography.fernet import Fernet, InvalidToken
 import psycopg2
 import psycopg2.extras
 from psycopg2 import sql as psql
@@ -47,6 +48,67 @@ limiter = Limiter(get_remote_address, app=app, default_limits=["200 per minute"]
                   storage_uri="memory://")
 
 GA_MEASUREMENT_ID = os.environ.get('GA_MEASUREMENT_ID', 'G-NGSNSF3SPM')
+
+# --- Encriptação de credenciais sensíveis no DB ---
+_ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY', '')
+_fernet = None
+if _ENCRYPTION_KEY:
+    try:
+        _fernet = Fernet(_ENCRYPTION_KEY.encode() if len(_ENCRYPTION_KEY) == 44
+                         else Fernet.generate_key())
+        if len(_ENCRYPTION_KEY) != 44:
+            print('[WARN] ENCRYPTION_KEY inválida (deve ser 44 chars base64 Fernet)', flush=True)
+            _fernet = None
+    except Exception:
+        _fernet = None
+
+
+def _encrypt_field(value: str) -> str:
+    if not value or not _fernet:
+        return value
+    return 'ENC:' + _fernet.encrypt(value.encode()).decode()
+
+
+def _decrypt_field(value: str) -> str:
+    if not value or not _fernet or not value.startswith('ENC:'):
+        return value or ''
+    try:
+        return _fernet.decrypt(value[4:].encode()).decode()
+    except (InvalidToken, Exception):
+        return value
+
+
+_SENSITIVE_FIELDS = ('linkedin_password', 'smtp_password', 'resend_api_key', 'serper_api_key')
+
+
+def _csrf_token():
+    if '_csrf' not in session:
+        session['_csrf'] = secrets.token_hex(16)
+    return session['_csrf']
+
+
+def _check_csrf():
+    """Valida CSRF em forms HTML (POST sem JSON content-type)."""
+    if request.method not in ('POST', 'PUT', 'DELETE'):
+        return
+    if request.content_type and 'json' in request.content_type:
+        return
+    if request.path.startswith('/webhook/'):
+        return
+    if request.path.startswith('/t/'):
+        return
+    token = request.form.get('_csrf') or request.headers.get('X-CSRF-Token', '')
+    if not token or not _hmac.compare_digest(token, session.get('_csrf', '')):
+        from flask import abort
+        abort(403)
+
+
+app.jinja_env.globals['csrf_token'] = _csrf_token
+
+
+@app.before_request
+def _csrf_protect():
+    _check_csrf()
 
 
 @app.after_request
@@ -601,7 +663,13 @@ def get_bot_config(schema: str) -> dict:
         c.execute('SELECT * FROM bot_config ORDER BY id DESC LIMIT 1')
         row = c.fetchone()
         conn.close()
-        return _serialize_row(dict(row)) if row else {}
+        if not row:
+            return {}
+        result = _serialize_row(dict(row))
+        for field in _SENSITIVE_FIELDS:
+            if field in result and result[field]:
+                result[field] = _decrypt_field(result[field])
+        return result
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -2451,13 +2519,13 @@ def api_save_config(bot):
                       email_cor_header or '#1a2332',
                       email_cor_botao or '#2563eb',
                       email_cor_texto or '#ffffff',
-                      resend_api_key or None,
+                      _encrypt_field(resend_api_key) or None,
                       smtp_host or None, smtp_port or 587,
-                      smtp_user or None, smtp_password or None,
-                      serper_api_key or None]
+                      smtp_user or None, _encrypt_field(smtp_password) or None,
+                      _encrypt_field(serper_api_key) or None]
             if li_password:
                 sql += ", linkedin_password=%s"
-                params.append(li_password)
+                params.append(_encrypt_field(li_password))
             sql += " WHERE id=%s"
             params.append(exists['id'])
             c.execute(sql, params)
@@ -2471,14 +2539,16 @@ def api_save_config(bot):
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                       (empresa_nome, website, descricao,
                        psycopg2.extras.Json(termos), li_email or None,
-                       li_password or None, psycopg2.extras.Json(li_cargos),
+                       _encrypt_field(li_password) or None,
+                       psycopg2.extras.Json(li_cargos),
                        msg_inicial or None, email_assunto or None,
                        email_html or None,
                        email_remetente or None,
                        email_remetente_nome or None,
-                       resend_api_key or None,
+                       _encrypt_field(resend_api_key) or None,
                        smtp_host or None, smtp_port or 587,
-                       smtp_user or None, smtp_password or None))
+                       smtp_user or None,
+                       _encrypt_field(smtp_password) or None))
         conn.commit()
 
         # Atualizar users (separado para não bloquear o save principal)
