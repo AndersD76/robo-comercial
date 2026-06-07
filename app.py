@@ -1089,7 +1089,7 @@ def robots_txt():
         "Allow: /\n\n"
         "User-agent: Google-Extended\n"
         "Allow: /\n\n"
-        "Sitemap: https://turbovenda.com.br/sitemap.xml\n"
+        "Sitemap: https://www.turbovenda.com.br/sitemap.xml\n"
     )
     return app.response_class(txt, mimetype='text/plain')
 
@@ -1097,17 +1097,17 @@ def robots_txt():
 @app.route('/sitemap.xml')
 def sitemap_xml():
     urls = [
-        ('https://turbovenda.com.br/', '2026-06-01', 'weekly', '1.0'),
-        ('https://turbovenda.com.br/cadastro', '2026-06-01', 'monthly', '0.8'),
-        ('https://turbovenda.com.br/blog', '2026-06-01', 'weekly', '0.9'),
-        ('https://turbovenda.com.br/login', '2026-05-01', 'monthly', '0.6'),
-        ('https://turbovenda.com.br/precos', '2026-06-01', 'monthly', '0.8'),
-        ('https://turbovenda.com.br/termos', '2026-06-01', 'yearly', '0.3'),
-        ('https://turbovenda.com.br/privacidade', '2026-06-01', 'yearly', '0.3'),
+        ('https://www.turbovenda.com.br/', '2026-06-01', 'weekly', '1.0'),
+        ('https://www.turbovenda.com.br/cadastro', '2026-06-01', 'monthly', '0.8'),
+        ('https://www.turbovenda.com.br/blog', '2026-06-01', 'weekly', '0.9'),
+        ('https://www.turbovenda.com.br/login', '2026-05-01', 'monthly', '0.6'),
+        ('https://www.turbovenda.com.br/precos', '2026-06-01', 'monthly', '0.8'),
+        ('https://www.turbovenda.com.br/termos', '2026-06-01', 'yearly', '0.3'),
+        ('https://www.turbovenda.com.br/privacidade', '2026-06-01', 'yearly', '0.3'),
     ]
     for p in BLOG_POSTS:
         urls.append((
-            f"https://turbovenda.com.br/blog/{p['slug']}",
+            f"https://www.turbovenda.com.br/blog/{p['slug']}",
             p['data'], 'monthly', '0.7'
         ))
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -1148,10 +1148,10 @@ def llms_txt():
         "- Starter (R$97/mês): 500 leads/mês\n"
         "- Pro (R$297/mês): Leads ilimitados + WhatsApp + prioridade\n\n"
         "## Links\n"
-        "- Site: https://turbovenda.com.br\n"
-        "- Criar conta: https://turbovenda.com.br/cadastro\n"
-        "- Blog: https://turbovenda.com.br/blog\n"
-        "- Preços: https://turbovenda.com.br/precos\n"
+        "- Site: https://www.turbovenda.com.br\n"
+        "- Criar conta: https://www.turbovenda.com.br/cadastro\n"
+        "- Blog: https://www.turbovenda.com.br/blog\n"
+        "- Preços: https://www.turbovenda.com.br/precos\n"
     )
     return app.response_class(txt, mimetype='text/plain')
 
@@ -1184,7 +1184,7 @@ def security_txt():
     txt = (
         "Contact: mailto:suporte@turbovenda.com.br\n"
         "Preferred-Languages: pt-BR, en\n"
-        "Canonical: https://turbovenda.com.br/.well-known/security.txt\n"
+        "Canonical: https://www.turbovenda.com.br/.well-known/security.txt\n"
         "Expires: 2027-06-01T00:00:00.000Z\n"
     )
     return app.response_class(txt, mimetype='text/plain')
@@ -2049,7 +2049,7 @@ def _processar_sequencias_schema(schema):
             nome = p['nome_fantasia'] or 'empresa'
             link_agenda = _get_link_agenda(schema, p['empresa_id'])
             track_token = _get_email_track_token(schema, p['empresa_id'])
-            seq_base_url = os.environ.get('BASE_URL', 'https://turbovenda.com.br')
+            seq_base_url = os.environ.get('BASE_URL', 'https://www.turbovenda.com.br')
             track_open_url = f'{seq_base_url}/t/{track_token}/open.png'
             track_click_url = f'{seq_base_url}/t/{track_token}/click?url={_urlquote(link_agenda, safe="")}'
             assunto = (passo.get('assunto', '')
