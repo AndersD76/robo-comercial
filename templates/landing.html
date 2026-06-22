@@ -298,12 +298,43 @@
     .fade-in.visible{opacity:1;transform:translateY(0)}
 
     @media(max-width:768px){
-      nav{padding:0 20px}
+      nav{padding:0 16px}
       .nav-links a:not(.btn-nav){display:none}
+      .btn-nav{padding:8px 14px!important;font-size:13px!important}
+      .hero{min-height:auto;padding:100px 20px 48px}
+      h1{font-size:1.8rem;letter-spacing:-.8px}
+      .hero-sub{font-size:15px;margin-bottom:28px}
+      .hero-cta{flex-direction:column;align-items:stretch;gap:10px}
+      .hero-cta a{justify-content:center}
+      .hero-stats{gap:16px}
+      .hero-stat-n{font-size:1.4rem}
+      .hero-stat-l{font-size:10px}
+      .demo-wrap{padding:0 16px 60px}
       .demo-body{grid-template-columns:1fr 1fr}
       .demo-kanban{grid-template-columns:1fr 1fr}
+      .demo-stat-n{font-size:1.3rem}
+      section.features{padding:60px 20px}
+      .features-grid{gap:14px}
+      .feat-card{padding:20px}
+      .how-steps{flex-direction:column;gap:32px}
       .how-step:not(:last-child)::after{display:none}
-      .hero-stats{gap:24px}
+      .pricing-grid{grid-template-columns:1fr!important}
+      .cta-final{padding:60px 20px}
+      footer{padding:32px 16px}
+      footer div{flex-wrap:wrap;justify-content:center}
+    }
+    @media(max-width:380px){
+      h1{font-size:1.5rem}
+      .hero-badge{font-size:11px;padding:5px 12px}
+      .demo-body{grid-template-columns:1fr}
+      .demo-kanban{grid-template-columns:1fr}
+    }
+    .sticky-cta{display:none}
+    @media(max-width:768px){
+      .sticky-cta{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:99;
+          padding:12px 16px;background:rgba(6,11,24,.95);backdrop-filter:blur(12px);
+          border-top:1px solid rgba(99,102,241,.2)}
+      .sticky-cta a{flex:1;text-align:center;justify-content:center}
     }
   </style>
 </head>
@@ -332,22 +363,28 @@
   <div class="hero-bg"></div>
   <div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center">
     <div class="hero-badge">
-      <i class="fa fa-circle"></i> CRM + Prospecção B2B com Inteligência Artificial
+      <i class="fa fa-circle"></i> Usado por empresas B2B no Brasil
     </div>
-    <h1>Seu CRM comercial com<br><span class="grad">prospecção automática</span></h1>
+    <h1>Encontre clientes no<br><span class="grad">piloto automático</span></h1>
     <p class="hero-sub">
-      A TurboVenda varre a internet, encontra empresas compradores,
-      extrai telefone, email, CNPJ e decisores — e entrega tudo num CRM
-      completo com pipeline, tarefas e timeline. Tudo no piloto automático.
+      O TurboVenda busca empresas, coleta contatos e envia mensagens
+      personalizadas com IA. Você só fecha negócio.
     </p>
     <div class="hero-cta">
       <a href="/cadastro" class="btn-primary">
-        <i class="fa fa-rocket"></i> Criar conta grátis
+        <i class="fa fa-bolt"></i> Começar grátis em 2 minutos
       </a>
-      <a href="#features" class="btn-ghost">
-        <i class="fa fa-play-circle"></i> Ver recursos
+      <a href="/precos" class="btn-ghost">
+        <i class="fa fa-tag"></i> Ver planos
       </a>
     </div>
+    <p style="color:var(--muted);font-size:13px;margin-top:-20px;margin-bottom:40px">
+      <i class="fa fa-check" style="color:var(--green);margin-right:4px"></i> Sem cartão de crédito
+      <span style="margin:0 12px">·</span>
+      <i class="fa fa-check" style="color:var(--green);margin-right:4px"></i> 50 leads grátis
+      <span style="margin:0 12px">·</span>
+      <i class="fa fa-check" style="color:var(--green);margin-right:4px"></i> Cancele quando quiser
+    </p>
     <div class="hero-stats">
       <div class="hero-stat">
         <div class="hero-stat-n"><span>+</span>500</div>
@@ -607,6 +644,13 @@
     <a href="/privacidade" style="color:#64748b;text-decoration:none;font-size:13px">Privacidade</a>
   </div>
 </footer>
+
+<!-- CTA fixo mobile -->
+<div class="sticky-cta">
+  <a href="/cadastro" class="btn-primary" style="font-size:15px;padding:12px 24px;border-radius:10px">
+    <i class="fa fa-bolt"></i> Começar grátis
+  </a>
+</div>
 
 <script>
   const obs = new IntersectionObserver((entries) => {
