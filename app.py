@@ -859,10 +859,10 @@ BLOG_POSTS = [
 <h2>As 5 melhores estratégias de prospecção B2B</h2>
 
 <h3>1. Prospecção Outbound com IA</h3>
-<p>A prospecção outbound evoluiu. Em vez de ligar para listas frias, ferramentas de IA como o <strong>TurboVenda</strong> identificam empresas que se encaixam no seu perfil ideal de cliente (ICP) automaticamente, coletando dados como telefone, e-mail, CNPJ e porte da empresa.</p>
+<p>A <a href="/blog/prospecao-outbound-guia">prospecção outbound</a> evoluiu. Em vez de ligar para listas frias, ferramentas de IA como o <strong>TurboVenda</strong> identificam empresas que se encaixam no seu perfil ideal de cliente (ICP) automaticamente, coletando dados como telefone, e-mail, CNPJ e porte da empresa.</p>
 
 <h3>2. E-mail Marketing B2B Personalizado</h3>
-<p>E-mails genéricos têm taxa de abertura de 5%. E-mails personalizados com o nome da empresa, setor e dor específica chegam a <strong>35% de abertura</strong>. A chave é usar dados do lead para criar mensagens relevantes.</p>
+<p>E-mails genéricos têm taxa de abertura de 5%. E-mails personalizados com o nome da empresa, setor e dor específica chegam a <strong>35% de abertura</strong>. A chave é usar dados do lead para criar mensagens relevantes. Veja <a href="/blog/email-marketing-b2b-templates">5 templates de e-mail B2B prontos</a>.</p>
 
 <h3>3. LinkedIn como canal de prospecção</h3>
 <p>O LinkedIn concentra 80% dos leads B2B gerados em redes sociais. Conecte-se com decisores, publique conteúdo de valor e use mensagens diretas para iniciar conversas.</p>
@@ -885,7 +885,7 @@ BLOG_POSTS = [
 </ul>
 
 <h2>Conclusão</h2>
-<p>A prospecção B2B em 2026 exige um mix de tecnologia e toque humano. Automatize a pesquisa e a abordagem inicial, mas mantenha a personalização nas interações. Ferramentas como o TurboVenda permitem que mesmo equipes pequenas prospectem como grandes empresas.</p>
+<p>A prospecção B2B em 2026 exige um mix de tecnologia e toque humano. Automatize a pesquisa e a abordagem inicial, mas mantenha a personalização nas interações. Ferramentas como o TurboVenda permitem que mesmo equipes pequenas prospectem como grandes empresas. Saiba também <a href="/blog/como-encontrar-clientes-pela-internet">6 formas de encontrar clientes pela internet</a> e como montar um <a href="/blog/pipeline-de-vendas-como-montar">pipeline de vendas eficiente</a>.</p>
 """
     },
     {
@@ -913,7 +913,7 @@ BLOG_POSTS = [
 <p>70% das vendas B2B acontecem após o 5º contato. Sequências automáticas garantem que nenhum lead seja esquecido, com intervalos programados entre cada mensagem.</p>
 
 <h3>Pipeline e CRM</h3>
-<p>Leads se movem automaticamente pelo funil conforme interagem: abriu e-mail → "Interessado", respondeu → "Em negociação", agendou reunião → "Qualificado".</p>
+<p>Leads se movem automaticamente pelo <a href="/blog/pipeline-de-vendas-como-montar">funil de vendas</a> conforme interagem: abriu e-mail → "Interessado", respondeu → "Em negociação", agendou reunião → "Qualificado".</p>
 
 <h2>ROI da automação comercial</h2>
 <p>Empresas que implementam automação comercial reportam em média:</p>
@@ -962,7 +962,7 @@ BLOG_POSTS = [
 <p>Dashboard com métricas essenciais: leads gerados, taxa de conversão, receita por período. Sem complicação.</p>
 
 <h2>CRM + Prospecção: a combinação perfeita</h2>
-<p>A maioria dos CRMs para PME só organiza leads que você já tem. O TurboVenda vai além: ele <strong>encontra novos leads automaticamente</strong> e já coloca no seu pipeline pronto para abordar. É CRM e prospecção numa única ferramenta, a partir de R$0/mês.</p>
+<p>A maioria dos CRMs para PME só organiza leads que você já tem. O TurboVenda vai além: ele <strong>encontra novos leads automaticamente</strong> e já coloca no seu <a href="/blog/pipeline-de-vendas-como-montar">pipeline</a> pronto para abordar. É CRM e prospecção numa única ferramenta, a partir de R$0/mês. Entenda melhor <a href="/blog/o-que-e-crm-para-que-serve">o que é CRM e para que serve</a>.</p>
 """
     },
     {
@@ -1008,7 +1008,7 @@ BLOG_POSTS = [
 <p>Após cada venda fechada, peça 3 indicações. Leads indicados convertem 4x mais que leads frios.</p>
 
 <h2>Ferramenta certa faz diferença</h2>
-<p>O TurboVenda automatiza as estratégias 1, 2, 5 e 6 em uma única plataforma. Configure seu ICP, ative o robô e receba leads qualificados no seu pipeline todos os dias.</p>
+<p>O TurboVenda automatiza as estratégias 1, 2, 5 e 6 em uma única plataforma. Configure seu ICP, ative o robô e receba leads qualificados no seu <a href="/blog/pipeline-de-vendas-como-montar">pipeline</a> todos os dias. Veja também <a href="/blog/como-encontrar-clientes-pela-internet">6 formas de encontrar clientes pela internet</a>.</p>
 """
     },
     {
@@ -1051,7 +1051,207 @@ BLOG_POSTS = [
 <p>Olá {Nome},<br>Há uns meses conversamos sobre {tema}. Desde então, lançamos {novidade/funcionalidade} que tem ajudado empresas de {segmento} a {resultado novo}. Quer ver como ficou?</p>
 
 <h2>Automatize seus e-mails</h2>
-<p>No TurboVenda, a IA gera mensagens personalizadas para cada lead usando os dados da empresa. Você configura a sequência uma vez e o sistema envia automaticamente, com intervalos programados e follow-ups inteligentes.</p>
+<p>No TurboVenda, a IA gera mensagens personalizadas para cada lead usando os dados da empresa. Você configura a sequência uma vez e o sistema envia automaticamente, com intervalos programados e follow-ups inteligentes. Saiba como usar <a href="/blog/whatsapp-para-vendas-b2b">WhatsApp para vendas B2B</a> como canal complementar.</p>
+"""
+    },
+    {
+        'slug': 'prospecao-outbound-guia',
+        'titulo': 'Prospecção Outbound: Guia Completo para Vendas B2B',
+        'desc': 'Aprenda o que é prospecção outbound, como montar um processo do zero e quais ferramentas usar para vender mais no B2B.',
+        'keywords': 'prospecção outbound, outbound marketing, vendas B2B, prospecção ativa, cold outreach',
+        'data': '2026-06-10',
+        'tempo': '10 min',
+        'conteudo': """
+<p>Prospecção outbound é quando <strong>você vai atrás do cliente</strong>, em vez de esperar ele chegar. No B2B, onde o ticket médio é alto e o ciclo de venda é longo, outbound bem feito é a forma mais rápida de gerar pipeline.</p>
+
+<h2>Outbound vs Inbound: qual escolher?</h2>
+<p>Inbound (blog, SEO, conteúdo) traz leads no médio/longo prazo. Outbound traz leads <strong>agora</strong>. O ideal é combinar os dois, mas se você precisa de resultado rápido, comece pelo outbound.</p>
+<ul>
+<li><strong>Inbound</strong>: volume maior, custo menor por lead, ciclo mais longo</li>
+<li><strong>Outbound</strong>: volume menor, custo maior, mas leads mais qualificados e ciclo mais curto</li>
+</ul>
+
+<h2>5 etapas de um processo outbound eficiente</h2>
+
+<h3>1. Defina seu ICP (Perfil de Cliente Ideal)</h3>
+<p>Antes de prospectar, saiba exatamente quem você busca: segmento, porte, região, cargo do decisor. Quanto mais específico, melhor a taxa de conversão.</p>
+
+<h3>2. Monte sua lista de empresas</h3>
+<p>Use fontes como Google, LinkedIn, associações comerciais e <a href="/blog/como-gerar-leads-qualificados">ferramentas de geração de leads</a>. O TurboVenda automatiza essa etapa usando IA para varrer a internet e encontrar empresas que compram o que você vende.</p>
+
+<h3>3. Enriqueça os dados</h3>
+<p>Nome da empresa não basta. Você precisa de: telefone, e-mail, CNPJ, nome do decisor, cargo. Ferramentas de enriquecimento cruzam dados da Receita Federal e sites corporativos.</p>
+
+<h3>4. Crie sequências de contato</h3>
+<p>Um único e-mail ou ligação raramente converte. Monte uma sequência multi-canal: e-mail → ligação → WhatsApp → follow-up. Veja <a href="/blog/email-marketing-b2b-templates">templates de e-mail B2B prontos</a>.</p>
+
+<h3>5. Meça e otimize</h3>
+<p>Acompanhe: taxa de resposta, taxa de agendamento, conversão por canal. Um <a href="/blog/crm-para-pequenas-empresas">CRM organizado</a> é essencial para não perder o controle.</p>
+
+<h2>Ferramentas para prospecção outbound</h2>
+<p>O TurboVenda combina as etapas 2, 3 e 4 numa única plataforma: a IA busca empresas, extrai contatos completos e alimenta seu pipeline. Você foca no que importa: <strong>fechar negócio</strong>.</p>
+"""
+    },
+    {
+        'slug': 'como-encontrar-clientes-pela-internet',
+        'titulo': 'Como Encontrar Clientes pela Internet: 6 Formas Práticas',
+        'desc': 'Descubra 6 formas práticas de encontrar novos clientes pela internet para sua empresa B2B. Do Google ao LinkedIn, com ferramentas gratuitas.',
+        'keywords': 'como encontrar clientes, encontrar clientes pela internet, captar clientes online, achar clientes B2B',
+        'data': '2026-06-15',
+        'tempo': '8 min',
+        'conteudo': """
+<p>Encontrar clientes pela internet não é sorte — é método. Existem dezenas de fontes públicas com dados de empresas que você pode usar para montar uma lista de prospecção. Veja as 6 formas mais eficientes.</p>
+
+<h2>1. Busca avançada no Google</h2>
+<p>Use operadores de busca para filtrar resultados: <code>"distribuidora" + "contato" + "SP"</code> retorna páginas de contato de distribuidoras em São Paulo. Combine com <code>site:linkedin.com</code> para encontrar decisores.</p>
+
+<h2>2. LinkedIn (gratuito)</h2>
+<p>O LinkedIn é a maior base de profissionais do mundo. Use o filtro de busca por cargo, empresa, setor e região. Conecte com decisores e envie mensagens personalizadas.</p>
+
+<h2>3. Google Maps</h2>
+<p>Para negócios locais, o Google Maps é uma mina de ouro. Busque "fábrica de [produto] em [cidade]" e você terá nome, telefone, site e avaliações.</p>
+
+<h2>4. Receita Federal (CNPJ)</h2>
+<p>Sites como a consulta pública da Receita Federal permitem buscar empresas por CNAE (atividade econômica), estado e situação cadastral. Ideal para listas segmentadas.</p>
+
+<h2>5. Associações e diretórios setoriais</h2>
+<p>Cada setor tem associações com listas de membros. ABRAS (supermercados), ABIOVE (óleos vegetais), ABRASCE (shopping centers) — todas publicam diretórios com contatos.</p>
+
+<h2>6. Ferramentas de prospecção automática</h2>
+<p>Fazer tudo manual funciona, mas escala mal. O <a href="/blog/prospecao-outbound-guia">processo outbound completo</a> exige volume. Ferramentas como o TurboVenda automatizam a busca, extração de contatos e alimentação do CRM. Você descreve seu cliente ideal e a IA faz o resto.</p>
+
+<h2>Como escolher a melhor forma?</h2>
+<p>Depende do seu ICP e volume. Se você precisa de 10 clientes por mês, busca manual no Google e LinkedIn funciona. Se precisa de 100+, <a href="/blog/automacao-comercial-guia-completo">automação comercial</a> é o caminho.</p>
+"""
+    },
+    {
+        'slug': 'pipeline-de-vendas-como-montar',
+        'titulo': 'Pipeline de Vendas: Como Montar e Gerenciar seu Funil B2B',
+        'desc': 'Aprenda a montar um pipeline de vendas B2B eficiente com etapas claras, métricas certas e ferramentas para não perder nenhuma oportunidade.',
+        'keywords': 'pipeline de vendas, funil de vendas B2B, etapas do funil, gestão de pipeline, funil comercial',
+        'data': '2026-06-18',
+        'tempo': '9 min',
+        'conteudo': """
+<p>Pipeline de vendas é a representação visual de onde cada oportunidade está no seu processo comercial. Sem pipeline, você não sabe quantos negócios estão em andamento, quais estão parados e onde está perdendo dinheiro.</p>
+
+<h2>Por que pipeline importa?</h2>
+<ul>
+<li><strong>Previsibilidade</strong>: saber quanto vai faturar no mês que vem</li>
+<li><strong>Priorização</strong>: focar nas oportunidades com maior chance de fechar</li>
+<li><strong>Diagnóstico</strong>: identificar onde os leads travam e por quê</li>
+</ul>
+
+<h2>6 etapas de um pipeline B2B</h2>
+
+<h3>1. Novo (lead bruto)</h3>
+<p>Lead acabou de entrar — por prospecção, inbound ou indicação. Ainda não foi contactado.</p>
+
+<h3>2. Contactado</h3>
+<p>Você fez o primeiro contato (e-mail, ligação, WhatsApp). Aguardando resposta.</p>
+
+<h3>3. Respondeu</h3>
+<p>O lead respondeu. Pode ser positivo ("me conte mais") ou neutro ("agora não"). Registre a resposta.</p>
+
+<h3>4. Qualificado</h3>
+<p>O lead tem fit (perfil certo), necessidade e orçamento. Vale investir tempo.</p>
+
+<h3>5. Demo/Proposta</h3>
+<p>Apresentou a solução ou enviou proposta comercial. Fase de negociação.</p>
+
+<h3>6. Convertido (ganho) ou Perdido</h3>
+<p>Registre o motivo em ambos os casos. Leads perdidos são fonte de aprendizado.</p>
+
+<h2>Métricas do pipeline</h2>
+<ul>
+<li><strong>Taxa de conversão por etapa</strong>: onde os leads travam?</li>
+<li><strong>Tempo médio em cada etapa</strong>: negócios parados há muito tempo morrem</li>
+<li><strong>Valor total do pipeline</strong>: quanto potencial tem na mesa</li>
+<li><strong>Velocidade do pipeline</strong>: quantos dias do primeiro contato ao fechamento</li>
+</ul>
+
+<h2>Ferramenta certa para seu pipeline</h2>
+<p>Planilha funciona até 20 leads. Acima disso, um <a href="/blog/crm-para-pequenas-empresas">CRM com Kanban</a> é essencial. O TurboVenda oferece pipeline visual com drag-and-drop, timeline de atividades por lead e <a href="/blog/como-gerar-leads-qualificados">geração automática de leads</a> para manter o topo do funil cheio.</p>
+"""
+    },
+    {
+        'slug': 'whatsapp-para-vendas-b2b',
+        'titulo': 'WhatsApp para Vendas B2B: Como Usar sem Parecer Spam',
+        'desc': 'Aprenda a usar o WhatsApp Business para vendas B2B de forma profissional. Dicas, templates e erros para evitar na abordagem comercial.',
+        'keywords': 'WhatsApp vendas B2B, WhatsApp Business vendas, mensagem comercial WhatsApp, abordagem WhatsApp',
+        'data': '2026-06-20',
+        'tempo': '7 min',
+        'conteudo': """
+<p>O WhatsApp é o canal de comunicação mais usado no Brasil — 99% dos smartphones têm o app. No B2B, ele pode ser uma arma poderosa de vendas <strong>se usado corretamente</strong>. Mal usado, é spam e queima sua marca.</p>
+
+<h2>WhatsApp pessoal vs Business vs API</h2>
+<ul>
+<li><strong>Pessoal</strong>: serve para conversas individuais, mas não escala</li>
+<li><strong>Business</strong>: perfil comercial, catálogo, respostas rápidas, etiquetas — gratuito</li>
+<li><strong>API</strong>: automação em escala, integração com CRM, mensagens em massa programadas</li>
+</ul>
+
+<h2>5 regras para não parecer spam</h2>
+
+<h3>1. Personalize SEMPRE</h3>
+<p>Nunca envie a mesma mensagem para todos. Use o nome da empresa, do decisor e mencione algo específico: "Vi que a {Empresa} atua com {segmento} em {cidade}..."</p>
+
+<h3>2. Primeira mensagem = valor, não venda</h3>
+<p>Não comece vendendo. Ofereça algo útil: um dado do setor, uma comparação, um case relevante. A venda vem depois.</p>
+
+<h3>3. Horário comercial</h3>
+<p>Respeite o horário. Mensagens às 22h de sábado queimam sua marca. Segunda a sexta, 9h-18h.</p>
+
+<h3>4. Dê saída fácil</h3>
+<p>"Se não fizer sentido, sem problemas." Essa frase reduz a resistência e aumenta respostas.</p>
+
+<h3>5. Sequência curta</h3>
+<p>Máximo 3 mensagens. Se não respondeu em 3 tentativas, pare. Insistir é spam.</p>
+
+<h2>Template de primeira mensagem</h2>
+<p><em>Olá {Nome}, tudo bem? Sou {SeuNome} da {SuaEmpresa}. Vi que a {Empresa} atua com {segmento} — temos ajudado empresas do setor a {benefício}. Posso te mostrar em 5 min como funciona?</em></p>
+
+<h2>Automatizando WhatsApp B2B</h2>
+<p>O TurboVenda integra WhatsApp Business para envio em massa com personalização por lead. Cada mensagem usa os dados extraídos automaticamente (nome, empresa, cargo) para parecer uma conversa 1:1, não um disparo genérico. Combine com <a href="/blog/email-marketing-b2b-templates">e-mail marketing B2B</a> para uma <a href="/blog/prospecao-outbound-guia">estratégia outbound multi-canal</a>.</p>
+"""
+    },
+    {
+        'slug': 'o-que-e-crm-para-que-serve',
+        'titulo': 'O que é CRM e Para que Serve? Guia Simples para PMEs',
+        'desc': 'Entenda o que é CRM, para que serve e por que sua empresa precisa de um. Guia simples e direto para pequenas e médias empresas.',
+        'keywords': 'o que é CRM, CRM para que serve, CRM significado, sistema CRM, CRM para empresas',
+        'data': '2026-06-22',
+        'tempo': '6 min',
+        'conteudo': """
+<p>CRM significa <strong>Customer Relationship Management</strong> — Gestão de Relacionamento com o Cliente. Na prática, é um sistema que organiza todas as informações dos seus clientes e oportunidades de venda num lugar só.</p>
+
+<h2>O que um CRM faz?</h2>
+<ul>
+<li><strong>Centraliza contatos</strong>: nome, telefone, e-mail, empresa, cargo — tudo num lugar</li>
+<li><strong>Organiza o funil</strong>: saber em que etapa cada negociação está</li>
+<li><strong>Registra interações</strong>: ligações, e-mails, reuniões, notas</li>
+<li><strong>Lembra de follow-ups</strong>: tarefas e lembretes para não esquecer nenhum lead</li>
+<li><strong>Mostra métricas</strong>: quantos leads, taxa de conversão, receita prevista</li>
+</ul>
+
+<h2>Quem precisa de CRM?</h2>
+<p>Se você tem mais de 10 clientes ou oportunidades simultâneas, precisa. Planilha funciona até certo ponto, mas:</p>
+<ul>
+<li>Não avisa quando um follow-up está atrasado</li>
+<li>Não mostra o funil visualmente</li>
+<li>Não registra histórico de interações</li>
+<li>Não escala quando a equipe cresce</li>
+</ul>
+
+<h2>CRM para PMEs: o que procurar?</h2>
+<ul>
+<li><strong>Simples de usar</strong>: se exige treinamento de 2 semanas, é complicado demais</li>
+<li><strong>Pipeline visual</strong>: Kanban com drag-and-drop é o mais intuitivo</li>
+<li><strong>Preço acessível</strong>: CRMs enterprise custam R$200+/usuário. PMEs precisam de opções a partir de R$0</li>
+<li><strong>Prospecção integrada</strong>: o CRM ideal não só organiza leads, mas <a href="/blog/como-encontrar-clientes-pela-internet">ajuda a encontrar novos</a></li>
+</ul>
+
+<h2>CRM + prospecção automática</h2>
+<p>A maioria dos CRMs do mercado só organiza leads que você já tem. O TurboVenda vai além: ele <a href="/blog/como-prospectar-clientes-b2b">prospecta automaticamente</a> usando IA, extrai contatos completos e alimenta seu <a href="/blog/pipeline-de-vendas-como-montar">pipeline</a> sem esforço. É CRM e prospecção numa única ferramenta, a partir de R$0/mês.</p>
 """
     },
 ]
