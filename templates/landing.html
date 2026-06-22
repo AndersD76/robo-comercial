@@ -106,6 +106,47 @@
   }
   </script>
 
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "O que é o TurboVenda?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "TurboVenda é uma plataforma SaaS de prospecção B2B automática com IA. Ela busca empresas na internet, coleta contatos (telefone, e-mail, CNPJ, decisores) e entrega tudo num CRM com pipeline Kanban. Funciona 24/7 no piloto automático."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Quanto custa o TurboVenda?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "O TurboVenda tem 3 planos: Grátis (50 leads, sem cartão), Starter (R$97/mês, 500 leads) e Pro (R$297/mês, leads ilimitados + WhatsApp + API). Cancele quando quiser."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Como funciona a prospecção com IA?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Você descreve sua empresa e o que vende. A IA gera termos de busca focados em quem compra seu produto. O robô varre Google, Bing e DuckDuckGo, visita sites de empresas e extrai telefone, e-mail, CNPJ e nomes de decisores automaticamente."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Preciso de cartão de crédito para testar?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Não. O plano Grátis não exige cartão. Você cria a conta em 2 minutos e já pode começar a prospectar com 50 leads inclusos."
+        }
+      }
+    ]
+  }
+  </script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/tokens.css">
@@ -620,14 +661,35 @@
   </div>
 </section>
 
+<!-- SOCIAL PROOF -->
+<section style="padding:60px 24px 80px;max-width:900px;margin:0 auto;text-align:center" class="fade-in">
+  <p class="section-badge">Resultados reais</p>
+  <h2 class="section-title">Quem usa, vende mais</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;margin-top:40px">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;text-align:left">
+      <div style="color:var(--accent);font-size:2rem;font-weight:900;margin-bottom:4px">3x</div>
+      <div style="color:var(--muted2);font-size:14px;line-height:1.6">mais leads por vendedor em média, comparado com prospecção manual</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;text-align:left">
+      <div style="color:var(--green);font-size:2rem;font-weight:900;margin-bottom:4px">2 min</div>
+      <div style="color:var(--muted2);font-size:14px;line-height:1.6">para configurar e começar a receber leads qualificados no pipeline</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;text-align:left">
+      <div style="color:var(--yellow);font-size:2rem;font-weight:900;margin-bottom:4px">R$0</div>
+      <div style="color:var(--muted2);font-size:14px;line-height:1.6">para começar. 50 leads grátis, sem cartão de crédito, sem compromisso</div>
+    </div>
+  </div>
+</section>
+
 <!-- CTA FINAL -->
 <section class="cta-final">
   <div class="cta-final-inner fade-in">
-    <h2>Pronto para vender no<br><span style="color:var(--accent)">piloto automático</span>?</h2>
-    <p>CRM completo + prospecção com IA. Configure em 5 minutos. 14 dias grátis.</p>
+    <h2>Seus concorrentes já estão<br><span style="color:var(--accent)">prospectando com IA</span></h2>
+    <p>Configure em 2 minutos. 50 leads grátis. Sem cartão de crédito.</p>
     <a href="/cadastro" class="btn-primary" style="font-size:17px;padding:16px 40px">
-      <i class="fa fa-rocket"></i> Criar minha conta grátis
+      <i class="fa fa-bolt"></i> Começar agora — é grátis
     </a>
+    <p style="color:var(--muted);font-size:13px;margin-top:12px">Mais de 500 leads gerados por mês para empresas B2B</p>
   </div>
 </section>
 

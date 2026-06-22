@@ -123,6 +123,13 @@ def _set_security_headers(resp):
     return resp
 
 
+@app.errorhandler(404)
+def _not_found(e):
+    if request.path.startswith('/api/'):
+        return jsonify({'error': 'Não encontrado'}), 404
+    return render_template('404.html'), 404
+
+
 @app.errorhandler(429)
 def _rate_limit_handler(e):
     return jsonify({'error': 'Muitas tentativas. Aguarde um momento.'}), 429
@@ -130,7 +137,9 @@ def _rate_limit_handler(e):
 
 @app.errorhandler(500)
 def _internal_error(e):
-    return jsonify({'error': 'Erro interno'}), 500
+    if request.path.startswith('/api/'):
+        return jsonify({'error': 'Erro interno'}), 500
+    return render_template('404.html'), 500
 
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 if not DATABASE_URL:
