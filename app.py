@@ -78,7 +78,7 @@ def _decrypt_field(value: str) -> str:
         return value
 
 
-_SENSITIVE_FIELDS = ('linkedin_password', 'smtp_password', 'resend_api_key', 'serper_api_key')
+_SENSITIVE_FIELDS = ('linkedin_password', 'smtp_password', 'resend_api_key', 'serper_api_key', 'brave_api_key')
 
 
 def _csrf_token():
@@ -410,6 +410,7 @@ def _init_user_schema(schema: str):
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_user TEXT",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS serper_api_key TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS brave_api_key TEXT",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_inicio INTEGER DEFAULT 9",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_fim INTEGER DEFAULT 18",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS duracao_reuniao INTEGER DEFAULT 30",
@@ -417,6 +418,8 @@ def _init_user_schema(schema: str):
         "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS email_aberto TIMESTAMP",
         "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS email_clicado TIMESTAMP",
         "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS email_track_token TEXT",
+        "ALTER TABLE contatos ADD COLUMN IF NOT EXISTS instagram TEXT",
+        "ALTER TABLE contatos ADD COLUMN IF NOT EXISTS fonte TEXT",
     ]:
         try:
             c.execute(stmt)
@@ -602,11 +605,18 @@ def get_leads(schema: str, limite: int = 5000) -> list:
         c = conn.cursor()
         _sub = """(SELECT ct.nome || ' - ' || ct.cargo
                    FROM contatos ct WHERE ct.empresa_id = e.id AND ct.decisor = 1
-                   LIMIT 1) AS _decisor"""
+                   LIMIT 1) AS _decisor,
+                  (SELECT ct.linkedin FROM contatos ct
+                   WHERE ct.empresa_id = e.id AND ct.decisor = 1
+                   LIMIT 1) AS _decisor_linkedin,
+                  (SELECT ct.instagram FROM contatos ct
+                   WHERE ct.empresa_id = e.id AND ct.decisor = 1
+                   LIMIT 1) AS _decisor_instagram"""
         _base = """e.id, e.nome_fantasia, e.whatsapp, e.telefone, e.email, e.score,
                    e.status, e.segmento, e.demo_status, e.cidade, e.estado,
                    e.encontrado_em, e.cnpj, e.razao_social, e.website,
                    e.linkedin, e.instagram, e.fonte, e.porte,
+                   e.situacao_cadastral, e.enriquecido,
                    e.email_enviado, e.wa_enviado, e.observacoes"""
         try:
             c.execute(f"SELECT {_base}, e.email_aberto, e.email_clicado, {_sub}"
@@ -1937,6 +1947,68 @@ def api_enriquecer_lead(bot, lead_id):
     return jsonify(result), 400
 
 
+@app.route('/api/<bot>/lead/<int:lead_id>/requalificar', methods=['POST'])
+@login_required
+def api_requalificar_lead(bot, lead_id):
+    """Requalifica: descobre CNPJ (se faltar) -> enriquece (estado/
+    situação/sócio decisor)."""
+    schema = _get_schema() or bot
+    passos = {}
+    cn = _descobrir_cnpj(schema, lead_id)
+    passos['cnpj'] = cn
+    if cn.get('ok') and cn.get('cnpj'):
+        passos['enriquecimento'] = _enriquecer_cnpj(schema, lead_id)
+    ok = bool(passos.get('enriquecimento', {}).get('ok'))
+    return jsonify({'ok': ok, 'passos': passos})
+
+
+def _buscar_redes_decisor(schema, lead_id):
+    """Busca LinkedIn/Instagram do decisor via Serper e salva no contato."""
+    conn = _conn(schema)
+    c = conn.cursor()
+    c.execute('SELECT e.nome_fantasia, ct.id AS cid, ct.nome AS cnome '
+              'FROM empresas e '
+              'JOIN contatos ct ON ct.empresa_id=e.id AND ct.decisor=1 '
+              'WHERE e.id=%s LIMIT 1', (lead_id,))
+    row = c.fetchone()
+    conn.close()
+    if not row or not row.get('cnome'):
+        return {'ok': False, 'error': 'Lead sem decisor cadastrado'}
+    nome = row['cnome']
+    empresa = row.get('nome_fantasia') or ''
+    found = {'linkedin': None, 'instagram': None}
+    r1 = _serper_search(schema, f'{nome} {empresa} linkedin', num=8)
+    if r1.get('ok'):
+        for it in r1['results']:
+            link = it.get('link', '')
+            if 'linkedin.com/in/' in link:
+                found['linkedin'] = link
+                break
+    r2 = _serper_search(schema, f'{nome} {empresa} instagram', num=8)
+    if r2.get('ok'):
+        for it in r2['results']:
+            link = it.get('link', '')
+            if 'instagram.com/' in link and '/p/' not in link:
+                found['instagram'] = link
+                break
+    if found['linkedin'] or found['instagram']:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute('UPDATE contatos SET linkedin=COALESCE(%s,linkedin), '
+                  'instagram=COALESCE(%s,instagram) WHERE id=%s',
+                  (found['linkedin'], found['instagram'], row['cid']))
+        conn.commit()
+        conn.close()
+    return {'ok': True, **found}
+
+
+@app.route('/api/<bot>/lead/<int:lead_id>/redes-decisor', methods=['POST'])
+@login_required
+def api_redes_decisor(bot, lead_id):
+    schema = _get_schema() or bot
+    return jsonify(_buscar_redes_decisor(schema, lead_id))
+
+
 # --- Relatórios ---
 
 @app.route('/api/<bot>/relatorios')
@@ -2339,10 +2411,14 @@ def api_export_leads(bot):
         c = conn.cursor()
         c.execute("""SELECT e.nome_fantasia, e.cnpj, e.telefone, e.whatsapp, e.email,
                             e.website, e.cidade, e.estado, e.segmento, e.score, e.status,
+                            e.situacao_cadastral,
                             e.observacoes, e.encontrado_em, e.email_enviado,
                             (SELECT ct.nome || ' - ' || ct.cargo
                              FROM contatos ct WHERE ct.empresa_id = e.id AND ct.decisor = 1
-                             LIMIT 1) AS decisor
+                             LIMIT 1) AS decisor,
+                            (SELECT ct.linkedin FROM contatos ct
+                             WHERE ct.empresa_id = e.id AND ct.decisor = 1
+                             LIMIT 1) AS decisor_linkedin
                      FROM empresas e ORDER BY e.encontrado_em DESC""")
         rows = c.fetchall()
         conn.close()
@@ -2350,17 +2426,21 @@ def api_export_leads(bot):
         writer = csv.writer(output)
         writer.writerow(['Empresa', 'CNPJ', 'Telefone', 'WhatsApp', 'Email',
                          'Website', 'Cidade', 'Estado', 'Segmento', 'Score', 'Status',
-                         'Observações', 'Encontrado em', 'Email enviado', 'Decisor'])
+                         'Situação', 'Observações', 'Encontrado em',
+                         'Email enviado', 'Decisor', 'LinkedIn Decisor'])
         for r in rows:
             writer.writerow([r.get('nome_fantasia', ''), r.get('cnpj', ''),
                              r.get('telefone', ''), r.get('whatsapp', ''),
                              r.get('email', ''), r.get('website', ''),
                              r.get('cidade', ''), r.get('estado', ''),
                              r.get('segmento', ''), r.get('score', ''),
-                             r.get('status', ''), r.get('observacoes', ''),
+                             r.get('status', ''),
+                             r.get('situacao_cadastral', ''),
+                             r.get('observacoes', ''),
                              str(r.get('encontrado_em') or ''),
                              str(r.get('email_enviado') or ''),
-                             r.get('decisor', '')])
+                             r.get('decisor', ''),
+                             r.get('decisor_linkedin', '')])
         from flask import Response
         return Response(output.getvalue(),
                         mimetype='text/csv',
@@ -2754,6 +2834,7 @@ def api_save_config(bot):
     smtp_user = data.get('smtp_user', '')
     smtp_password = data.get('smtp_password', '')
     serper_api_key = data.get('serper_api_key', '')
+    brave_api_key = data.get('brave_api_key', '')
 
     # Validação de campos obrigatórios
     erros = []
@@ -2779,6 +2860,7 @@ def api_save_config(bot):
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_user TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS serper_api_key TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS brave_api_key TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_cor_header TEXT DEFAULT '#1a2332'",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_cor_botao TEXT DEFAULT '#2563eb'",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_cor_texto TEXT DEFAULT '#ffffff'",
@@ -2813,7 +2895,7 @@ def api_save_config(bot):
                          resend_api_key=%s,
                          smtp_host=%s, smtp_port=%s,
                          smtp_user=%s, smtp_password=%s,
-                         serper_api_key=%s,
+                         serper_api_key=%s, brave_api_key=%s,
                          atualizado_em=NOW()"""
             params = [empresa_nome, website, descricao, psycopg2.extras.Json(termos),
                       li_email or None, psycopg2.extras.Json(li_cargos),
@@ -2827,7 +2909,8 @@ def api_save_config(bot):
                       _encrypt_field(resend_api_key) or None,
                       smtp_host or None, smtp_port or 587,
                       smtp_user or None, _encrypt_field(smtp_password) or None,
-                      _encrypt_field(serper_api_key) or None]
+                      _encrypt_field(serper_api_key) or None,
+                      _encrypt_field(brave_api_key) or None]
             if li_password:
                 sql += ", linkedin_password=%s"
                 params.append(_encrypt_field(li_password))
@@ -4026,6 +4109,282 @@ def webhook_email():
     return jsonify({'ok': True})
 
 
+def _busca_ddg(query, num=10):
+    """Busca gratuita via DuckDuckGo HTML (sem API key). Mesmo formato
+    de resultado do Serper: [{'link','title','snippet'}]."""
+    import requests as http
+    import html as _html
+    import urllib.parse as _up
+    try:
+        r = http.get(
+            'https://html.duckduckgo.com/html/',
+            params={'q': query, 'kl': 'br-pt'},
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; '
+                     'x64) AppleWebKit/537.36 (KHTML, like Gecko) '
+                     'Chrome/120.0 Safari/537.36'},
+            timeout=15)
+        if r.status_code != 200:
+            return []
+        txt = r.text
+    except Exception:
+        return []
+    results = []
+    for m in re.finditer(
+            r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
+            txt, re.S):
+        href = m.group(1)
+        title = re.sub(r'<[^>]+>', '', m.group(2)).strip()
+        if 'uddg=' in href:
+            mm = re.search(r'uddg=([^&]+)', href)
+            if mm:
+                try:
+                    href = _up.unquote(mm.group(1))
+                except Exception:
+                    pass
+        results.append({'link': _html.unescape(href),
+                        'title': _html.unescape(title), 'snippet': ''})
+        if len(results) >= num:
+            break
+    snips = re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', txt, re.S)
+    for i, s in enumerate(snips):
+        if i < len(results):
+            results[i]['snippet'] = _html.unescape(
+                re.sub(r'<[^>]+>', '', s).strip())
+    return results
+
+
+def _busca_brave(schema, query, num=10):
+    """Busca via Brave Search API. Grátis 2k/mês. Chave do Config
+    (brave_api_key) ou env BRAVE_API_KEY."""
+    import requests as http
+    key = ''
+    try:
+        key = (get_bot_config(schema) or {}).get('brave_api_key') or ''
+    except Exception:
+        key = ''
+    key = key or os.environ.get('BRAVE_API_KEY', '')
+    if not key:
+        return []
+    try:
+        r = http.get(
+            'https://api.search.brave.com/res/v1/web/search',
+            headers={'X-Subscription-Token': key,
+                     'Accept': 'application/json'},
+            params={'q': query, 'country': 'br', 'count': num},
+            timeout=15)
+        if r.status_code != 200:
+            return []
+        web = (r.json().get('web') or {}).get('results') or []
+        return [{'link': it.get('url', ''), 'title': it.get('title', ''),
+                 'snippet': it.get('description', '')} for it in web]
+    except Exception:
+        return []
+
+
+def _busca_google_cse(query, num=10):
+    """Busca via Google Custom Search JSON API. Grátis 100/dia.
+    Env: GOOGLE_CSE_KEY e GOOGLE_CSE_CX."""
+    import requests as http
+    key = os.environ.get('GOOGLE_CSE_KEY', '')
+    cx = os.environ.get('GOOGLE_CSE_CX', '')
+    if not key or not cx:
+        return []
+    try:
+        r = http.get(
+            'https://www.googleapis.com/customsearch/v1',
+            params={'key': key, 'cx': cx, 'q': query, 'gl': 'br',
+                    'num': min(num, 10)},
+            timeout=15)
+        if r.status_code != 200:
+            return []
+        items = r.json().get('items') or []
+        return [{'link': it.get('link', ''), 'title': it.get('title', ''),
+                 'snippet': it.get('snippet', '')} for it in items]
+    except Exception:
+        return []
+
+
+def _busca_serper(schema, query, num=10):
+    """Busca via Serper.dev. Chave do Config ou env SERPER_API_KEY."""
+    import requests as http
+    key = ''
+    try:
+        key = (get_bot_config(schema) or {}).get('serper_api_key') or ''
+    except Exception:
+        key = ''
+    key = key or os.environ.get('SERPER_API_KEY', '')
+    if not key:
+        return []
+    try:
+        r = http.post(
+            'https://google.serper.dev/search',
+            headers={'X-API-KEY': key, 'Content-Type': 'application/json'},
+            json={'q': query, 'gl': 'br', 'hl': 'pt-br', 'num': num},
+            timeout=15)
+        if r.status_code != 200:
+            return []
+        return [{'link': it.get('link', ''), 'title': it.get('title', ''),
+                 'snippet': it.get('snippet', '')}
+                for it in (r.json().get('organic') or [])]
+    except Exception:
+        return []
+
+
+def _serper_search(schema, query, num=10):
+    """Busca web multi-provedor (tudo automático no servidor). Tenta, em
+    ordem, os provedores configurados por ENV/Config e cai no DuckDuckGo
+    como último recurso. Retorna {'ok', 'results', 'fonte'}.
+    Basta UMA chave no ambiente: BRAVE_API_KEY (recomendado, grátis) ou
+    SERPER_API_KEY ou GOOGLE_CSE_KEY+GOOGLE_CSE_CX."""
+    provedores = [
+        ('serper', lambda: _busca_serper(schema, query, num)),
+        ('brave', lambda: _busca_brave(schema, query, num)),
+        ('google_cse', lambda: _busca_google_cse(query, num)),
+        ('duckduckgo', lambda: _busca_ddg(query, num)),
+    ]
+    for fonte, fn in provedores:
+        try:
+            res = fn()
+        except Exception:
+            res = []
+        if res:
+            return {'ok': True, 'results': res, 'fonte': fonte}
+    return {'ok': False,
+            'error': 'Nenhum provedor de busca disponível. Configure uma '
+                     'chave grátis no ambiente (BRAVE_API_KEY recomendado).',
+            'results': []}
+
+
+_CNPJ_RE = re.compile(r'\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}')
+# Termos genéricos ignorados na conferência de nome
+_NOME_STOP = {
+    'LTDA', 'ME', 'EPP', 'EIRELI', 'SA', 'S', 'A', 'CIA', 'LIMITADA',
+    'EMPRESA', 'GRUPO', 'COMERCIO', 'COMERCIAL', 'INDUSTRIA', 'INDUSTRIAL',
+    'IND', 'COM', 'SERVICOS', 'SERVICO', 'E', 'DE', 'DA', 'DO', 'DAS',
+    'DOS', 'EM', 'DISTRIBUIDORA', 'REPRESENTACOES', 'EIRELLI',
+}
+
+
+def _cnpj_valido(d):
+    """Valida os dígitos verificadores do CNPJ (garante que não é lixo)."""
+    if len(d) != 14 or len(set(d)) == 1:
+        return False
+    w1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    w2 = [6] + w1
+    s1 = sum(int(d[i]) * w1[i] for i in range(12))
+    r1 = s1 % 11
+    dv1 = 0 if r1 < 2 else 11 - r1
+    if dv1 != int(d[12]):
+        return False
+    s2 = sum(int(d[i]) * w2[i] for i in range(13))
+    r2 = s2 % 11
+    dv2 = 0 if r2 < 2 else 11 - r2
+    return dv2 == int(d[13])
+
+
+def _tokens_nome(s):
+    import unicodedata
+    s = (s or '').upper()
+    s = ''.join(ch for ch in unicodedata.normalize('NFKD', s)
+                if not unicodedata.combining(ch))
+    s = re.sub(r'[^A-Z0-9 ]', ' ', s)
+    return [t for t in s.split() if len(t) > 1 and t not in _NOME_STOP]
+
+
+def _nome_confere(nome_lead, *oficiais):
+    """True se o nome do lead bate com a razão social/fantasia da Receita."""
+    t_lead = set(_tokens_nome(nome_lead))
+    if not t_lead:
+        return False
+    minimo = max(1, round(len(t_lead) * 0.5))
+    for of in oficiais:
+        t_of = set(_tokens_nome(of))
+        if t_of and len(t_lead & t_of) >= minimo:
+            return True
+    return False
+
+
+def _descobrir_cnpj(schema, lead_id):
+    """Descobre o CNPJ do lead via Serper e VALIDA antes de salvar:
+    1) dígito verificador do CNPJ; 2) nome confere com a Receita."""
+    import time
+    import requests as http
+    conn = _conn(schema)
+    c = conn.cursor()
+    c.execute('SELECT nome_fantasia, razao_social, cidade, estado, cnpj '
+              'FROM empresas WHERE id=%s', (lead_id,))
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        return {'ok': False, 'error': 'Lead não encontrado'}
+    if row.get('cnpj'):
+        conn.close()
+        return {'ok': True, 'cnpj': row['cnpj'], 'ja_tinha': True}
+    nome = row.get('nome_fantasia') or row.get('razao_social') or ''
+    if not nome:
+        conn.close()
+        return {'ok': False, 'error': 'Lead sem nome'}
+    cidade = row.get('cidade') or ''
+    local = ' '.join(x for x in [cidade, row.get('estado')] if x)
+    conn.close()
+    res = _serper_search(schema, f'{nome} {local} CNPJ'.strip(), num=10)
+    if not res['ok']:
+        return res
+    # 1) Coleta candidatos com dígito verificador válido (ordem dos results)
+    candidatos = []
+    for item in res['results']:
+        blob = ' '.join([item.get('title', ''), item.get('snippet', ''),
+                         item.get('link', '')])
+        for m in _CNPJ_RE.finditer(blob):
+            digits = ''.join(ch for ch in m.group(0) if ch.isdigit())
+            if len(digits) == 14 and _cnpj_valido(digits) \
+                    and digits not in candidatos:
+                candidatos.append(digits)
+    if not candidatos:
+        return {'ok': False, 'error': 'Nenhum CNPJ válido encontrado na busca'}
+    # 2) Valida nome contra a Receita (BrasilAPI) — só salva se conferir
+    sugerido = None
+    for digits in candidatos[:6]:
+        try:
+            rr = http.get(
+                f'https://brasilapi.com.br/api/cnpj/v1/{digits}', timeout=10)
+            if rr.status_code != 200:
+                time.sleep(0.3)
+                continue
+            dd = rr.json()
+        except Exception:
+            continue
+        cidade_ok = (not cidade) or (
+            (dd.get('municipio') or '').upper().strip()
+            == cidade.upper().strip())
+        if _nome_confere(nome, dd.get('razao_social'),
+                         dd.get('nome_fantasia')) and cidade_ok:
+            cnpj_fmt = (f'{digits[:2]}.{digits[2:5]}.{digits[5:8]}/'
+                        f'{digits[8:12]}-{digits[12:]}')
+            conn = _conn(schema)
+            c = conn.cursor()
+            try:
+                c.execute('UPDATE empresas SET cnpj=%s WHERE id=%s',
+                          (cnpj_fmt, lead_id))
+                conn.commit()
+                conn.close()
+                return {'ok': True, 'cnpj': cnpj_fmt,
+                        'validado': True,
+                        'razao_social': dd.get('razao_social')}
+            except Exception:
+                conn.rollback()
+                conn.close()
+                return {'ok': False, 'error': 'CNPJ já existe em outro lead'}
+        if not sugerido:
+            sugerido = (f'{digits[:2]}.{digits[2:5]}.{digits[5:8]}/'
+                        f'{digits[8:12]}-{digits[12:]}')
+        time.sleep(0.3)
+    return {'ok': False,
+            'error': 'CNPJ encontrado não confere com o nome — '
+                     'revise manualmente',
+            'cnpj_sugerido': sugerido}
+
+
 def _enriquecer_cnpj(schema, lead_id):
     """Enriquece dados do lead via BrasilAPI (CNPJ)."""
     import requests as http
@@ -4073,13 +4432,36 @@ def _enriquecer_cnpj(schema, lead_id):
             WHERE id = %s""",
             (razao, fantasia, porte, natureza, situacao,
              endereco, mun, uf, lead_id))
+        # Sócios (QSA) -> cadastra o sócio-administrador como decisor
+        socio_nome = None
+        qsa = d.get('qsa') or []
+        if qsa:
+            adm = next(
+                (s for s in qsa
+                 if 'ADMIN' in (s.get('qualificacao_socio') or '').upper()),
+                None)
+            socio = adm or qsa[0]
+            socio_nome = (socio.get('nome_socio') or '').strip()
+            cargo = (socio.get('qualificacao_socio') or 'Sócio').strip()
+            if socio_nome:
+                c.execute(
+                    'SELECT id FROM contatos WHERE empresa_id=%s '
+                    'AND decisor=1 LIMIT 1', (lead_id,))
+                if not c.fetchone():
+                    c.execute(
+                        "INSERT INTO contatos "
+                        "(empresa_id, nome, cargo, decisor, fonte) "
+                        "VALUES (%s, %s, %s, 1, 'qsa')",
+                        (lead_id, socio_nome, cargo))
         c.execute("""INSERT INTO atividades (empresa_id, tipo, descricao)
             VALUES (%s, 'enriquecimento', %s)""",
-            (lead_id, f'CNPJ enriquecido: {razao} | {porte} | {situacao}'))
+            (lead_id, f'CNPJ enriquecido: {razao} | {porte} | {situacao}'
+             + (f' | Sócio: {socio_nome}' if socio_nome else '')))
         conn.commit()
         conn.close()
         return {'ok': True, 'razao_social': razao, 'porte': porte,
-                'cidade': mun, 'estado': uf, 'situacao': situacao}
+                'cidade': mun, 'estado': uf, 'situacao': situacao,
+                'socio': socio_nome}
     except Exception as e:
         print(f'[ERR] agendar: {e}', flush=True); return {'ok': False, 'error': 'Erro interno'}
 

@@ -632,6 +632,7 @@
       <button class="btn-cfg" onclick="exportCSV()" style="background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.25);color:#4ade80;"><i class="fa fa-download"></i> CSV</button>
       <button class="btn-cfg" onclick="enviarEmailSel()" style="background:rgba(234,88,12,.12);border-color:rgba(234,88,12,.25);color:#fb923c;"><i class="fa fa-envelope"></i> Email</button>
       <button class="btn-cfg" onclick="enriquecerTodos()" style="background:rgba(59,130,246,.12);border-color:rgba(59,130,246,.25);color:#60a5fa;"><i class="fa fa-database"></i> Enriquecer CNPJs</button>
+      <button class="btn-cfg" onclick="requalificarTodos()" title="Automático: descobre CNPJ faltante, estado da sede, situação cadastral e sócio decisor" style="background:rgba(168,85,247,.12);border-color:rgba(168,85,247,.25);color:#c084fc;"><i class="fa fa-user-check"></i> Requalificar</button>
       <span style="flex:1"></span>
       <select id="bulk-action" class="filter-select" style="font-size:11px;padding:6px 10px;">
         <option value="">Ações em massa...</option>
@@ -662,6 +663,23 @@
           <option value="busca">Robô</option>
           <option value="manual">Manual</option>
           <option value="api">API</option>
+        </select>
+        <select id="filter-regiao" class="filter-select" onchange="onRegiaoChange()">
+          <option value="">Todas regiões</option>
+          <option value="N">Norte</option>
+          <option value="NE">Nordeste</option>
+          <option value="CO">Centro-Oeste</option>
+          <option value="SE">Sudeste</option>
+          <option value="S">Sul</option>
+        </select>
+        <select id="filter-estado" class="filter-select" onchange="filterLeads()">
+          <option value="">Todos estados</option>
+        </select>
+        <select id="filter-situacao" class="filter-select" onchange="filterLeads()">
+          <option value="">Toda situação</option>
+          <option value="ativa">🟢 Ativa</option>
+          <option value="inativa">🔴 Inativa/Baixada</option>
+          <option value="sem">Sem dados</option>
         </select>
         <span id="lead-count" style="font-size:11px;color:var(--muted);font-weight:600;"></span>
       </div>
@@ -1029,6 +1047,7 @@ function loadWA(){
   fetch(`/api/${BOT}/leads`).then(r=>r.json()).then(d=>{
     _waAllLeads=d;
     _waPage=1;
+    populateEstadoFilter();
     renderLeadsList();
   }).catch(e=>{console.error('loadWA error:',e)});
 }
@@ -1051,7 +1070,7 @@ function renderLeadsList(){
     return `<tr>
     <td><input type="checkbox" class="lead-chk" value="${l.id}" data-email="${l.email||''}"></td>
     <td style="color:var(--muted);font-size:11px">${idx}</td>
-    <td><b>${l.nome_fantasia||'—'}</b></td>
+    <td><b>${l.nome_fantasia||'—'}</b>${_ufChip(l)}${_situacaoBadge(l)}</td>
     <td style="color:var(--muted);font-size:11px">${l.whatsapp||l.telefone||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
     <td style="color:var(--muted);font-size:11px">${l.email||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
     <td style="color:var(--muted);font-size:11px">${l.cnpj||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
@@ -1086,14 +1105,76 @@ function renderLeadsList(){
   document.getElementById('lead-count').textContent=filtered.length+' leads';
 }
 
+// Mapa UF -> região (IBGE)
+const _REGIOES={
+  N:['AC','AP','AM','PA','RO','RR','TO'],
+  NE:['AL','BA','CE','MA','PB','PE','PI','RN','SE'],
+  CO:['DF','GO','MT','MS'],
+  SE:['ES','MG','RJ','SP'],
+  S:['PR','RS','SC']
+};
+function _ufRegiao(uf){
+  uf=(uf||'').toUpperCase();
+  for(const r in _REGIOES){if(_REGIOES[r].includes(uf)) return r;}
+  return '';
+}
+// "ATIVA" -> ativa ; "BAIXADA"/"INAPTA"/"SUSPENSA"/"NULA" -> inativa ; vazio -> sem
+function _situacaoClasse(s){
+  s=(s||'').toUpperCase().trim();
+  if(!s) return 'sem';
+  return s.startsWith('ATIVA')?'ativa':'inativa';
+}
+// Badge visual de situação cadastral (Receita Federal)
+function _situacaoBadge(l){
+  const cls=_situacaoClasse(l.situacao_cadastral);
+  if(cls==='sem') return '';
+  const txt=(l.situacao_cadastral||'').toUpperCase().trim();
+  if(cls==='ativa')
+    return ` <span title="${txt}" style="color:#22c55e;font-size:9px"><i class="fa fa-circle" style="font-size:7px"></i></span>`;
+  return ` <span title="${txt}" style="background:rgba(239,68,68,.15);color:#f87171;font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;vertical-align:middle">${txt||'INATIVA'}</span>`;
+}
+// Chip de UF
+function _ufChip(l){
+  const uf=(l.estado||'').toUpperCase().trim();
+  if(uf.length!==2) return '';
+  return ` <span style="background:rgba(99,102,241,.12);color:#818cf8;font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;vertical-align:middle">${uf}</span>`;
+}
+// Preenche o dropdown de estados com as UFs presentes nos leads (respeitando a região escolhida)
+function populateEstadoFilter(){
+  const sel=document.getElementById('filter-estado');
+  if(!sel) return;
+  const regiao=document.getElementById('filter-regiao')?.value||'';
+  const atual=sel.value;
+  const ufs=new Set();
+  _waAllLeads.forEach(l=>{
+    const uf=(l.estado||'').toUpperCase().trim();
+    if(uf.length===2 && (!regiao || _ufRegiao(uf)===regiao)) ufs.add(uf);
+  });
+  const ordenadas=[...ufs].sort();
+  sel.innerHTML='<option value="">Todos estados</option>'+
+    ordenadas.map(uf=>`<option value="${uf}">${uf}</option>`).join('');
+  // preserva seleção se ainda válida
+  if(ordenadas.includes(atual)) sel.value=atual;
+}
+function onRegiaoChange(){
+  populateEstadoFilter();
+  filterLeads();
+}
 function getFilteredLeads(){
   const q=(document.getElementById('lead-search')?.value||'').toLowerCase();
   const statusF=document.getElementById('filter-status')?.value||'';
   const sourceF=document.getElementById('filter-source')?.value||'';
+  const regiaoF=document.getElementById('filter-regiao')?.value||'';
+  const estadoF=(document.getElementById('filter-estado')?.value||'').toUpperCase();
+  const situacaoF=document.getElementById('filter-situacao')?.value||'';
   return _waAllLeads.filter(l=>{
     if(q && !(l.nome_fantasia||'').toLowerCase().includes(q) && !(l.email||'').toLowerCase().includes(q) && !(l.cnpj||'').toLowerCase().includes(q) && !(l.telefone||'').toLowerCase().includes(q)) return false;
     if(statusF && l.status!==statusF) return false;
     if(sourceF && l.fonte!==sourceF) return false;
+    const uf=(l.estado||'').toUpperCase().trim();
+    if(estadoF && uf!==estadoF) return false;
+    if(regiaoF && _ufRegiao(uf)!==regiaoF) return false;
+    if(situacaoF && _situacaoClasse(l.situacao_cadastral)!==situacaoF) return false;
     return true;
   });
 }
@@ -1449,7 +1530,8 @@ function openLead(l){
       <div class="m-row"><span class="m-lbl">Website</span><span class="m-val" style="font-size:11px">${l.website?`<a href="${l.website.startsWith('http')?l.website:'https://'+l.website}" target="_blank" style="color:#60a5fa">${l.website}</a>`:'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
       <div class="m-row"><span class="m-lbl">CNPJ</span><span class="m-val" style="font-size:11px">${l.cnpj||'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
       <div class="m-row"><span class="m-lbl">Local</span><span class="m-val">${[l.cidade,l.estado].filter(Boolean).join(', ')||'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
-      <div class="m-row"><span class="m-lbl">Decisor</span><span class="m-val" style="font-size:11px;color:#a78bfa">${l._decisor||'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
+      <div class="m-row"><span class="m-lbl">Situação</span><span class="m-val" style="font-size:11px">${l.situacao_cadastral?(_situacaoClasse(l.situacao_cadastral)==='ativa'?'<span style="color:#22c55e">🟢 '+l.situacao_cadastral+'</span>':'<span style="color:#f87171">🔴 '+l.situacao_cadastral+'</span>'):'<span style="color:#666;font-size:10px">não enriquecido</span>'}</span></div>
+      <div class="m-row"><span class="m-lbl">Decisor</span><span class="m-val" style="font-size:11px;color:#a78bfa">${l._decisor||'<span style="color:#666;font-size:10px">não encontrado</span>'}${l._decisor_linkedin?` <a href="${l._decisor_linkedin}" target="_blank" title="LinkedIn do decisor" style="color:#0a66c2;margin-left:4px"><i class="fab fa-linkedin"></i></a>`:''}${l._decisor_instagram?` <a href="${l._decisor_instagram}" target="_blank" title="Instagram do decisor" style="color:#e1306c;margin-left:2px"><i class="fab fa-instagram"></i></a>`:''}</span></div>
       <div class="m-row"><span class="m-lbl">Score</span><span class="m-val"><span style="color:#fbbf24">★</span> ${l.score||0}</span></div>
     </div>
 
@@ -1484,6 +1566,8 @@ function openLead(l){
         <button onclick="copiarLinkAgenda(${l.id})" class="btn-cfg" style="font-size:11px;background:rgba(139,92,246,.12);border-color:rgba(139,92,246,.25);color:#a78bfa"><i class="fa fa-link"></i> Link Agenda</button>
         <button onclick="logCall(${l.id})" class="btn-cfg" style="font-size:11px;background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.25);color:#4ade80"><i class="fa fa-phone"></i> Ligação</button>
         ${l.cnpj?`<button onclick="enriquecerLead(${l.id})" class="btn-cfg" style="font-size:11px;background:rgba(59,130,246,.12);border-color:rgba(59,130,246,.25);color:#60a5fa"><i class="fa fa-database"></i> ${l.enriquecido?'Re-enriquecer':'Enriquecer CNPJ'}</button>`:''}
+        <button onclick="requalificarLead(${l.id})" class="btn-cfg" title="Descobre CNPJ + estado da sede + situação + sócio decisor (automático)" style="font-size:11px;background:rgba(168,85,247,.12);border-color:rgba(168,85,247,.25);color:#c084fc"><i class="fa fa-user-check"></i> Requalificar</button>
+        ${l._decisor?`<button onclick="buscarRedesDecisor(${l.id})" class="btn-cfg" title="Busca LinkedIn/Instagram do decisor automaticamente" style="font-size:11px;background:rgba(10,102,194,.12);border-color:rgba(10,102,194,.25);color:#60a5fa"><i class="fab fa-linkedin"></i> Buscar redes</button>`:''}
         <button onclick="delWA(${l.id})" class="btn-cfg" style="font-size:11px;background:rgba(248,113,113,.12);border-color:rgba(248,113,113,.25);color:#f87171"><i class="fa fa-trash"></i> Excluir</button>
       </div>
     </div>
@@ -2789,6 +2873,61 @@ async function enriquecerTodos(){
   btn.innerHTML=old;
   alert(`Enriquecidos: ${ok} | Erros: ${err}`);
   loadWA();
+}
+// Requalifica os leads FILTRADOS na tela: descobre CNPJ -> enriquece -> sócio.
+async function requalificarTodos(){
+  const alvo=getFilteredLeads().filter(l=>!l.enriquecido);
+  if(!alvo.length){alert('Nenhum lead filtrado para requalificar (todos já enriquecidos). Use os filtros para escolher um lote.');return;}
+  if(!confirm(`Requalificar ${alvo.length} leads filtrados?\n\nAutomático: descobre CNPJ faltante, estado da sede, situação cadastral e o sócio decisor (dados oficiais da Receita).`)) return;
+  const btn=event.target.closest('button');
+  const old=btn.innerHTML;
+  let ok=0,err=0;
+  for(let i=0;i<alvo.length;i++){
+    btn.innerHTML=`<i class="fa fa-spinner fa-spin"></i> ${i+1}/${alvo.length}`;
+    try{
+      const r=await fetch(`/api/${BOT}/lead/${alvo[i].id}/requalificar`,{method:'POST'});
+      const d=await r.json();
+      if(d.ok) ok++; else err++;
+    }catch(e){err++;}
+    await new Promise(r=>setTimeout(r,600));
+  }
+  btn.innerHTML=old;
+  alert(`Requalificados: ${ok} | Sem dados/erro: ${err}`);
+  loadWA();
+}
+async function requalificarLead(id){
+  const btn=event.target.closest('button');
+  btn.disabled=true;btn.innerHTML='<i class="fa fa-spinner fa-spin"></i> Requalificando...';
+  try{
+    const r=await fetch(`/api/${BOT}/lead/${id}/requalificar`,{method:'POST'});
+    const d=await r.json();
+    const lr=await fetch(`/api/${BOT}/leads`);
+    _waAllLeads=await lr.json();
+    const lead=_waAllLeads.find(l=>l.id===id);
+    if(lead) openLead(lead);
+    if(!d.ok){
+      const p=d.passos||{};
+      let msg=(p.cnpj&&!p.cnpj.ok)?p.cnpj.error:(p.enriquecimento&&p.enriquecimento.error)||'Não foi possível requalificar';
+      if(p.cnpj&&p.cnpj.cnpj_sugerido) msg+=`\n\nCNPJ sugerido (NÃO confirmado): ${p.cnpj.cnpj_sugerido}\nConfira na Receita e preencha manualmente se for o correto.`;
+      alert('⚠️ '+msg);
+    }
+  }catch(e){alert('Erro ao requalificar');}
+  finally{populateEstadoFilter();}
+}
+async function buscarRedesDecisor(id){
+  const btn=event.target.closest('button');
+  btn.disabled=true;btn.innerHTML='<i class="fa fa-spinner fa-spin"></i> Buscando...';
+  try{
+    const r=await fetch(`/api/${BOT}/lead/${id}/redes-decisor`,{method:'POST'});
+    const d=await r.json();
+    if(d.ok){
+      const lr=await fetch(`/api/${BOT}/leads`);
+      _waAllLeads=await lr.json();
+      const lead=_waAllLeads.find(l=>l.id===id);
+      if(lead) openLead(lead);
+      if(!d.linkedin&&!d.instagram) alert('Nenhuma rede encontrada para o decisor.');
+    }else{alert('⚠️ '+(d.error||'Erro'));btn.disabled=false;btn.innerHTML='<i class="fab fa-linkedin"></i> Buscar redes';}
+  }catch(e){alert('Erro');btn.disabled=false;}
 }
 async function enriquecerLead(id){
   const btn=event.target.closest('button');

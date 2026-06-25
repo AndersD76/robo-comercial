@@ -235,6 +235,20 @@
     </div>
   </div>
 
+  <!-- BUSCA AUTOMÁTICA (REQUALIFICAÇÃO) -->
+  <div class="card">
+    <div class="card-title"><i class="fa fa-magnifying-glass"></i> Busca automática (requalificação de leads)</div>
+    <div class="info-box">
+      Usada pelo botão <strong>Requalificar</strong> para descobrir o CNPJ, o estado da sede, a situação e o sócio decisor dos leads automaticamente.<br>
+      Cole sua chave do <strong>Brave Search</strong> (grátis, 2.000 buscas/mês, sem cartão).
+      Pegue em <a href="https://brave.com/search/api/" target="_blank" style="color:#818cf8">brave.com/search/api</a> → login com Google → plano Free → copie o token.
+    </div>
+    <div class="field">
+      <label>Chave da API de busca (Brave) <small>(opcional)</small></label>
+      <input type="password" id="brave_api_key" value="{{ cfg.brave_api_key or '' }}" placeholder="BSA..." autocomplete="off">
+    </div>
+  </div>
+
   <!-- SALVAR -->
   <button class="btn-save" id="btn-save" onclick="saveConfig(true)">
     <i class="fa fa-floppy-disk"></i> Salvar configurações
@@ -489,7 +503,8 @@ async function saveConfig(redirect) {
       email_remetente_nome: document.getElementById('email_remetente_nome').value,
       email_cor_header: document.getElementById('email_cor_header').value,
       email_cor_botao: document.getElementById('email_cor_botao').value,
-      email_cor_texto: document.getElementById('email_cor_texto').value
+      email_cor_texto: document.getElementById('email_cor_texto').value,
+      brave_api_key: document.getElementById('brave_api_key').value
     }
     var r = await fetch('/api/' + BOT + '/config', {
       method: 'POST',
