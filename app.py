@@ -618,15 +618,38 @@ def get_leads(schema: str, limite: int = 5000) -> list:
                    e.linkedin, e.instagram, e.fonte, e.porte,
                    e.situacao_cadastral, e.enriquecido,
                    e.email_enviado, e.wa_enviado, e.observacoes"""
+        def _exec():
+            try:
+                c.execute(
+                    f"SELECT {_base}, e.email_aberto, e.email_clicado, {_sub}"
+                    " FROM empresas e ORDER BY e.encontrado_em DESC LIMIT %s",
+                    (limite,))
+            except Exception:
+                conn.rollback()
+                c.execute(
+                    f"SELECT {_base}, NULL as email_aberto,"
+                    f" NULL as email_clicado, {_sub}"
+                    " FROM empresas e ORDER BY e.encontrado_em DESC LIMIT %s",
+                    (limite,))
         try:
-            c.execute(f"SELECT {_base}, e.email_aberto, e.email_clicado, {_sub}"
-                      " FROM empresas e ORDER BY e.encontrado_em DESC LIMIT %s",
-                      (limite,))
+            _exec()
         except Exception:
+            # Auto-reparo: schema de tenant antigo sem as colunas novas.
             conn.rollback()
-            c.execute(f"SELECT {_base}, NULL as email_aberto, NULL as email_clicado, {_sub}"
-                      " FROM empresas e ORDER BY e.encontrado_em DESC LIMIT %s",
-                      (limite,))
+            for stmt in (
+                "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS "
+                "situacao_cadastral TEXT",
+                "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS "
+                "enriquecido BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE contatos ADD COLUMN IF NOT EXISTS instagram TEXT",
+                "ALTER TABLE contatos ADD COLUMN IF NOT EXISTS fonte TEXT",
+            ):
+                try:
+                    c.execute(stmt)
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+            _exec()
         rows = [_serialize_row(dict(r)) for r in c.fetchall()]
         conn.close()
         return rows
