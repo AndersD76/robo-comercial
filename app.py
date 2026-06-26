@@ -78,7 +78,7 @@ def _decrypt_field(value: str) -> str:
         return value
 
 
-_SENSITIVE_FIELDS = ('linkedin_password', 'smtp_password', 'resend_api_key', 'serper_api_key', 'brave_api_key')
+_SENSITIVE_FIELDS = ('linkedin_password', 'smtp_password', 'resend_api_key', 'serper_api_key', 'brave_api_key', 'google_cse_key')
 
 
 def _csrf_token():
@@ -411,6 +411,8 @@ def _init_user_schema(schema: str):
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS serper_api_key TEXT",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS brave_api_key TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS google_cse_key TEXT",
+        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS google_cse_cx TEXT",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_inicio INTEGER DEFAULT 9",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_fim INTEGER DEFAULT 18",
         "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS duracao_reuniao INTEGER DEFAULT 30",
@@ -2875,6 +2877,8 @@ def api_save_config(bot):
     smtp_password = data.get('smtp_password', '')
     serper_api_key = data.get('serper_api_key', '')
     brave_api_key = data.get('brave_api_key', '')
+    google_cse_key = data.get('google_cse_key', '')
+    google_cse_cx = data.get('google_cse_cx', '')
 
     # Validação de campos obrigatórios
     erros = []
@@ -2901,6 +2905,8 @@ def api_save_config(bot):
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS serper_api_key TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS brave_api_key TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS google_cse_key TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS google_cse_cx TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_cor_header TEXT DEFAULT '#1a2332'",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_cor_botao TEXT DEFAULT '#2563eb'",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_cor_texto TEXT DEFAULT '#ffffff'",
@@ -2936,6 +2942,7 @@ def api_save_config(bot):
                          smtp_host=%s, smtp_port=%s,
                          smtp_user=%s, smtp_password=%s,
                          serper_api_key=%s, brave_api_key=%s,
+                         google_cse_key=%s, google_cse_cx=%s,
                          atualizado_em=NOW()"""
             params = [empresa_nome, website, descricao, psycopg2.extras.Json(termos),
                       li_email or None, psycopg2.extras.Json(li_cargos),
@@ -2950,7 +2957,9 @@ def api_save_config(bot):
                       smtp_host or None, smtp_port or 587,
                       smtp_user or None, _encrypt_field(smtp_password) or None,
                       _encrypt_field(serper_api_key) or None,
-                      _encrypt_field(brave_api_key) or None]
+                      _encrypt_field(brave_api_key) or None,
+                      _encrypt_field(google_cse_key) or None,
+                      google_cse_cx or None]
             if li_password:
                 sql += ", linkedin_password=%s"
                 params.append(_encrypt_field(li_password))
@@ -4221,12 +4230,19 @@ def _busca_brave(schema, query, num=10):
         return []
 
 
-def _busca_google_cse(query, num=10):
-    """Busca via Google Custom Search JSON API. Grátis 100/dia.
-    Env: GOOGLE_CSE_KEY e GOOGLE_CSE_CX."""
+def _busca_google_cse(schema, query, num=10):
+    """Busca via Google Custom Search JSON API. Grátis 100/dia, sem cartão.
+    Chave/cx do Config ou env GOOGLE_CSE_KEY / GOOGLE_CSE_CX."""
     import requests as http
-    key = os.environ.get('GOOGLE_CSE_KEY', '')
-    cx = os.environ.get('GOOGLE_CSE_CX', '')
+    key = cx = ''
+    try:
+        cfg = get_bot_config(schema) or {}
+        key = cfg.get('google_cse_key') or ''
+        cx = cfg.get('google_cse_cx') or ''
+    except Exception:
+        key = cx = ''
+    key = key or os.environ.get('GOOGLE_CSE_KEY', '')
+    cx = cx or os.environ.get('GOOGLE_CSE_CX', '')
     if not key or not cx:
         return []
     try:
@@ -4279,7 +4295,7 @@ def _serper_search(schema, query, num=10):
     provedores = [
         ('serper', lambda: _busca_serper(schema, query, num)),
         ('brave', lambda: _busca_brave(schema, query, num)),
-        ('google_cse', lambda: _busca_google_cse(query, num)),
+        ('google_cse', lambda: _busca_google_cse(schema, query, num)),
         ('duckduckgo', lambda: _busca_ddg(query, num)),
     ]
     for fonte, fn in provedores:
@@ -4290,8 +4306,9 @@ def _serper_search(schema, query, num=10):
         if res:
             return {'ok': True, 'results': res, 'fonte': fonte}
     return {'ok': False, 'sem_provedor': True,
-            'error': 'Busca não configurada: cole a chave do Brave Search '
-                     '(grátis) em Config para descobrir CNPJ automaticamente.',
+            'error': 'Busca não configurada: em Config → "Busca automática" '
+                     'preencha o Google (grátis, sem cartão) ou o Brave para '
+                     'descobrir CNPJ automaticamente.',
             'results': []}
 
 
