@@ -1071,7 +1071,7 @@ function renderLeadsList(){
     <td><input type="checkbox" class="lead-chk" value="${l.id}" data-email="${l.email||''}"></td>
     <td style="color:var(--muted);font-size:11px">${idx}</td>
     <td><b>${l.nome_fantasia||'—'}</b>${_ufChip(l)}${_situacaoBadge(l)}</td>
-    <td style="color:var(--muted);font-size:11px">${l.whatsapp||l.telefone||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
+    <td style="color:var(--muted);font-size:11px">${formatTel(l.whatsapp||l.telefone)||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
     <td style="color:var(--muted);font-size:11px">${l.email||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
     <td style="color:var(--muted);font-size:11px">${l.cnpj||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
     <td style="color:var(--muted);font-size:11px">${l._decisor||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
@@ -1117,6 +1117,19 @@ function _ufRegiao(uf){
   uf=(uf||'').toUpperCase();
   for(const r in _REGIOES){if(_REGIOES[r].includes(uf)) return r;}
   return '';
+}
+// Padroniza telefone para o formato BR (DD) XXXXX-XXXX. Não-BR/inválido
+// mantém o valor original. Cobre todos os leads, atuais e futuros.
+function formatTel(raw){
+  if(raw==null||raw==='') return '';
+  let d=(''+raw).replace(/\D/g,'');
+  if(d.length>11 && d.startsWith('55')) d=d.slice(2); // remove +55
+  const ddd=parseInt(d.slice(0,2),10);
+  if(ddd>=11){
+    if(d.length===11) return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+    if(d.length===10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+  }
+  return raw; // formato não reconhecido: preserva original
 }
 // "ATIVA" -> ativa ; "BAIXADA"/"INAPTA"/"SUSPENSA"/"NULA" -> inativa ; vazio -> sem
 function _situacaoClasse(s){
@@ -1524,8 +1537,8 @@ function openLead(l){
   // INFO TAB
   document.getElementById('modal-tab-info').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;margin-bottom:16px">
-      <div class="m-row"><span class="m-lbl">Telefone</span><span class="m-val">${l.telefone||'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
-      <div class="m-row"><span class="m-lbl">WhatsApp</span><span class="m-val">${l.whatsapp||'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
+      <div class="m-row"><span class="m-lbl">Telefone</span><span class="m-val">${formatTel(l.telefone)||'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
+      <div class="m-row"><span class="m-lbl">WhatsApp</span><span class="m-val">${formatTel(l.whatsapp)||'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
       <div class="m-row"><span class="m-lbl">Email</span><span class="m-val" style="font-size:11px;word-break:break-all">${l.email||'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
       <div class="m-row"><span class="m-lbl">Website</span><span class="m-val" style="font-size:11px">${l.website?`<a href="${l.website.startsWith('http')?l.website:'https://'+l.website}" target="_blank" style="color:#60a5fa">${l.website}</a>`:'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
       <div class="m-row"><span class="m-lbl">CNPJ</span><span class="m-val" style="font-size:11px">${l.cnpj||'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>

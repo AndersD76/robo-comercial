@@ -597,6 +597,22 @@ def get_stats(schema: str) -> dict:
     return z
 
 
+def _fmt_tel(raw) -> str:
+    """Padroniza telefone para (DD) XXXXX-XXXX. Não-BR/inválido mantém
+    o original. Mesma lógica do formatTel() do frontend."""
+    if not raw:
+        return ''
+    d = ''.join(ch for ch in str(raw) if ch.isdigit())
+    if len(d) > 11 and d.startswith('55'):
+        d = d[2:]
+    if len(d) >= 2 and d[:2].isdigit() and int(d[:2]) >= 11:
+        if len(d) == 11:
+            return f'({d[:2]}) {d[2:7]}-{d[7:]}'
+        if len(d) == 10:
+            return f'({d[:2]}) {d[2:6]}-{d[6:]}'
+    return str(raw)
+
+
 def get_leads(schema: str, limite: int = 5000) -> list:
     if not DATABASE_URL or not schema:
         return []
@@ -2453,7 +2469,8 @@ def api_export_leads(bot):
                          'Email enviado', 'Decisor', 'LinkedIn Decisor'])
         for r in rows:
             writer.writerow([r.get('nome_fantasia', ''), r.get('cnpj', ''),
-                             r.get('telefone', ''), r.get('whatsapp', ''),
+                             _fmt_tel(r.get('telefone', '')),
+                             _fmt_tel(r.get('whatsapp', '')),
                              r.get('email', ''), r.get('website', ''),
                              r.get('cidade', ''), r.get('estado', ''),
                              r.get('segmento', ''), r.get('score', ''),
