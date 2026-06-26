@@ -1118,6 +1118,31 @@ function _ufRegiao(uf){
   for(const r in _REGIOES){if(_REGIOES[r].includes(uf)) return r;}
   return '';
 }
+// DDD -> UF (deriva o estado do telefone, sem precisar de CNPJ/API)
+const _DDD_UF={
+  '11':'SP','12':'SP','13':'SP','14':'SP','15':'SP','16':'SP','17':'SP','18':'SP','19':'SP',
+  '21':'RJ','22':'RJ','24':'RJ','27':'ES','28':'ES',
+  '31':'MG','32':'MG','33':'MG','34':'MG','35':'MG','37':'MG','38':'MG',
+  '41':'PR','42':'PR','43':'PR','44':'PR','45':'PR','46':'PR',
+  '47':'SC','48':'SC','49':'SC','51':'RS','53':'RS','54':'RS','55':'RS',
+  '61':'DF','62':'GO','64':'GO','63':'TO','65':'MT','66':'MT','67':'MS',
+  '68':'AC','69':'RO','71':'BA','73':'BA','74':'BA','75':'BA','77':'BA','79':'SE',
+  '81':'PE','87':'PE','82':'AL','83':'PB','84':'RN','85':'CE','88':'CE','86':'PI','89':'PI',
+  '91':'PA','93':'PA','94':'PA','92':'AM','97':'AM','95':'RR','96':'AP','98':'MA','99':'MA'
+};
+function dddUF(raw){
+  if(!raw) return '';
+  let d=(''+raw).replace(/\D/g,'');
+  if(d.length>11 && d.startsWith('55')) d=d.slice(2);
+  if(d.length<10) return '';
+  return _DDD_UF[d.slice(0,2)]||'';
+}
+// UF do lead: usa o estado oficial (Receita) se houver; senão deriva do DDD
+function leadUF(l){
+  const uf=(l.estado||'').toUpperCase().trim();
+  if(uf.length===2) return uf;
+  return dddUF(l.whatsapp||l.telefone);
+}
 // Padroniza telefone para o formato BR (DD) XXXXX-XXXX. Não-BR/inválido
 // mantém o valor original. Cobre todos os leads, atuais e futuros.
 function formatTel(raw){
@@ -1146,11 +1171,13 @@ function _situacaoBadge(l){
     return ` <span title="${txt}" style="color:#22c55e;font-size:9px"><i class="fa fa-circle" style="font-size:7px"></i></span>`;
   return ` <span title="${txt}" style="background:rgba(239,68,68,.15);color:#f87171;font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;vertical-align:middle">${txt||'INATIVA'}</span>`;
 }
-// Chip de UF
+// Chip de UF (estado oficial ou derivado do DDD)
 function _ufChip(l){
-  const uf=(l.estado||'').toUpperCase().trim();
+  const uf=leadUF(l);
   if(uf.length!==2) return '';
-  return ` <span style="background:rgba(99,102,241,.12);color:#818cf8;font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;vertical-align:middle">${uf}</span>`;
+  // Itálico discreto quando veio do DDD (não confirmado pela Receita)
+  const viaDDD=!(l.estado||'').trim();
+  return ` <span title="${viaDDD?'Estado pelo DDD do telefone':'Estado (Receita)'}" style="background:rgba(99,102,241,.12);color:#818cf8;font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;vertical-align:middle${viaDDD?';font-style:italic;opacity:.85':''}">${uf}</span>`;
 }
 // Preenche o dropdown de estados com as UFs presentes nos leads (respeitando a região escolhida)
 function populateEstadoFilter(){
@@ -1160,7 +1187,7 @@ function populateEstadoFilter(){
   const atual=sel.value;
   const ufs=new Set();
   _waAllLeads.forEach(l=>{
-    const uf=(l.estado||'').toUpperCase().trim();
+    const uf=leadUF(l);
     if(uf.length===2 && (!regiao || _ufRegiao(uf)===regiao)) ufs.add(uf);
   });
   const ordenadas=[...ufs].sort();
@@ -1184,7 +1211,7 @@ function getFilteredLeads(){
     if(q && !(l.nome_fantasia||'').toLowerCase().includes(q) && !(l.email||'').toLowerCase().includes(q) && !(l.cnpj||'').toLowerCase().includes(q) && !(l.telefone||'').toLowerCase().includes(q)) return false;
     if(statusF && l.status!==statusF) return false;
     if(sourceF && l.fonte!==sourceF) return false;
-    const uf=(l.estado||'').toUpperCase().trim();
+    const uf=leadUF(l);
     if(estadoF && uf!==estadoF) return false;
     if(regiaoF && _ufRegiao(uf)!==regiaoF) return false;
     if(situacaoF && _situacaoClasse(l.situacao_cadastral)!==situacaoF) return false;
