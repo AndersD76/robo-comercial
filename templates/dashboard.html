@@ -2894,18 +2894,27 @@ async function requalificarTodos(){
   if(!confirm(`Requalificar ${alvo.length} leads filtrados?\n\nAutomático: descobre CNPJ faltante, estado da sede, situação cadastral e o sócio decisor (dados oficiais da Receita).`)) return;
   const btn=event.target.closest('button');
   const old=btn.innerHTML;
-  let ok=0,err=0;
+  let ok=0,err=0,semProvedor=0,semCnpj=0;
   for(let i=0;i<alvo.length;i++){
     btn.innerHTML=`<i class="fa fa-spinner fa-spin"></i> ${i+1}/${alvo.length}`;
     try{
       const r=await fetch(`/api/${BOT}/lead/${alvo[i].id}/requalificar`,{method:'POST'});
       const d=await r.json();
-      if(d.ok) ok++; else err++;
+      if(d.ok){ok++;}
+      else{
+        err++;
+        const cn=(d.passos||{}).cnpj||{};
+        if(cn.sem_provedor) semProvedor++;
+        else if(!cn.cnpj) semCnpj++;
+      }
     }catch(e){err++;}
     await new Promise(r=>setTimeout(r,600));
   }
   btn.innerHTML=old;
-  alert(`Requalificados: ${ok} | Sem dados/erro: ${err}`);
+  let msg=`✓ Requalificados: ${ok}\n✗ Sem dados/erro: ${err}`;
+  if(semProvedor>0) msg+=`\n\n⚠️ ${semProvedor} precisaram buscar o CNPJ mas a busca não está configurada.\nCole a chave grátis do Brave Search em Config → "Busca automática" e rode de novo.`;
+  else if(semCnpj>0) msg+=`\n\n${semCnpj} não tiveram o CNPJ encontrado na busca (nome muito genérico ou empresa pequena).`;
+  alert(msg);
   loadWA();
 }
 async function requalificarLead(id){

@@ -4289,9 +4289,9 @@ def _serper_search(schema, query, num=10):
             res = []
         if res:
             return {'ok': True, 'results': res, 'fonte': fonte}
-    return {'ok': False,
-            'error': 'Nenhum provedor de busca disponível. Configure uma '
-                     'chave grátis no ambiente (BRAVE_API_KEY recomendado).',
+    return {'ok': False, 'sem_provedor': True,
+            'error': 'Busca não configurada: cole a chave do Brave Search '
+                     '(grátis) em Config para descobrir CNPJ automaticamente.',
             'results': []}
 
 
@@ -4431,6 +4431,24 @@ def _enriquecer_cnpj(schema, lead_id):
     try:
         conn = _conn(schema)
         c = conn.cursor()
+        # Garante colunas que o enrich escreve (tenants antigos podem não ter)
+        for stmt in (
+            "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS razao_social TEXT",
+            "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS natureza_juridica TEXT",
+            "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS situacao_cadastral "
+            "TEXT",
+            "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS enriquecido BOOLEAN "
+            "DEFAULT FALSE",
+            "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS enriquecido_em "
+            "TIMESTAMP",
+            "ALTER TABLE contatos ADD COLUMN IF NOT EXISTS instagram TEXT",
+            "ALTER TABLE contatos ADD COLUMN IF NOT EXISTS fonte TEXT",
+        ):
+            try:
+                c.execute(stmt)
+                conn.commit()
+            except Exception:
+                conn.rollback()
         c.execute('SELECT cnpj FROM empresas WHERE id = %s', (lead_id,))
         row = c.fetchone()
         if not row or not row.get('cnpj'):
