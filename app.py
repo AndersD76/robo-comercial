@@ -1988,18 +1988,73 @@ def api_enriquecer_lead(bot, lead_id):
     return jsonify(result), 400
 
 
+# DDD -> UF (deriva o estado do telefone, sem CNPJ/API)
+_DDD_UF = {
+    '11': 'SP', '12': 'SP', '13': 'SP', '14': 'SP', '15': 'SP', '16': 'SP',
+    '17': 'SP', '18': 'SP', '19': 'SP', '21': 'RJ', '22': 'RJ', '24': 'RJ',
+    '27': 'ES', '28': 'ES', '31': 'MG', '32': 'MG', '33': 'MG', '34': 'MG',
+    '35': 'MG', '37': 'MG', '38': 'MG', '41': 'PR', '42': 'PR', '43': 'PR',
+    '44': 'PR', '45': 'PR', '46': 'PR', '47': 'SC', '48': 'SC', '49': 'SC',
+    '51': 'RS', '53': 'RS', '54': 'RS', '55': 'RS', '61': 'DF', '62': 'GO',
+    '64': 'GO', '63': 'TO', '65': 'MT', '66': 'MT', '67': 'MS', '68': 'AC',
+    '69': 'RO', '71': 'BA', '73': 'BA', '74': 'BA', '75': 'BA', '77': 'BA',
+    '79': 'SE', '81': 'PE', '87': 'PE', '82': 'AL', '83': 'PB', '84': 'RN',
+    '85': 'CE', '88': 'CE', '86': 'PI', '89': 'PI', '91': 'PA', '93': 'PA',
+    '94': 'PA', '92': 'AM', '97': 'AM', '95': 'RR', '96': 'AP', '98': 'MA',
+    '99': 'MA',
+}
+
+
+def _uf_do_ddd(raw) -> str:
+    if not raw:
+        return ''
+    d = ''.join(ch for ch in str(raw) if ch.isdigit())
+    if len(d) > 11 and d.startswith('55'):
+        d = d[2:]
+    if len(d) < 10:
+        return ''
+    return _DDD_UF.get(d[:2], '')
+
+
+def _preencher_estado_por_ddd(schema, lead_id):
+    """Preenche e salva o estado pelo DDD do telefone (grátis, sem API)."""
+    conn = _conn(schema)
+    c = conn.cursor()
+    c.execute('SELECT estado, whatsapp, telefone FROM empresas WHERE id=%s',
+              (lead_id,))
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        return {'ok': False, 'error': 'Lead não encontrado'}
+    if (row.get('estado') or '').strip():
+        conn.close()
+        return {'ok': True, 'estado': row['estado'], 'ja_tinha': True}
+    uf = _uf_do_ddd(row.get('whatsapp') or row.get('telefone') or '')
+    if not uf:
+        conn.close()
+        return {'ok': False, 'error': 'Sem telefone com DDD válido'}
+    c.execute('UPDATE empresas SET estado=%s WHERE id=%s', (uf, lead_id))
+    conn.commit()
+    conn.close()
+    return {'ok': True, 'estado': uf, 'fonte': 'ddd'}
+
+
 @app.route('/api/<bot>/lead/<int:lead_id>/requalificar', methods=['POST'])
 @login_required
 def api_requalificar_lead(bot, lead_id):
-    """Requalifica: descobre CNPJ (se faltar) -> enriquece (estado/
-    situação/sócio decisor)."""
+    """Requalifica fazendo o máximo de graça: com CNPJ -> enriquece
+    (estado/situação/sócio via Receita); sem CNPJ -> ao menos preenche o
+    estado pelo DDD do telefone."""
     schema = _get_schema() or bot
     passos = {}
     cn = _descobrir_cnpj(schema, lead_id)
     passos['cnpj'] = cn
     if cn.get('ok') and cn.get('cnpj'):
         passos['enriquecimento'] = _enriquecer_cnpj(schema, lead_id)
-    ok = bool(passos.get('enriquecimento', {}).get('ok'))
+    else:
+        passos['ddd'] = _preencher_estado_por_ddd(schema, lead_id)
+    ok = bool(passos.get('enriquecimento', {}).get('ok')
+              or passos.get('ddd', {}).get('ok'))
     return jsonify({'ok': ok, 'passos': passos})
 
 

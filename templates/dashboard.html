@@ -2918,29 +2918,26 @@ async function enriquecerTodos(){
 async function requalificarTodos(){
   const alvo=getFilteredLeads().filter(l=>!l.enriquecido);
   if(!alvo.length){alert('Nenhum lead filtrado para requalificar (todos já enriquecidos). Use os filtros para escolher um lote.');return;}
-  if(!confirm(`Requalificar ${alvo.length} leads filtrados?\n\nAutomático: descobre CNPJ faltante, estado da sede, situação cadastral e o sócio decisor (dados oficiais da Receita).`)) return;
+  if(!confirm(`Requalificar ${alvo.length} leads filtrados?\n\nLeads com CNPJ: enriquece estado, situação e sócio decisor (Receita).\nLeads sem CNPJ: preenche o estado pelo DDD do telefone.\nTudo grátis.`)) return;
   const btn=event.target.closest('button');
   const old=btn.innerHTML;
-  let ok=0,err=0,semProvedor=0,semCnpj=0;
+  let ok=0,err=0,enriquecidos=0,porDDD=0;
   for(let i=0;i<alvo.length;i++){
     btn.innerHTML=`<i class="fa fa-spinner fa-spin"></i> ${i+1}/${alvo.length}`;
     try{
       const r=await fetch(`/api/${BOT}/lead/${alvo[i].id}/requalificar`,{method:'POST'});
       const d=await r.json();
-      if(d.ok){ok++;}
-      else{
-        err++;
-        const cn=(d.passos||{}).cnpj||{};
-        if(cn.sem_provedor) semProvedor++;
-        else if(!cn.cnpj) semCnpj++;
-      }
+      const p=d.passos||{};
+      if(p.enriquecimento&&p.enriquecimento.ok) enriquecidos++;
+      else if(p.ddd&&p.ddd.ok&&p.ddd.fonte==='ddd') porDDD++;
+      if(d.ok) ok++; else err++;
     }catch(e){err++;}
     await new Promise(r=>setTimeout(r,600));
   }
   btn.innerHTML=old;
-  let msg=`✓ Requalificados: ${ok}\n✗ Sem dados/erro: ${err}`;
-  if(semProvedor>0) msg+=`\n\n⚠️ ${semProvedor} precisaram buscar o CNPJ mas a busca não está configurada.\nCole a chave grátis do Brave Search em Config → "Busca automática" e rode de novo.`;
-  else if(semCnpj>0) msg+=`\n\n${semCnpj} não tiveram o CNPJ encontrado na busca (nome muito genérico ou empresa pequena).`;
+  let msg=`✓ Enriquecidos pela Receita (com CNPJ): ${enriquecidos}`;
+  msg+=`\n📍 Estado preenchido pelo DDD: ${porDDD}`;
+  if(err>0) msg+=`\n✗ Sem dados: ${err} (sem CNPJ e sem telefone com DDD)`;
   alert(msg);
   loadWA();
 }
