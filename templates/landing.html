@@ -714,6 +714,40 @@
   </a>
 </div>
 
+<!-- WhatsApp flutuante -->
+<a href="https://wa.me/5554999648368?text=Oi%2C%20quero%20saber%20mais%20sobre%20o%20TurboVenda" target="_blank" rel="noopener"
+   id="wpp-btn" style="position:fixed;bottom:24px;right:24px;z-index:90;width:56px;height:56px;
+   border-radius:50%;background:#25d366;display:flex;align-items:center;justify-content:center;
+   box-shadow:0 4px 16px rgba(0,0,0,.3);transition:.3s;text-decoration:none"
+   onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+  <svg width="28" height="28" fill="#fff" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.556 4.126 1.528 5.865L.06 23.49l5.753-1.508A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75c-1.94 0-3.75-.573-5.27-1.558l-.378-.224-3.916 1.027 1.045-3.818-.247-.393A9.7 9.7 0 012.25 12 9.75 9.75 0 0112 2.25 9.75 9.75 0 0121.75 12 9.75 9.75 0 0112 21.75z"/></svg>
+</a>
+
+<!-- Exit intent popup -->
+<div id="exit-popup" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.7);
+     backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:20px">
+  <div style="background:#0d1526;border:1px solid rgba(99,102,241,.3);border-radius:20px;
+       padding:40px;max-width:440px;width:100%;text-align:center;position:relative">
+    <button onclick="document.getElementById('exit-popup').style.display='none';sessionStorage.setItem('exit-shown','1')"
+            style="position:absolute;top:14px;right:18px;background:none;border:none;color:#64748b;
+            font-size:20px;cursor:pointer">&times;</button>
+    <div style="font-size:40px;margin-bottom:12px">⚡</div>
+    <h3 style="font-size:20px;font-weight:800;margin-bottom:8px;color:#f1f5f9">Espera! 50 leads grátis</h3>
+    <p style="color:#94a3b8;font-size:14px;margin-bottom:24px;line-height:1.6">
+      Antes de ir, sabia que você pode testar o TurboVenda de graça?<br>
+      Sem cartão, sem compromisso. 2 minutos para configurar.
+    </p>
+    <a href="/cadastro" style="display:inline-block;background:linear-gradient(135deg,#6366f1,#8b5cf6);
+       color:#fff;padding:14px 32px;border-radius:10px;font-weight:700;font-size:15px;
+       text-decoration:none;transition:.2s"
+       onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'"
+       onclick="if(typeof gtag==='function')gtag('event','generate_lead',{event_category:'exit_intent'})">
+      <i class="fa fa-bolt"></i> Quero meus 50 leads grátis
+    </a>
+    <p style="color:#475569;font-size:12px;margin-top:12px">Sem cartão de crédito</p>
+  </div>
+</div>
+
 <script>
   const obs = new IntersectionObserver((entries) => {
     entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible') })
@@ -726,6 +760,27 @@
       if(typeof gtag==='function') gtag('event','generate_lead',{event_category:'cta',event_label:a.textContent.trim()});
     });
   });
+
+  // Exit intent (desktop: mouse sai da janela)
+  document.addEventListener('mouseout', function(e) {
+    if (e.clientY < 5 && !sessionStorage.getItem('exit-shown')) {
+      document.getElementById('exit-popup').style.display = 'flex';
+      sessionStorage.setItem('exit-shown', '1');
+    }
+  });
+  // Mobile: botão voltar / scroll up rápido
+  let _lastY = 0;
+  window.addEventListener('scroll', function() {
+    const y = window.scrollY;
+    if (y > 600 && y < _lastY - 200 && !sessionStorage.getItem('exit-shown')) {
+      document.getElementById('exit-popup').style.display = 'flex';
+      sessionStorage.setItem('exit-shown', '1');
+    }
+    _lastY = y;
+  });
+
+  // Esconder WhatsApp no mobile (sticky CTA já ocupa o espaço)
+  if (window.innerWidth < 769) document.getElementById('wpp-btn').style.bottom = '80px';
 </script>
 </body>
 </html>

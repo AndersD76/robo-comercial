@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prospecção B2B para {{ seg.nome }} — TurboVenda</title>
+  <meta name="description" content="{{ seg.desc }}">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://www.turbovenda.com.br/para/{{ seg.slug }}">
+  <meta property="og:title" content="Prospecção B2B para {{ seg.nome }} — TurboVenda">
+  <meta property="og:description" content="{{ seg.desc }}">
+  <meta property="og:url" content="https://www.turbovenda.com.br/para/{{ seg.slug }}">
+  <meta property="og:image" content="https://www.turbovenda.com.br/static/og-image.png">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect rx='20' width='100' height='100' fill='%236366f1'/><text x='50' y='72' font-size='60' text-anchor='middle' fill='white'>⚡</text></svg>">
+  <script async src="https://www.googletagmanager.com/gtag/js?id={{ ga_id }}"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','{{ ga_id }}');</script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {"@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.turbovenda.com.br/"},
+      {"@type": "ListItem", "position": 2, "name": "{{ seg.nome }}", "item": "https://www.turbovenda.com.br/para/{{ seg.slug }}"}
+    ]
+  }
+  </script>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',sans-serif;background:#060b18;color:#f1f5f9}
+    nav{position:fixed;top:0;left:0;right:0;z-index:100;height:64px;display:flex;align-items:center;
+        justify-content:space-between;padding:0 40px;backdrop-filter:blur(20px);
+        background:rgba(6,11,24,.85);border-bottom:1px solid rgba(255,255,255,.05)}
+    .nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none}
+    .nav-logo-mark{width:36px;height:36px;border-radius:10px;
+        background:linear-gradient(135deg,#6366f1,#8b5cf6);
+        display:flex;align-items:center;justify-content:center;font-size:16px}
+    .nav-logo-text{font-size:18px;font-weight:800;color:#fff;letter-spacing:-.4px}
+    .nav-logo-text span{color:#6366f1}
+    .btn-nav{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff!important;
+        padding:8px 18px;border-radius:8px;font-weight:700;font-size:13px}
+    .nav-links{display:flex;align-items:center;gap:6px}
+    .nav-links a{color:#94a3b8;text-decoration:none;font-size:14px;font-weight:500;padding:6px 14px;border-radius:8px}
+    .nav-links a:hover{color:#fff;background:rgba(255,255,255,.05)}
+
+    .hero{max-width:720px;margin:0 auto;padding:140px 24px 60px;text-align:center}
+    .badge{display:inline-block;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.25);
+        color:#818cf8;font-size:12px;font-weight:700;padding:5px 14px;border-radius:100px;
+        margin-bottom:20px;text-transform:uppercase;letter-spacing:1px}
+    h1{font-size:2.4rem;font-weight:900;letter-spacing:-1px;line-height:1.15;margin-bottom:16px}
+    h1 em{font-style:normal;color:#6366f1}
+    .sub{color:#94a3b8;font-size:16px;line-height:1.7;margin-bottom:32px;max-width:560px;margin-left:auto;margin-right:auto}
+    .cta-btn{display:inline-block;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;
+        padding:16px 36px;border-radius:12px;font-weight:700;font-size:16px;text-decoration:none;
+        transition:.2s;box-shadow:0 4px 20px rgba(99,102,241,.3)}
+    .cta-btn:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(99,102,241,.4)}
+    .trust{color:#64748b;font-size:13px;margin-top:14px}
+
+    .examples{max-width:720px;margin:0 auto;padding:0 24px 60px}
+    .examples h2{font-size:1.4rem;font-weight:800;margin-bottom:20px;text-align:center}
+    .tags{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:40px}
+    .tag{background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);
+        color:#818cf8;font-size:13px;font-weight:600;padding:6px 16px;border-radius:100px}
+
+    .steps{max-width:720px;margin:0 auto;padding:0 24px 80px}
+    .steps h2{font-size:1.4rem;font-weight:800;margin-bottom:24px;text-align:center}
+    .step-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+    .step{background:#0d1526;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:24px}
+    .step-num{color:#6366f1;font-size:28px;font-weight:900;margin-bottom:8px}
+    .step-title{font-weight:700;margin-bottom:6px}
+    .step-desc{color:#94a3b8;font-size:14px;line-height:1.6}
+
+    .final-cta{text-align:center;padding:60px 24px 80px;max-width:600px;margin:0 auto}
+    .final-cta h2{font-size:1.6rem;font-weight:800;margin-bottom:12px}
+    .final-cta p{color:#94a3b8;font-size:15px;margin-bottom:24px}
+
+    footer{text-align:center;padding:40px 24px;border-top:1px solid rgba(255,255,255,.05)}
+    footer p{color:#64748b;font-size:13px}
+
+    @media(max-width:768px){
+      nav{padding:0 16px}
+      .nav-links a:not(.btn-nav){display:none}
+      h1{font-size:1.7rem}
+      .hero{padding:110px 20px 40px}
+    }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="/">
+    <div class="nav-logo-mark">⚡</div>
+    <div class="nav-logo-text">Turbo<span>Venda</span></div>
+  </a>
+  <div class="nav-links">
+    <a href="/precos">Preços</a>
+    <a href="/blog">Blog</a>
+    <a href="/cadastro" class="btn-nav">Começar grátis</a>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="badge">{{ seg.nome }}</div>
+  <h1>Prospecção B2B para<br><em>{{ seg.nome }}</em> com IA</h1>
+  <p class="sub">{{ seg.desc }}</p>
+  <a href="/cadastro" class="cta-btn"
+     onclick="if(typeof gtag==='function')gtag('event','generate_lead',{event_category:'segmento',event_label:'{{ seg.slug }}'})">
+    <i class="fa fa-bolt"></i> Começar grátis — 50 leads
+  </a>
+  <p class="trust">Sem cartão · Configuração em 2 minutos · Cancele quando quiser</p>
+</section>
+
+<section class="examples">
+  <h2>Tipos de empresa que o TurboVenda encontra</h2>
+  <div class="tags">
+    {% for ex in seg.exemplos.split(', ') %}
+    <span class="tag">{{ ex }}</span>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="steps">
+  <h2>Como funciona para {{ seg.nome }}</h2>
+  <div class="step-grid">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-title">Descreva seu negócio</div>
+      <div class="step-desc">Diga o que vende e quem compra no {{ seg.nome|lower }}. A IA entende seu mercado.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-title">IA gera os termos</div>
+      <div class="step-desc">O Claude AI cria dezenas de termos focados em compradores de {{ seg.nome|lower }}.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-title">Robô prospecta 24/7</div>
+      <div class="step-desc">Varre sites, extrai telefone, email, CNPJ e decisores de empresas do setor.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-title">Feche negócio</div>
+      <div class="step-desc">Use o CRM com Kanban, envie emails e WhatsApp, converta leads em clientes.</div>
+    </div>
+  </div>
+</section>
+
+<section class="final-cta">
+  <h2>Seus concorrentes no {{ seg.nome|lower }} já prospectam com IA</h2>
+  <p>Configure em 2 minutos. 50 leads grátis. Sem cartão de crédito.</p>
+  <a href="/cadastro" class="cta-btn"><i class="fa fa-bolt"></i> Começar agora</a>
+</section>
+
+<footer>
+  <p>&copy; 2026 TurboVenda. Todos os direitos reservados.</p>
+  <div style="margin-top:8px">
+    <a href="/" style="color:#64748b;text-decoration:none;font-size:13px;margin:0 8px">Home</a>
+    <a href="/blog" style="color:#64748b;text-decoration:none;font-size:13px;margin:0 8px">Blog</a>
+    <a href="/precos" style="color:#64748b;text-decoration:none;font-size:13px;margin:0 8px">Preços</a>
+  </div>
+</footer>
+</body>
+</html>

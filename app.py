@@ -1396,6 +1396,30 @@ def robots_txt():
     return app.response_class(txt, mimetype='text/plain')
 
 
+SEGMENTOS = [
+    {'slug': 'agronegocio', 'nome': 'Agronegócio', 'desc': 'Encontre cooperativas, distribuidores de insumos, revendas agrícolas e agroindústrias automaticamente. O TurboVenda prospecta compradores do agro em todo o Brasil.',
+     'exemplos': 'cooperativas, revendas de insumos, distribuidores de defensivos, agroindústrias, cerealistas, frigoríficos, fazendas produtoras'},
+    {'slug': 'industria', 'nome': 'Indústria', 'desc': 'Prospecte fábricas, metalúrgicas, indústrias alimentícias e manufaturas. Encontre compradores industriais com telefone, email e decisores.',
+     'exemplos': 'metalúrgicas, fábricas, indústrias alimentícias, indústrias químicas, manufaturas, siderúrgicas, embalagens'},
+    {'slug': 'tecnologia', 'nome': 'Tecnologia', 'desc': 'Encontre software houses, consultorias de TI, startups e empresas de tecnologia. Prospecte decisores de tech com IA.',
+     'exemplos': 'software houses, consultorias de TI, startups SaaS, integradores de sistemas, empresas de cloud, fintechs'},
+    {'slug': 'saude', 'nome': 'Saúde', 'desc': 'Prospecte clínicas, hospitais, laboratórios e distribuidores de equipamentos médicos. Encontre compradores do setor de saúde.',
+     'exemplos': 'clínicas, hospitais, laboratórios, distribuidores de equipamentos médicos, farmácias de manipulação, planos de saúde'},
+    {'slug': 'servicos', 'nome': 'Serviços', 'desc': 'Encontre empresas de contabilidade, advocacia, engenharia, arquitetura e consultorias. Prospecte prestadores de serviço B2B.',
+     'exemplos': 'contabilidades, escritórios de advocacia, consultorias, empresas de engenharia, seguradoras, empresas de RH'},
+    {'slug': 'comercio', 'nome': 'Comércio', 'desc': 'Prospecte distribuidoras, atacadistas, varejistas e redes de lojas. Encontre compradores comerciais em qualquer região.',
+     'exemplos': 'distribuidoras, atacadistas, redes de lojas, importadoras, exportadoras, representantes comerciais'},
+]
+
+
+@app.route('/para/<slug>')
+def segmento_page(slug):
+    seg = next((s for s in SEGMENTOS if s['slug'] == slug), None)
+    if not seg:
+        return render_template('404.html'), 404
+    return render_template('segmento.html', seg=seg, ga_id=GA_MEASUREMENT_ID)
+
+
 @app.route('/sitemap.xml')
 def sitemap_xml():
     urls = [
@@ -1411,6 +1435,11 @@ def sitemap_xml():
         urls.append((
             f"https://www.turbovenda.com.br/blog/{p['slug']}",
             p['data'], 'monthly', '0.7'
+        ))
+    for s in SEGMENTOS:
+        urls.append((
+            f"https://www.turbovenda.com.br/para/{s['slug']}",
+            '2026-06-27', 'monthly', '0.8'
         ))
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
     xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'

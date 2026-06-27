@@ -186,5 +186,27 @@
   <p>&copy; 2026 TurboVenda. Todos os direitos reservados.</p>
 </footer>
 
+<!-- Banner CTA flutuante ao rolar 50% -->
+<div id="blog-cta-bar" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:90;
+     background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:12px 20px;
+     box-shadow:0 -4px 20px rgba(0,0,0,.3);text-align:center">
+  <a href="/cadastro" style="color:#fff;text-decoration:none;font-weight:700;font-size:14px"
+     onclick="if(typeof gtag==='function')gtag('event','generate_lead',{event_category:'blog_bar'})">
+    ⚡ Teste grátis: 50 leads sem cartão de crédito →
+  </a>
+  <button onclick="this.parentElement.style.display='none';sessionStorage.setItem('blog-cta','1')"
+          style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;
+          border:none;color:rgba(255,255,255,.6);font-size:18px;cursor:pointer">&times;</button>
+</div>
+<script>
+window.addEventListener('scroll', function() {
+  if (sessionStorage.getItem('blog-cta')) return;
+  var h = document.documentElement.scrollHeight - window.innerHeight;
+  if (h > 0 && window.scrollY / h > 0.4) {
+    document.getElementById('blog-cta-bar').style.display = 'block';
+  }
+});
+</script>
+
 </body>
 </html>
