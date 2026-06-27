@@ -479,6 +479,39 @@ PLAN_LEAD_LIMITS = {
     'enterprise': None  # ilimitado
 }
 
+TRIAL_DAYS = 14
+
+PLAN_FEATURES = {
+    'trial':      {'email_massa': False, 'sequencias': False, 'api_tokens': False},
+    'starter':    {'email_massa': True,  'sequencias': False, 'api_tokens': False},
+    'pro':        {'email_massa': True,  'sequencias': True,  'api_tokens': True},
+    'enterprise': {'email_massa': True,  'sequencias': True,  'api_tokens': True},
+}
+
+
+def _get_user_plano(uid=None):
+    uid = uid or session.get('user_id')
+    if not uid:
+        return 'trial'
+    try:
+        conn = _conn()
+        c = conn.cursor()
+        c.execute('SELECT plano FROM users WHERE id = %s', (uid,))
+        row = c.fetchone()
+        conn.close()
+        return (row['plano'] if row else 'trial') or 'trial'
+    except Exception:
+        return 'trial'
+
+
+def _check_feature(feature, uid=None):
+    plano = _get_user_plano(uid)
+    allowed = PLAN_FEATURES.get(plano, PLAN_FEATURES['trial'])
+    if not allowed.get(feature, False):
+        nomes = {'email_massa': 'Email em massa', 'sequencias': 'Sequências automáticas', 'api_tokens': 'API REST'}
+        return False, f'{nomes.get(feature, feature)} não disponível no plano {plano}. Faça upgrade para desbloquear.'
+    return True, ''
+
 
 def _check_lead_limit(schema, uid=None):
     """Retorna (ok, msg). ok=True se pode inserir, False se atingiu limite."""
@@ -491,12 +524,20 @@ def _check_lead_limit(schema, uid=None):
     try:
         conn = _conn()
         c = conn.cursor()
-        c.execute('SELECT plano FROM users WHERE id = %s', (uid,))
+        c.execute('SELECT plano, plano_expira FROM users WHERE id = %s', (uid,))
         row = c.fetchone()
         conn.close()
         plano = (row['plano'] if row else 'trial') or 'trial'
     except Exception:
         plano = 'trial'
+        row = None
+    if plano == 'trial' and row and row.get('plano_expira'):
+        from datetime import datetime
+        expira = row['plano_expira']
+        if isinstance(expira, str):
+            expira = datetime.fromisoformat(expira)
+        if expira < datetime.now():
+            return False, f'Seu trial de {TRIAL_DAYS} dias expirou. Faça upgrade para continuar prospectando.'
     limite = PLAN_LEAD_LIMITS.get(plano)
     if limite is None:
         return True, ''
@@ -839,9 +880,9 @@ def cadastro():
                 if c.fetchone():
                     error = 'Email já cadastrado'
                 else:
-                    c.execute("""INSERT INTO users (email, password_hash, empresa_nome, website)
-                                 VALUES (%s,%s,%s,%s) RETURNING id""",
-                              (email, _hash_pw(pw), empresa, website or None))
+                    c.execute("""INSERT INTO users (email, password_hash, empresa_nome, website, plano_expira)
+                                 VALUES (%s,%s,%s,%s, NOW() + INTERVAL '%s days') RETURNING id""",
+                              (email, _hash_pw(pw), empresa, website or None, TRIAL_DAYS))
                     uid = c.fetchone()['id']
                     schema = f'emp_{uid}'
                     c.execute('UPDATE users SET schema_name=%s WHERE id=%s', (schema, uid))
@@ -2257,6 +2298,9 @@ def api_list_sequencias(bot):
 @app.route('/api/<bot>/sequencias', methods=['POST'])
 @login_required
 def api_create_sequencia(bot):
+    ok, msg = _check_feature('sequencias')
+    if not ok:
+        return jsonify({'error': msg}), 403
     schema = _get_schema() or bot
     data = request.get_json(silent=True) or {}
     nome = data.get('nome', '').strip()
@@ -2386,6 +2430,9 @@ def api_sequencia_leads(bot, seq_id):
 @app.route('/api/<bot>/sequencias/processar', methods=['POST'])
 @login_required
 def api_processar_sequencias(bot):
+    ok, msg = _check_feature('sequencias')
+    if not ok:
+        return jsonify({'error': msg}), 403
     schema = _get_schema() or bot
     return _processar_sequencias_schema(schema)
 
@@ -2786,6 +2833,9 @@ def api_send_emails(bot):
 @app.route('/api/<bot>/email/campanha', methods=['POST'])
 @login_required
 def api_email_campanha(bot):
+    ok, msg = _check_feature('email_massa')
+    if not ok:
+        return jsonify({'error': msg}), 403
     schema = _get_schema() or bot
     data = request.get_json(silent=True) or {}
     assunto = data.get('assunto', '').strip()
@@ -3469,6 +3519,9 @@ def api_list_tokens(bot):
 @app.route('/api/<bot>/tokens', methods=['POST'])
 @login_required
 def api_create_token(bot):
+    ok, msg = _check_feature('api_tokens')
+    if not ok:
+        return jsonify({'error': msg}), 403
     uid = session.get('user_id')
     data = request.get_json(silent=True) or {}
     label = data.get('label', 'Token API')
@@ -5292,12 +5345,15 @@ def api_meu_plano():
             conn2.close()
     except Exception:
         pass
+    features = PLAN_FEATURES.get(plano, PLAN_FEATURES['trial'])
     return jsonify({
         'plano': plano,
         'ativo': ativo,
         'expira': str(expira) if expira else None,
         'limite_leads': limite,
         'total_leads': total_leads,
+        'features': features,
+        'trial_expirado': plano == 'trial' and not ativo,
     })
 
 
