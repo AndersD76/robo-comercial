@@ -855,6 +855,7 @@ def cadastro():
                     conn2.commit()
                     conn2.close()
                     session['user_id'] = uid
+                    session['just_registered'] = True
                     return redirect(url_for('config_page'))
             except Exception as e:
                 print(f'[cadastro] erro: {e}', flush=True)
@@ -1504,7 +1505,9 @@ def config_page():
     if not schema and user:
         schema = user.get('schema_name')
     cfg = get_bot_config(schema) if schema else {}
-    return render_template('config.html', user=user, cfg=cfg)
+    just_registered = session.pop('just_registered', False)
+    return render_template('config.html', user=user, cfg=cfg,
+                           just_registered=just_registered)
 
 
 # =============================================================================

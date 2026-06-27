@@ -105,8 +105,13 @@
     .info-box code{background:rgba(255,255,255,.06);padding:2px 7px;border-radius:5px;
         font-size:12px;color:#818cf8}
   </style>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-NGSNSF3SPM"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-NGSNSF3SPM');</script>
 </head>
 <body>
+{% if just_registered %}
+<script>if(typeof gtag==='function')gtag('event','sign_up',{method:'email'});</script>
+{% endif %}
 <a href="#main" class="skip-link">Pular para conteúdo</a>
 <header class="tv-header">
   <a href="/dashboard" class="tv-logo">Turbo<span>Venda</span></a>
