@@ -3,7 +3,8 @@
     "allow": [
       "Bash(python /c/Users/danie/AppData/Local/Temp/apply_extraction.py)",
       "WebFetch(domain:prospectar.com.br)",
-      "WebFetch(domain:rdap.registro.br)"
+      "WebFetch(domain:rdap.registro.br)",
+      "Bash(curl -s -c /tmp/tv_cookies -b /tmp/tv_cookies -X POST -L https://www.turbovenda.com.br/login -d \"email=daniel.anders@outlook.com.br&senha=123456\" -w \"\\\\n%{url_effective}\")"
     ]
   }
 }

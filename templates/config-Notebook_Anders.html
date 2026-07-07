@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configurar Robô — TurboVenda</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect rx='20' width='100' height='100' fill='%236366f1'/><text x='50' y='72' font-size='60' text-anchor='middle' fill='white'>⚡</text></svg>">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/tokens.css">
+  <link rel="stylesheet" href="/static/components.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    :root{--bg:#060b18;--surface:#0d1526;--surface2:#111d35;
+          --border:rgba(99,102,241,.18);--accent:#6366f1;--text:#f1f5f9;--muted:#64748b;--muted2:#94a3b8}
+    body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+    .tv-header-right{display:flex;align-items:center;gap:12px}
+    .btn-sm{padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;
+        cursor:pointer;border:none;text-decoration:none;font-family:'Inter',sans-serif;transition:.2s}
+    .btn-dash{background:rgba(99,102,241,.15);color:#818cf8}
+    .btn-dash:hover{background:rgba(99,102,241,.25)}
+    .btn-logout{background:transparent;color:var(--muted);border:1px solid rgba(255,255,255,.08)}
+    .btn-logout:hover{background:rgba(255,255,255,.04)}
+
+    main{max-width:760px;margin:0 auto;padding:40px 24px}
+    .page-title{font-size:26px;font-weight:900;letter-spacing:-.5px;margin-bottom:6px}
+    .page-sub{color:var(--muted2);font-size:14px;margin-bottom:36px}
+
+    .card{background:var(--surface);border:1px solid rgba(255,255,255,.06);
+        border-radius:16px;padding:28px;margin-bottom:20px}
+    .card-title{font-size:14px;font-weight:700;color:var(--muted2);text-transform:uppercase;
+        letter-spacing:.8px;margin-bottom:20px;display:flex;align-items:center;gap:8px}
+    .card-title i{color:var(--accent)}
+    .field{margin-bottom:18px}
+    label{display:block;font-size:13px;font-weight:600;color:var(--muted2);margin-bottom:7px}
+    label small{color:var(--muted);font-weight:400}
+    input,textarea{width:100%;background:var(--surface2);border:1px solid rgba(255,255,255,.08);
+        border-radius:10px;padding:11px 14px;color:var(--text);font-size:14px;
+        font-family:'Inter',sans-serif;outline:none;transition:.2s;resize:vertical}
+    input:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(99,102,241,.12)}
+    input::placeholder,textarea::placeholder{color:#334155}
+
+    .terms-section{margin-top:6px}
+    .terms-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+    .terms-header span{font-size:13px;font-weight:600;color:var(--muted2)}
+    .btn-gen{background:rgba(99,102,241,.12);border:1px solid var(--border);
+        color:#818cf8;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;
+        cursor:pointer;display:flex;align-items:center;gap:6px;transition:.2s;font-family:'Inter',sans-serif}
+    .btn-gen:hover{background:rgba(99,102,241,.22)}
+    .btn-gen:disabled{opacity:.5;cursor:not-allowed}
+    .terms-list{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto}
+    .term-item{display:flex;align-items:center;gap:8px;background:var(--surface2);
+        border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:9px 12px}
+    .term-item input[type=text]{background:transparent;border:none;padding:0;flex:1;
+        font-size:13px;box-shadow:none}
+    .term-item input[type=text]:focus{box-shadow:none;border:none}
+    .btn-del-term{background:none;border:none;color:#475569;cursor:pointer;padding:2px 6px;
+        font-size:13px;transition:.2s;flex-shrink:0}
+    .btn-del-term:hover{color:#ef4444}
+    .btn-add-term{background:none;border:1px dashed rgba(99,102,241,.3);color:#818cf8;
+        border-radius:8px;padding:8px;width:100%;font-size:13px;cursor:pointer;
+        font-family:'Inter',sans-serif;transition:.2s;margin-top:6px}
+    .btn-add-term:hover{background:rgba(99,102,241,.06)}
+
+    .btn-save{background:linear-gradient(135deg,var(--accent),#8b5cf6);color:#fff;
+        border:none;border-radius:10px;padding:13px 28px;font-size:15px;font-weight:700;
+        cursor:pointer;font-family:'Inter',sans-serif;transition:.2s;width:100%;margin-top:8px}
+    .btn-save:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(99,102,241,.35)}
+    .btn-save:disabled{opacity:.6;cursor:not-allowed;transform:none}
+
+    .toast{position:fixed;bottom:24px;right:24px;background:#111d35;border:1px solid rgba(99,102,241,.3);
+        border-radius:12px;padding:14px 20px;font-size:14px;font-weight:600;
+        display:flex;align-items:center;gap:10px;z-index:999;
+        transform:translateY(80px);transition:.3s;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+    .toast.show{transform:translateY(0)}
+    .toast.ok{color:#34d399;border-color:rgba(16,185,129,.3)}
+    .toast.err{color:#fca5a5;border-color:rgba(239,68,68,.3)}
+
+    /* Tokens section */
+    .token-list{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+    .token-item{display:flex;align-items:center;justify-content:space-between;
+        background:var(--surface2);border:1px solid rgba(255,255,255,.06);
+        border-radius:10px;padding:12px 16px;font-size:13px}
+    .token-label{font-weight:600;color:var(--text)}
+    .token-preview{color:var(--muted);font-family:monospace;font-size:12px;margin-top:2px}
+    .token-date{color:var(--muted);font-size:11px}
+    .btn-revoke{background:none;border:none;color:#ef4444;cursor:pointer;font-size:12px;
+        font-family:'Inter',sans-serif;font-weight:600;transition:.2s}
+    .btn-revoke:hover{color:#fca5a5}
+    .token-new{display:flex;gap:8px}
+    .token-new input{flex:1}
+    .btn-create-token{background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.25);
+        color:#34d399;padding:11px 18px;border-radius:10px;font-size:13px;font-weight:600;
+        cursor:pointer;white-space:nowrap;font-family:'Inter',sans-serif;transition:.2s}
+    .btn-create-token:hover{background:rgba(16,185,129,.2)}
+    .token-reveal{background:rgba(99,102,241,.08);border:1px solid var(--border);
+        border-radius:10px;padding:14px;font-family:monospace;font-size:13px;color:#818cf8;
+        word-break:break-all;margin-top:10px;display:none}
+    .token-reveal.show{display:block}
+    .token-warn{color:#fbbf24;font-size:12px;margin-top:6px}
+
+    .info-box{background:rgba(99,102,241,.06);border:1px solid var(--border);
+        border-radius:10px;padding:14px;font-size:13px;color:var(--muted2);line-height:1.6;margin-top:8px}
+    .info-box code{background:rgba(255,255,255,.06);padding:2px 7px;border-radius:5px;
+        font-size:12px;color:#818cf8}
+  </style>
+</head>
+<body>
+<a href="#main" class="skip-link">Pular para conteúdo</a>
+<header class="tv-header">
+  <a href="/dashboard" class="tv-logo">Turbo<span>Venda</span></a>
+  <div class="tv-header-right">
+    <span class="tv-header-user">{{ user.empresa_nome or user.email }}</span>
+    <a href="/dashboard" class="btn-sm btn-dash"><i class="fa fa-gauge"></i> Dashboard</a>
+    <a href="/logout" class="btn-sm btn-logout">Sair</a>
+  </div>
+</header>
+
+<main id="main">
+  <div class="page-title">Configurar Robô</div>
+  <p class="page-sub">Configure sua empresa e deixe a IA gerar os termos de busca para encontrar seus clientes.</p>
+
+  <!-- EMPRESA -->
+  <div class="card">
+    <div class="card-title"><i class="fa fa-building"></i> Sua Empresa</div>
+    <div class="field">
+      <label>Nome da empresa</label>
+      <input type="text" id="empresa_nome" value="{{ cfg.empresa_nome or user.empresa_nome or '' }}" placeholder="Nome da sua empresa">
+    </div>
+    <div class="field">
+      <label>Site da empresa <small>(opcional)</small></label>
+      <input type="url" id="website" value="{{ cfg.website or user.website or '' }}" placeholder="https://suaempresa.com.br">
+    </div>
+    <div class="field">
+      <label>Descreva seu produto/serviço e cliente ideal</label>
+      <textarea id="descricao" rows="4" placeholder="Ex: Vendemos tombadores e coletores de grãos para cerealistas, cooperativas agrícolas e silos. Nosso cliente ideal é o gerente de operações ou compras de empresas que trabalham com recebimento e armazenagem de soja, milho e trigo no Centro-Oeste e Sul do Brasil.">{{ cfg.descricao|default('',true)|e }}</textarea>
+    </div>
+  </div>
+
+  <!-- TERMOS DE BUSCA -->
+  <div class="card">
+    <div class="card-title"><i class="fa fa-magnifying-glass"></i> Termos de Busca</div>
+    <div class="terms-header">
+      <span id="terms-count">0 termos configurados</span>
+      <button class="btn-gen" id="btn-gen" onclick="generateTerms()">
+        <i class="fa fa-wand-magic-sparkles"></i> Gerar Automático
+      </button>
+    </div>
+    <div class="terms-list" id="terms-list"></div>
+    <button class="btn-add-term" onclick="addTerm('')">
+      <i class="fa fa-plus"></i> Adicionar termo manualmente
+    </button>
+  </div>
+
+  <!-- MENSAGEM INICIAL WHATSAPP -->
+  <div class="card">
+    <div class="card-title"><i class="fab fa-whatsapp"></i> Mensagem Inicial (WhatsApp)</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
+      Esta mensagem será enviada no primeiro contato com cada lead. O sistema gera uma sugestão baseada no seu negócio — edite antes de salvar.
+    </p>
+    <div class="terms-header" style="margin-bottom:10px">
+      <span style="font-size:12px;color:var(--muted)">Variáveis: <code style="color:#22c55e">{% raw %}{{nome}}{% endraw %}</code> = empresa, <code style="color:#22c55e">{% raw %}{{cal_link}}{% endraw %}</code> = link de agendamento</span>
+      <button class="btn-gen" id="btn-gen-msg" onclick="generateMsg()">
+        <i class="fa fa-wand-magic-sparkles"></i> Gerar Automático
+      </button>
+    </div>
+    <textarea id="msg_inicial" rows="6" placeholder="Olá! Sou da equipe {nome_empresa}.&#10;&#10;Vi que a {nome} pode se interessar...&#10;&#10;Posso agendar uma conversa? {cal_link}"></textarea>
+  </div>
+
+  <!-- CONFIG EMAIL -->
+  <div class="card">
+    <div class="card-title"><i class="fa fa-at"></i> Configuração de Email</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
+      Emails são enviados como <b style="color:var(--text)">contato@turbovenda.com.br</b>. Respostas dos leads vão para o email da sua conta.
+    </p>
+    <div class="field">
+      <label>Nome do remetente <small>(aparece no "De:" do email)</small></label>
+      <input type="text" id="email_remetente_nome" value="{{ cfg.email_remetente_nome or '' }}" placeholder="Ex: João da Empresa XYZ">
+    </div>
+    <input type="hidden" id="email_remetente" value="contato@turbovenda.com.br">
+  </div>
+
+  <!-- TEMPLATE EMAIL -->
+  <div class="card">
+    <div class="card-title"><i class="fa fa-envelope"></i> Template de Email (Mala Direta)</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
+      Configure o assunto e corpo HTML padrão para campanhas de email. Use variáveis para personalizar.
+    </p>
+    <div class="field">
+      <label>Assunto padrão do email</label>
+      <input type="text" id="email_assunto_padrao" value="{{ cfg.email_assunto_padrao|default('',true)|e }}" placeholder="Ex: {nome}, conheça nossa solução para seu negócio">
+      <small style="color:var(--muted);font-size:11px">Use <code style="color:#818cf8">{% raw %}{{nome}}{% endraw %}</code> para o nome da empresa</small>
+    </div>
+    <div style="display:flex;gap:14px;margin-bottom:18px;flex-wrap:wrap">
+      <div style="flex:1;min-width:140px">
+        <label>Cor do header</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="color" id="email_cor_header" value="{{ cfg.email_cor_header|default('#1a2332',true) }}" style="width:44px;height:38px;padding:2px;border-radius:8px;cursor:pointer;background:var(--surface2);border:1px solid rgba(255,255,255,.08)">
+          <input type="text" id="email_cor_header_hex" value="{{ cfg.email_cor_header|default('#1a2332',true) }}" style="width:90px;font-family:monospace;font-size:12px;padding:9px 10px" oninput="document.getElementById('email_cor_header').value=this.value">
+        </div>
+      </div>
+      <div style="flex:1;min-width:140px">
+        <label>Cor do botão</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="color" id="email_cor_botao" value="{{ cfg.email_cor_botao|default('#2563eb',true) }}" style="width:44px;height:38px;padding:2px;border-radius:8px;cursor:pointer;background:var(--surface2);border:1px solid rgba(255,255,255,.08)">
+          <input type="text" id="email_cor_botao_hex" value="{{ cfg.email_cor_botao|default('#2563eb',true) }}" style="width:90px;font-family:monospace;font-size:12px;padding:9px 10px" oninput="document.getElementById('email_cor_botao').value=this.value">
+        </div>
+      </div>
+      <div style="flex:1;min-width:140px">
+        <label>Cor do texto do header</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="color" id="email_cor_texto" value="{{ cfg.email_cor_texto|default('#ffffff',true) }}" style="width:44px;height:38px;padding:2px;border-radius:8px;cursor:pointer;background:var(--surface2);border:1px solid rgba(255,255,255,.08)">
+          <input type="text" id="email_cor_texto_hex" value="{{ cfg.email_cor_texto|default('#ffffff',true) }}" style="width:90px;font-family:monospace;font-size:12px;padding:9px 10px" oninput="document.getElementById('email_cor_texto').value=this.value">
+        </div>
+      </div>
+    </div>
+    <div class="field">
+      <label>Template HTML do email <small>— Variáveis: {% raw %}{{nome}}, {{email}}, {{segmento}}, {{cidade}}, {{link_agenda}}{% endraw %}</small></label>
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+        <button class="btn-gen" id="btn-gen-email" onclick="generateEmail()">
+          <i class="fa fa-wand-magic-sparkles"></i> Gerar Automático
+        </button>
+        <label style="background:rgba(99,102,241,.12);border:1px solid var(--border);color:#818cf8;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;margin:0">
+          <i class="fa fa-upload"></i> Carregar HTML
+          <input type="file" id="cfg-html-file" accept=".html,.htm" style="display:none" onchange="loadCfgHtml(this)">
+        </label>
+        <button onclick="previewCfgHtml()" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);color:var(--muted2);padding:7px 14px;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit">
+          <i class="fa fa-eye"></i> Pré-visualizar
+        </button>
+        <span id="cfg-html-filename" style="font-size:12px;color:var(--muted);align-self:center"></span>
+      </div>
+      <textarea id="email_html_template" rows="12" placeholder="<html>&#10;<body>&#10;  <div style='font-family:sans-serif;max-width:600px;margin:0 auto'>&#10;    <h2>Olá {nome}!</h2>&#10;    <p>Sua mensagem aqui...</p>&#10;  </div>&#10;</body>&#10;</html>" style="font-family:'Courier New',monospace;font-size:12px"></textarea>
+      <div id="cfg-html-preview" style="display:none;margin-top:10px;background:#fff;border-radius:8px;padding:16px;max-height:400px;overflow:auto"></div>
+    </div>
+  </div>
+
+  <!-- BUSCA AUTOMÁTICA (REQUALIFICAÇÃO) -->
+  <div class="card">
+    <div class="card-title"><i class="fa fa-magnifying-glass"></i> Busca automática (requalificação de leads)</div>
+    <div class="info-box">
+      Usada pelo botão <strong>Requalificar</strong> para descobrir o <strong>CNPJ</strong> dos leads que estão sem ele (estado da sede, situação e sócio já vêm de graça da Receita). Preencha <strong>UMA</strong> das opções abaixo:
+    </div>
+    <div class="field">
+      <label>Opção 1 — Google (grátis, sem cartão, 100 buscas/dia) — recomendado</label>
+      <input type="password" id="google_cse_key" value="{{ cfg.google_cse_key or '' }}" placeholder="Chave da API do Google (AIza...)" autocomplete="off" style="margin-bottom:8px">
+      <input type="text" id="google_cse_cx" value="{{ cfg.google_cse_cx or '' }}" placeholder="ID do mecanismo de busca (cx)" autocomplete="off">
+      <small style="color:var(--muted);display:block;margin-top:6px">
+        1) Crie um mecanismo em <a href="https://programmablesearchengine.google.com/" target="_blank" style="color:#818cf8">programmablesearchengine.google.com</a> com a opção "Pesquisar em toda a web" → copie o <strong>ID (cx)</strong>.<br>
+        2) Gere a chave em <a href="https://developers.google.com/custom-search/v1/introduction" target="_blank" style="color:#818cf8">developers.google.com/custom-search</a> ("Get a Key") → copie a <strong>chave (AIza...)</strong>.
+      </small>
+    </div>
+    <div class="field" style="margin-top:14px">
+      <label>Opção 2 — Brave Search <small>(2.000/mês, pode pedir cartão)</small></label>
+      <input type="password" id="brave_api_key" value="{{ cfg.brave_api_key or '' }}" placeholder="BSA..." autocomplete="off">
+    </div>
+  </div>
+
+  <!-- SALVAR -->
+  <button class="btn-save" id="btn-save" onclick="saveConfig(true)">
+    <i class="fa fa-floppy-disk"></i> Salvar configurações
+  </button>
+  <div id="save-debug" style="color:#f87171;font-size:11px;margin-top:8px;display:none"></div>
+
+  <!-- API TOKENS -->
+  <div class="card" style="margin-top:32px">
+    <div class="card-title"><i class="fa fa-key"></i> Tokens de API</div>
+    <div class="info-box">
+      Use tokens para integrar com outros sistemas via REST API.<br>
+      Exemplo: <code>GET /api/v1/leads</code> com header <code>Authorization: Bearer SEU_TOKEN</code>
+    </div>
+    <div class="token-list" id="token-list" style="margin-top:16px"></div>
+    <div class="token-new">
+      <input type="text" id="token-label" placeholder="Nome do token (ex: TurboVenda CRM)">
+      <button class="btn-create-token" onclick="createToken()">
+        <i class="fa fa-plus"></i> Gerar token
+      </button>
+    </div>
+    <div class="token-reveal" id="token-reveal">
+      <div style="font-size:11px;color:#64748b;margin-bottom:6px">Seu token (copie agora):</div>
+      <div id="token-value"></div>
+      <p class="token-warn"><i class="fa fa-triangle-exclamation"></i> Este token não será exibido novamente. Copie agora.</p>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+<script id="terms-data" type="application/json">{{ (cfg.termos_busca or []) | tojson }}</script>
+<script id="cfg-msg-inicial" type="application/json">{{ (cfg.msg_inicial or '') | tojson }}</script>
+<script id="cfg-email-tpl" type="application/json">{{ (cfg.email_html_template or '') | tojson }}</script>
+
+<script>
+const BOT = '{{ user.schema_name if user and user.schema_name else "" }}';
+
+// Sync color pickers com hex inputs
+document.querySelectorAll('input[type=color]').forEach(picker => {
+  const hexInput = document.getElementById(picker.id + '_hex');
+  if (hexInput) {
+    picker.addEventListener('input', () => { hexInput.value = picker.value });
+    hexInput.addEventListener('input', () => {
+      if (/^#[0-9a-fA-F]{6}$/.test(hexInput.value)) picker.value = hexInput.value;
+    });
+  }
+});
+
+// Termos — parse seguro via tag JSON
+let terms = [];
+try {
+  var _el = document.getElementById('terms-data');
+  if (_el) {
+    var _raw = JSON.parse(_el.textContent);
+    if (typeof _raw === 'string') { try { _raw = JSON.parse(_raw) } catch(e){} }
+    if (Array.isArray(_raw)) terms = _raw;
+  }
+} catch(e) { terms = []; }
+
+// Carregar msg_inicial e email_html_template via JSON
+try {
+  var _msgEl = document.getElementById('cfg-msg-inicial');
+  if (_msgEl) { var _v = JSON.parse(_msgEl.textContent); if (_v) document.getElementById('msg_inicial').value = _v; }
+} catch(e) {}
+try {
+  var _tplEl = document.getElementById('cfg-email-tpl');
+  if (_tplEl) { var _v = JSON.parse(_tplEl.textContent); if (_v) document.getElementById('email_html_template').value = _v; }
+} catch(e) {}
+
+function renderTerms() {
+  const list = document.getElementById('terms-list')
+  list.innerHTML = ''
+  terms.forEach((t, i) => {
+    const div = document.createElement('div')
+    div.className = 'term-item'
+    div.innerHTML = `<input type="text" value="${t.replace(/"/g,'&quot;')}" onchange="terms[${i}]=this.value">
+                     <button class="btn-del-term" onclick="removeTerm(${i})"><i class="fa fa-xmark"></i></button>`
+    list.appendChild(div)
+  })
+  document.getElementById('terms-count').textContent = `${terms.length} termo${terms.length !== 1 ? 's' : ''} configurado${terms.length !== 1 ? 's' : ''}`
+}
+
+function addTerm(val) {
+  terms.push(val)
+  renderTerms()
+  // Focus last input
+  setTimeout(() => {
+    const inputs = document.querySelectorAll('.term-item input')
+    if (inputs.length) inputs[inputs.length-1].focus()
+  }, 50)
+}
+
+function removeTerm(i) {
+  terms.splice(i, 1)
+  renderTerms()
+}
+
+async function generateTerms() {
+  const desc = document.getElementById('descricao').value.trim()
+  if (!desc) { showToast('Preencha a descrição da empresa primeiro', false); return }
+  const btn = document.getElementById('btn-gen')
+  btn.disabled = true
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Gerando...'
+  try {
+    const r = await fetch(`/api/${BOT}/config/generate-terms`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        empresa_nome: document.getElementById('empresa_nome').value,
+        descricao: desc,
+        website: document.getElementById('website').value
+      })
+    })
+    const d = await r.json()
+    if (d.ok && d.termos) {
+      terms = d.termos
+      renderTerms()
+      showToast(`✓ ${d.termos.length} termos gerados! Clique Salvar para gravar.`, true)
+    } else {
+      showToast('Erro ao gerar termos: ' + (d.error || 'falha'), false)
+    }
+  } catch(e) { showToast('Erro de conexão', false) }
+  btn.disabled = false
+  btn.innerHTML = '<i class="fa fa-wand-magic-sparkles"></i> Gerar Automático'
+}
+
+async function generateMsg() {
+  const desc = document.getElementById('descricao').value.trim()
+  if (!desc) { showToast('Preencha a descrição da empresa primeiro', false); return }
+  const btn = document.getElementById('btn-gen-msg')
+  btn.disabled = true
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Gerando...'
+  try {
+    const r = await fetch(`/api/${BOT}/config/generate-msg`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        empresa_nome: document.getElementById('empresa_nome').value,
+        descricao: desc,
+        website: document.getElementById('website').value
+      })
+    })
+    const d = await r.json()
+    if (d.ok && d.mensagem) {
+      document.getElementById('msg_inicial').value = d.mensagem
+      showToast('✓ Mensagem gerada! Revise antes de salvar.', true)
+    } else {
+      showToast('Erro: ' + (d.error || 'falha'), false)
+    }
+  } catch(e) { showToast('Erro de conexão', false) }
+  btn.disabled = false
+  btn.innerHTML = '<i class="fa fa-wand-magic-sparkles"></i> Gerar Automático'
+}
+
+async function generateEmail() {
+  const desc = document.getElementById('descricao').value.trim()
+  if (!desc) { showToast('Preencha a descrição da empresa primeiro', false); return }
+  const btn = document.getElementById('btn-gen-email')
+  btn.disabled = true
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Gerando...'
+  try {
+    const r = await fetch(`/api/${BOT}/config/generate-email`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        empresa_nome: document.getElementById('empresa_nome').value,
+        descricao: desc,
+        website: document.getElementById('website').value,
+        cor_header: document.getElementById('email_cor_header').value,
+        cor_botao: document.getElementById('email_cor_botao').value,
+        cor_texto: document.getElementById('email_cor_texto').value
+      })
+    })
+    const d = await r.json()
+    if (d.ok && d.html) {
+      document.getElementById('email_html_template').value = d.html
+      if (d.assunto && !document.getElementById('email_assunto_padrao').value.trim()) {
+        document.getElementById('email_assunto_padrao').value = d.assunto
+      }
+      // Auto-preview
+      previewCfgHtml()
+      showToast('✓ Template gerado! Revise antes de salvar.', true)
+    } else {
+      showToast('Erro: ' + (d.error || 'falha'), false)
+    }
+  } catch(e) { showToast('Erro de conexão', false) }
+  btn.disabled = false
+  btn.innerHTML = '<i class="fa fa-wand-magic-sparkles"></i> Gerar Automático'
+}
+
+function loadCfgHtml(input) {
+  const file = input.files[0]
+  if (!file) return
+  document.getElementById('cfg-html-filename').textContent = file.name
+  const reader = new FileReader()
+  reader.onload = function(e) { document.getElementById('email_html_template').value = e.target.result }
+  reader.readAsText(file)
+}
+
+function previewCfgHtml() {
+  const html = document.getElementById('email_html_template').value
+  const preview = document.getElementById('cfg-html-preview')
+  if (!html.trim()) { showToast('Preencha ou gere o template HTML primeiro', false); return }
+  // Toggle: se já está visível, esconde
+  if (preview.style.display !== 'none' && preview.innerHTML) {
+    preview.style.display = 'none'
+    return
+  }
+  const rendered = html.replace(/\{\{nome\}\}/g, '<span style="background:#e0e7ff;color:#4338ca;padding:1px 6px;border-radius:4px;font-size:13px">{{nome}}</span>')
+    .replace(/\{\{email\}\}/g, '<span style="background:#e0e7ff;color:#4338ca;padding:1px 6px;border-radius:4px;font-size:13px">{{email}}</span>')
+    .replace(/\{\{segmento\}\}/g, '<span style="background:#e0e7ff;color:#4338ca;padding:1px 6px;border-radius:4px;font-size:13px">{{segmento}}</span>')
+    .replace(/\{\{cidade\}\}/g, '<span style="background:#e0e7ff;color:#4338ca;padding:1px 6px;border-radius:4px;font-size:13px">{{cidade}}</span>')
+    .replace(/\{\{link_agenda\}\}/g, '#')
+  // Usar iframe para isolamento de estilos
+  preview.innerHTML = ''
+  const iframe = document.createElement('iframe')
+  iframe.style.cssText = 'width:100%;border:none;min-height:500px;border-radius:8px'
+  preview.appendChild(iframe)
+  preview.style.display = 'block'
+  const doc = iframe.contentDocument || iframe.contentWindow.document
+  doc.open()
+  doc.write(rendered)
+  doc.close()
+  // Ajustar altura do iframe ao conteúdo
+  iframe.onload = function() {
+    try { iframe.style.height = doc.body.scrollHeight + 20 + 'px' } catch(e) {}
+  }
+  setTimeout(() => {
+    try { iframe.style.height = doc.body.scrollHeight + 20 + 'px' } catch(e) {}
+  }, 200)
+  preview.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+async function saveConfig(redirect) {
+  var dbg = document.getElementById('save-debug')
+  dbg.style.display = 'block'
+  dbg.textContent = '1. Iniciando save...'
+  try {
+    document.querySelectorAll('.term-item input[type=text]').forEach(function(inp, i) { terms[i] = inp.value })
+    var btn = document.getElementById('btn-save')
+    btn.disabled = true
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Salvando...'
+    dbg.textContent = '2. Fazendo fetch...'
+    var payload = {
+      empresa_nome: document.getElementById('empresa_nome').value,
+      website: document.getElementById('website').value,
+      descricao: document.getElementById('descricao').value,
+      termos_busca: Array.isArray(terms) ? terms.filter(Boolean) : [],
+      msg_inicial: document.getElementById('msg_inicial').value,
+      email_assunto_padrao: document.getElementById('email_assunto_padrao').value,
+      email_html_template: document.getElementById('email_html_template').value,
+      email_remetente: document.getElementById('email_remetente').value,
+      email_remetente_nome: document.getElementById('email_remetente_nome').value,
+      email_cor_header: document.getElementById('email_cor_header').value,
+      email_cor_botao: document.getElementById('email_cor_botao').value,
+      email_cor_texto: document.getElementById('email_cor_texto').value,
+      brave_api_key: document.getElementById('brave_api_key').value,
+      google_cse_key: document.getElementById('google_cse_key').value,
+      google_cse_cx: document.getElementById('google_cse_cx').value
+    }
+    var r = await fetch('/api/' + BOT + '/config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    })
+    dbg.textContent = '3. Status: ' + r.status
+    var txt = await r.text()
+    dbg.textContent = '4. Resposta: ' + txt.substring(0, 100)
+    var d = JSON.parse(txt)
+    if (d.ok) {
+      dbg.style.color = '#4ade80'
+      if (redirect) {
+        dbg.textContent = 'Salvo! Indo pro dashboard...'
+        window.location.href = '/dashboard'
+      } else {
+        dbg.textContent = 'Salvo!'
+        btn.innerHTML = '<i class="fa fa-check"></i> Salvo!'
+        setTimeout(function() { btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'; btn.disabled = false; dbg.style.display = 'none' }, 1500)
+      }
+    } else {
+      var errMsg = d.error || 'Erro ao salvar'
+      dbg.textContent = errMsg
+      showToast(errMsg, false)
+      btn.disabled = false
+      btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'
+    }
+  } catch(e) {
+    alert('JS Exception: ' + e.message)
+    dbg.textContent = 'EXCEPTION: ' + e.message
+    btn.disabled = false
+    btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Salvar configurações'
+  }
+}
+
+// Tokens
+async function loadTokens() {
+  try {
+    const r = await fetch(`/api/${BOT}/tokens`)
+    const tokens = await r.json()
+    const list = document.getElementById('token-list')
+    if (!tokens.length) {
+      list.innerHTML = '<p style="color:#475569;font-size:13px;padding:8px 0">Nenhum token criado ainda.</p>'
+      return
+    }
+    list.innerHTML = tokens.map(t => `
+      <div class="token-item" id="tk-${t.id}">
+        <div>
+          <div class="token-label">${t.label || 'Token'}</div>
+          <div class="token-preview">${t.token_preview}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="token-date">${new Date(t.criado_em).toLocaleDateString('pt-BR')}</div>
+          <button class="btn-revoke" onclick="revokeToken(${t.id})">Revogar</button>
+        </div>
+      </div>`).join('')
+  } catch(e) {}
+}
+
+async function createToken() {
+  const label = document.getElementById('token-label').value.trim() || 'Token API'
+  try {
+    const r = await fetch(`/api/${BOT}/tokens`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({label})
+    })
+    const d = await r.json()
+    if (d.ok) {
+      document.getElementById('token-value').textContent = d.token
+      const rev = document.getElementById('token-reveal')
+      rev.classList.add('show')
+      document.getElementById('token-label').value = ''
+      loadTokens()
+    } else showToast('Erro: ' + d.error, false)
+  } catch(e) { showToast('Erro de conexão', false) }
+}
+
+async function revokeToken(id) {
+  if (!confirm('Revogar este token? Integrações usando-o vão parar de funcionar.')) return
+  await fetch(`/api/${BOT}/tokens/${id}`, {method: 'DELETE'})
+  loadTokens()
+  showToast('Token revogado', true)
+}
+
+function showToast(msg, ok) {
+  const t = document.getElementById('toast')
+  t.textContent = msg
+  t.className = 'toast show ' + (ok ? 'ok' : 'err')
+  setTimeout(() => t.classList.remove('show'), 3500)
+}
+
+renderTerms()
+loadTokens()
+</script>
+</body>
+</html>

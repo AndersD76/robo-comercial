@@ -29,3 +29,7 @@ whatsapp_session/
 # MacOS / Windows
 .DS_Store
 Thumbs.db
+.claude/
+_ul
+_ul-*
+.streamlit/
