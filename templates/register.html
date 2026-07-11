@@ -65,13 +65,13 @@
     <div class="logo-mark">⚡</div>
     <div class="logo-text">Turbo<span>Venda</span></div>
   </div>
-  <h2>Comece a prospectar em 2 minutos</h2>
-  <p class="subtitle">50 leads grátis • Sem cartão de crédito</p>
+  <h2>Teste grátis: gere até 50 leads</h2>
+  <p class="subtitle">Informe sua empresa, diga quem você quer encontrar e veja os primeiros leads no painel.</p>
 
   <div class="benefits">
     <span class="benefit"><i class="fa fa-check"></i> 50 leads grátis</span>
-    <span class="benefit"><i class="fa fa-check"></i> IA gera seus termos</span>
-    <span class="benefit"><i class="fa fa-check"></i> Sem compromisso</span>
+    <span class="benefit"><i class="fa fa-check"></i> Sem cartão</span>
+    <span class="benefit"><i class="fa fa-check"></i> 2 min para configurar</span>
   </div>
 
   {% if error %}
@@ -80,6 +80,9 @@
 
   <form method="POST">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="utm_source" id="utm_source">
+    <input type="hidden" name="utm_medium" id="utm_medium">
+    <input type="hidden" name="utm_campaign" id="utm_campaign">
     <div class="field">
       <label>Nome da empresa <small>*</small></label>
       <input type="text" name="empresa_nome" placeholder="Nome da sua empresa" required>
@@ -87,6 +90,14 @@
     <div class="field">
       <label>Site da empresa <small>(opcional)</small></label>
       <input type="url" name="website" placeholder="https://suaempresa.com.br">
+    </div>
+    <div class="field">
+      <label>Segmento que vende <small>(opcional)</small></label>
+      <input type="text" name="segmento" placeholder="Ex: consultoria, equipamentos industriais, software">
+    </div>
+    <div class="field">
+      <label>Cidade/estado que quer prospectar <small>(opcional)</small></label>
+      <input type="text" name="regiao" placeholder="Ex: São Paulo, Curitiba, Brasil todo">
     </div>
     <div class="field">
       <label>Seu email <small>*</small></label>
@@ -97,7 +108,7 @@
       <input type="password" name="senha" placeholder="••••••••" required minlength="6" autocomplete="new-password">
     </div>
     <button type="submit" class="btn">
-      <i class="fa fa-bolt"></i> Começar agora — é grátis
+      <i class="fa fa-bolt"></i> Começar grátis com 50 leads
     </button>
   </form>
 
@@ -115,5 +126,15 @@
   </div>
 </div>
 </main>
+<script>
+(function(){
+  var p=new URLSearchParams(location.search);
+  ['utm_source','utm_medium','utm_campaign'].forEach(function(k){
+    var v=p.get(k);if(v)localStorage.setItem(k,v);
+    var el=document.getElementById(k);
+    if(el)el.value=v||localStorage.getItem(k)||'';
+  });
+})();
+</script>
 </body>
 </html>

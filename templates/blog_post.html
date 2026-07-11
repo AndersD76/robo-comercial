@@ -162,9 +162,18 @@
 </article>
 
 <div class="post-cta">
-  <h3>Quer automatizar sua prospecao B2B?</h3>
-  <p>O TurboVenda encontra leads, envia e-mails e gerencia seu pipeline com IA. Comece gratis.</p>
-  <a href="/cadastro" class="btn-primary"><i class="fa fa-rocket"></i> Criar conta gratis</a>
+  <h3>Quer automatizar sua prospecção B2B?</h3>
+  <p>O TurboVenda encontra leads, envia e-mails e gerencia seu pipeline com IA. <a href="/precos" style="color:#818cf8">Veja planos a partir de R$0</a>.</p>
+  <a href="/cadastro" class="btn-primary"><i class="fa fa-rocket"></i> Criar conta grátis — 50 leads</a>
+</div>
+
+<div class="related" style="margin-bottom:24px">
+  <h3>Prospecção por segmento</h3>
+  <div class="related-list">
+    {% for s in segmentos %}
+    <a href="/para/{{ s.slug }}">Prospecção B2B para {{ s.nome }}</a>
+    {% endfor %}
+  </div>
 </div>
 
 <div class="related">
@@ -207,6 +216,7 @@ window.addEventListener('scroll', function() {
   }
 });
 </script>
+<script>(function(){var p=new URLSearchParams(location.search);['utm_source','utm_medium','utm_campaign'].forEach(function(k){var v=p.get(k);if(v)localStorage.setItem(k,v)})})();</script>
 
 </body>
 </html>

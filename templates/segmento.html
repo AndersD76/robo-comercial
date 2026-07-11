@@ -12,6 +12,9 @@
   <meta property="og:url" content="https://www.turbovenda.com.br/para/{{ seg.slug }}">
   <meta property="og:image" content="https://www.turbovenda.com.br/static/og-image.png">
   <meta property="og:type" content="website">
+  <meta property="og:locale" content="pt_BR">
+  <meta property="og:site_name" content="TurboVenda">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect rx='20' width='100' height='100' fill='%236366f1'/><text x='50' y='72' font-size='60' text-anchor='middle' fill='white'>⚡</text></svg>">
   <script async src="https://www.googletagmanager.com/gtag/js?id={{ ga_id }}"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','{{ ga_id }}');</script>
@@ -24,6 +27,24 @@
     "itemListElement": [
       {"@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.turbovenda.com.br/"},
       {"@type": "ListItem", "position": 2, "name": "{{ seg.nome }}", "item": "https://www.turbovenda.com.br/para/{{ seg.slug }}"}
+    ]
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {% for q, a in seg.faq %}
+      {
+        "@type": "Question",
+        "name": "{{ q }}",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "{{ a }}"
+        }
+      }{% if not loop.last %},{% endif %}
+      {% endfor %}
     ]
   }
   </script>
@@ -58,13 +79,25 @@
     .cta-btn:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(99,102,241,.4)}
     .trust{color:#64748b;font-size:13px;margin-top:14px}
 
-    .examples{max-width:720px;margin:0 auto;padding:0 24px 60px}
-    .examples h2{font-size:1.4rem;font-weight:800;margin-bottom:20px;text-align:center}
+    .section{max-width:720px;margin:0 auto;padding:0 24px 60px}
+    .section h2{font-size:1.4rem;font-weight:800;margin-bottom:20px}
+
     .tags{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:40px}
     .tag{background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);
         color:#818cf8;font-size:13px;font-weight:600;padding:6px 16px;border-radius:100px}
 
-    .steps{max-width:720px;margin:0 auto;padding:0 24px 80px}
+    .dores-list{list-style:none;margin-bottom:32px}
+    .dores-list li{padding:14px 16px;margin-bottom:10px;background:#0d1526;border:1px solid rgba(255,255,255,.06);
+        border-radius:10px;font-size:14px;line-height:1.6;color:#cbd5e1;display:flex;align-items:flex-start;gap:12px}
+    .dores-list li i{color:#f59e0b;margin-top:3px;flex-shrink:0}
+
+    .msg-box{background:#0d1526;border:1px solid rgba(99,102,241,.2);border-radius:14px;
+        padding:24px;margin-bottom:16px}
+    .msg-box p{font-size:14px;line-height:1.8;color:#94a3b8;font-style:italic}
+    .msg-label{font-size:12px;font-weight:700;color:#6366f1;text-transform:uppercase;
+        letter-spacing:1px;margin-bottom:10px}
+
+    .steps{max-width:720px;margin:0 auto;padding:0 24px 60px}
     .steps h2{font-size:1.4rem;font-weight:800;margin-bottom:24px;text-align:center}
     .step-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
     .step{background:#0d1526;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:24px}
@@ -72,12 +105,28 @@
     .step-title{font-weight:700;margin-bottom:6px}
     .step-desc{color:#94a3b8;font-size:14px;line-height:1.6}
 
+    .faq{max-width:720px;margin:0 auto;padding:0 24px 60px}
+    .faq h2{font-size:1.4rem;font-weight:800;margin-bottom:24px}
+    .faq-item{background:#0d1526;border:1px solid rgba(255,255,255,.06);border-radius:12px;
+        padding:20px 24px;margin-bottom:12px}
+    .faq-item h3{font-size:15px;font-weight:700;margin-bottom:8px;color:#f1f5f9}
+    .faq-item p{color:#94a3b8;font-size:14px;line-height:1.7}
+
     .final-cta{text-align:center;padding:60px 24px 80px;max-width:600px;margin:0 auto}
     .final-cta h2{font-size:1.6rem;font-weight:800;margin-bottom:12px}
     .final-cta p{color:#94a3b8;font-size:15px;margin-bottom:24px}
 
+    .related{max-width:720px;margin:0 auto;padding:0 24px 60px}
+    .related h2{font-size:1.1rem;font-weight:700;margin-bottom:16px;color:#64748b}
+    .related-links{display:flex;flex-wrap:wrap;gap:10px}
+    .related-links a{background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.15);
+        color:#818cf8;font-size:13px;font-weight:600;padding:8px 16px;border-radius:8px;text-decoration:none;transition:.2s}
+    .related-links a:hover{background:rgba(99,102,241,.12)}
+
     footer{text-align:center;padding:40px 24px;border-top:1px solid rgba(255,255,255,.05)}
     footer p{color:#64748b;font-size:13px}
+    footer a{color:#64748b;text-decoration:none;font-size:13px;margin:0 8px}
+    footer a:hover{color:#f1f5f9}
 
     @media(max-width:768px){
       nav{padding:0 16px}
@@ -94,7 +143,7 @@
     <div class="nav-logo-text">Turbo<span>Venda</span></div>
   </a>
   <div class="nav-links">
-    <a href="/precos">Preços</a>
+    <a href="/precos">Planos e Preços</a>
     <a href="/blog">Blog</a>
     <a href="/cadastro" class="btn-nav">Começar grátis</a>
   </div>
@@ -106,18 +155,36 @@
   <p class="sub">{{ seg.desc }}</p>
   <a href="/cadastro" class="cta-btn"
      onclick="if(typeof gtag==='function')gtag('event','generate_lead',{event_category:'segmento',event_label:'{{ seg.slug }}'})">
-    <i class="fa fa-bolt"></i> Começar grátis — 50 leads
+    <i class="fa fa-bolt"></i> Gerar meus 50 leads grátis
   </a>
   <p class="trust">Sem cartão · Configuração em 2 minutos · Cancele quando quiser</p>
 </section>
 
-<section class="examples">
-  <h2>Tipos de empresa que o TurboVenda encontra</h2>
+<section class="section">
+  <h2>Tipos de empresa que o TurboVenda encontra no {{ seg.nome }}</h2>
   <div class="tags">
     {% for ex in seg.exemplos.split(', ') %}
     <span class="tag">{{ ex }}</span>
     {% endfor %}
   </div>
+</section>
+
+<section class="section">
+  <h2>Dores que o TurboVenda resolve para quem vende ao {{ seg.nome }}</h2>
+  <ul class="dores-list">
+    {% for dor in seg.dores %}
+    <li><i class="fa fa-circle-exclamation"></i> {{ dor }}</li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section class="section">
+  <h2>Exemplo de mensagem de prospecção para {{ seg.nome }}</h2>
+  <div class="msg-box">
+    <div class="msg-label">Mensagem gerada pela IA do TurboVenda</div>
+    <p>"{{ seg.msg_exemplo }}"</p>
+  </div>
+  <p style="color:#64748b;font-size:13px">A IA personaliza cada mensagem com o nome da empresa, cidade e segmento do lead encontrado.</p>
 </section>
 
 <section class="steps">
@@ -146,19 +213,41 @@
   </div>
 </section>
 
+<section class="faq">
+  <h2>Perguntas frequentes — {{ seg.nome }}</h2>
+  {% for q, a in seg.faq %}
+  <div class="faq-item">
+    <h3>{{ q }}</h3>
+    <p>{{ a }}</p>
+  </div>
+  {% endfor %}
+</section>
+
+<section class="related">
+  <h2>Outros segmentos atendidos</h2>
+  <div class="related-links">
+    {% for s in segmentos %}
+    {% if s.slug != seg.slug %}
+    <a href="/para/{{ s.slug }}">{{ s.nome }}</a>
+    {% endif %}
+    {% endfor %}
+  </div>
+</section>
+
 <section class="final-cta">
   <h2>Seus concorrentes no {{ seg.nome|lower }} já prospectam com IA</h2>
   <p>Configure em 2 minutos. 50 leads grátis. Sem cartão de crédito.</p>
-  <a href="/cadastro" class="cta-btn"><i class="fa fa-bolt"></i> Começar agora</a>
+  <a href="/cadastro" class="cta-btn"><i class="fa fa-bolt"></i> Gerar meus 50 leads grátis</a>
 </section>
 
 <footer>
   <p>&copy; 2026 TurboVenda. Todos os direitos reservados.</p>
   <div style="margin-top:8px">
-    <a href="/" style="color:#64748b;text-decoration:none;font-size:13px;margin:0 8px">Home</a>
-    <a href="/blog" style="color:#64748b;text-decoration:none;font-size:13px;margin:0 8px">Blog</a>
-    <a href="/precos" style="color:#64748b;text-decoration:none;font-size:13px;margin:0 8px">Preços</a>
+    <a href="/">Home</a>
+    <a href="/blog">Blog</a>
+    <a href="/precos">Planos e Preços</a>
   </div>
 </footer>
+<script>(function(){var p=new URLSearchParams(location.search);['utm_source','utm_medium','utm_campaign'].forEach(function(k){var v=p.get(k);if(v)localStorage.setItem(k,v)})})();</script>
 </body>
 </html>

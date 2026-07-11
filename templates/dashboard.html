@@ -1043,12 +1043,17 @@ let _waAllLeads=[];
 let _waPage=1;
 const _waPerPage=50;
 
+let _firstLeadsTracked=false;
 function loadWA(){
   fetch(`/api/${BOT}/leads`).then(r=>r.json()).then(d=>{
     _waAllLeads=d;
     _waPage=1;
     populateEstadoFilter();
     renderLeadsList();
+    if(d.length>0 && !_firstLeadsTracked){
+      _firstLeadsTracked=true;
+      if(typeof gtag==='function') gtag('event','first_leads_generated',{value:d.length});
+    }
   }).catch(e=>{console.error('loadWA error:',e)});
 }
 
@@ -3097,7 +3102,7 @@ function upgradeProPlano(){
   </div>`;
   ov.style.display='flex';
   selectPlan('pro');
-  if(typeof gtag==='function')gtag('event','begin_checkout',{currency:'BRL',value:297});
+  if(typeof gtag==='function')gtag('event','checkout_started',{currency:'BRL',value:297});
 }
 function selectPlan(p){
   _selectedPlan=p;

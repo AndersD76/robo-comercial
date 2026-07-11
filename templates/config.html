@@ -110,7 +110,7 @@
 </head>
 <body>
 {% if just_registered %}
-<script>if(typeof gtag==='function')gtag('event','sign_up',{method:'email'});</script>
+<script>if(typeof gtag==='function'){gtag('event','sign_up',{method:'email'});gtag('event','onboarding_started');}</script>
 {% endif %}
 <a href="#main" class="skip-link">Pular para conteúdo</a>
 <header class="tv-header">

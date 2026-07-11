@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Precos — TurboVenda | Prospeccao B2B a partir de R$0</title>
+  <title>Planos e Preços — TurboVenda | Prospecção B2B a partir de R$0</title>
   <meta name="description" content="Planos TurboVenda: Gratis (50 leads), Starter R$97/mes (500 leads), Pro R$297/mes (ilimitado). Comece gratis, sem cartao de credito.">
   <meta name="keywords" content="TurboVenda precos, planos TurboVenda, CRM B2B preco, prospeccao automatica valor">
   <meta name="robots" content="index, follow">
@@ -15,6 +15,7 @@
   <meta property="og:image" content="https://www.turbovenda.com.br/static/og-image.png">
   <meta property="og:locale" content="pt_BR">
   <meta property="og:site_name" content="TurboVenda">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect rx='20' width='100' height='100' fill='%236366f1'/><text x='50' y='72' font-size='60' text-anchor='middle' fill='white'>⚡</text></svg>">
   <script type="application/ld+json">
   {
@@ -104,63 +105,71 @@
   <div class="nav-links">
     <a href="/">Home</a>
     <a href="/blog">Blog</a>
-    <a href="/precos" style="color:#fff">Precos</a>
-    <a href="/cadastro" class="btn-nav">Criar conta</a>
+    <a href="/precos" style="color:#fff">Planos e Preços</a>
+    <a href="/login">Entrar</a>
+    <a href="/cadastro" class="btn-nav">Começar grátis</a>
   </div>
 </nav>
 
 <main id="main">
 <section class="pricing-hero">
-  <h1>Planos <span>simples</span></h1>
-  <p>Comece gratis. Escale quando quiser. Sem surpresas.</p>
+  <h1>Quanto custa montar uma lista<br>comercial <span>manualmente</span>?</h1>
+  <p style="max-width:600px">Procurar empresas, contatos, planilhas e follow-up toma horas da equipe.
+     O TurboVenda entrega a base organizada — e custa menos que um almoço de equipe.</p>
 </section>
 
 <div class="pricing-grid">
   <div class="plan">
-    <div class="plan-name">Gratis</div>
-    <div class="plan-desc">Para testar a plataforma</div>
+    <div class="plan-name">Grátis</div>
+    <div class="plan-desc">50 leads para testar, sem cartão</div>
     <div class="plan-price">R$0</div>
-    <div class="plan-period">para sempre</div>
+    <div class="plan-period">uma única vez</div>
     <ul class="plan-features">
-      <li><i class="fa fa-check"></i> 50 leads para prospectar</li>
-      <li><i class="fa fa-check"></i> CRM com Kanban</li>
-      <li><i class="fa fa-check"></i> 1 campanha de e-mail</li>
+      <li><i class="fa fa-check"></i> 50 leads com busca IA</li>
+      <li><i class="fa fa-check"></i> Pipeline Kanban básico</li>
+      <li><i class="fa fa-check"></i> Enriquecimento CNPJ</li>
+      <li><i class="fa fa-check"></i> Export CSV limitado</li>
       <li><i class="fa fa-check"></i> IA para gerar mensagens</li>
-      <li><i class="fa fa-check"></i> Suporte por e-mail</li>
+      <li style="opacity:.4"><i class="fa fa-times" style="color:var(--muted)"></i> Sem email em massa</li>
+      <li style="opacity:.4"><i class="fa fa-times" style="color:var(--muted)"></i> Sem automações</li>
+      <li style="opacity:.4"><i class="fa fa-times" style="color:var(--muted)"></i> Sem suporte prioritário</li>
     </ul>
-    <a href="/cadastro" class="btn-plan btn-plan-ghost">Comecar gratis</a>
+    <a href="/cadastro" class="btn-plan btn-plan-ghost" onclick="if(typeof gtag==='function')gtag('event','click_start_free',{event_category:'pricing_page'})">Gerar meus 50 leads grátis</a>
   </div>
 
   <div class="plan featured">
     <div class="plan-name">Starter</div>
-    <div class="plan-desc">Para quem quer crescer</div>
-    <div class="plan-price">R$97 <small>/mes</small></div>
+    <div class="plan-desc">Para quem quer crescer todo mês</div>
+    <div class="plan-price">R$97 <small>/mês</small></div>
     <div class="plan-period">cancele quando quiser</div>
     <ul class="plan-features">
-      <li><i class="fa fa-check"></i> 500 leads/mes</li>
+      <li><i class="fa fa-check"></i> 500 leads/mês</li>
       <li><i class="fa fa-check"></i> CRM completo</li>
-      <li><i class="fa fa-check"></i> E-mail ilimitado</li>
-      <li><i class="fa fa-check"></i> IA avancada</li>
-      <li><i class="fa fa-check"></i> Relatorios</li>
-      <li><i class="fa fa-check"></i> Suporte prioritario</li>
+      <li><i class="fa fa-check"></i> Email em massa</li>
+      <li><i class="fa fa-check"></i> Export CSV completo</li>
+      <li><i class="fa fa-check"></i> WhatsApp manual assistido</li>
+      <li><i class="fa fa-check"></i> Suporte padrão</li>
+      <li style="opacity:.4"><i class="fa fa-times" style="color:var(--muted)"></i> Sem sequências automáticas</li>
+      <li style="opacity:.4"><i class="fa fa-times" style="color:var(--muted)"></i> Sem API</li>
     </ul>
-    <a href="/cadastro" class="btn-plan btn-plan-primary">Comecar com Starter</a>
+    <a href="/cadastro" class="btn-plan btn-plan-primary" onclick="if(typeof gtag==='function')gtag('event','click_plan_starter',{event_category:'pricing_page'})">Assinar Starter por R$97/mês</a>
   </div>
 
   <div class="plan">
     <div class="plan-name">Pro</div>
-    <div class="plan-desc">Para equipes que prospectam pesado</div>
-    <div class="plan-price">R$297 <small>/mes</small></div>
+    <div class="plan-desc">Tudo ilimitado + automações</div>
+    <div class="plan-price">R$297 <small>/mês</small></div>
     <div class="plan-period">cancele quando quiser</div>
     <ul class="plan-features">
       <li><i class="fa fa-check"></i> Leads ilimitados</li>
       <li><i class="fa fa-check"></i> Tudo do Starter</li>
-      <li><i class="fa fa-check"></i> WhatsApp Business</li>
-      <li><i class="fa fa-check"></i> Agendamento automatico</li>
-      <li><i class="fa fa-check"></i> API de integracao</li>
-      <li><i class="fa fa-check"></i> Gerente de conta dedicado</li>
+      <li><i class="fa fa-check"></i> Sequências automáticas</li>
+      <li><i class="fa fa-check"></i> WhatsApp em massa</li>
+      <li><i class="fa fa-check"></i> API REST + Tokens</li>
+      <li><i class="fa fa-check"></i> Relatórios avançados</li>
+      <li><i class="fa fa-check"></i> Suporte prioritário</li>
     </ul>
-    <a href="/cadastro" class="btn-plan btn-plan-ghost">Comecar com Pro</a>
+    <a href="/cadastro" class="btn-plan btn-plan-ghost">Assinar Pro</a>
   </div>
 </div>
 
@@ -193,5 +202,6 @@
     <a href="/blog">Blog</a>
   </div>
 </footer>
+<script>if(typeof gtag==='function')gtag('event','view_pricing');</script>
 </body>
 </html>

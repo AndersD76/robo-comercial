@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teste expirado — TurboVenda</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect rx='20' width='100' height='100' fill='%236366f1'/><text x='50' y='72' font-size='60' text-anchor='middle' fill='white'>⚡</text></svg>">
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-NGSNSF3SPM"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-NGSNSF3SPM');</script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/tokens.css">
+  <link rel="stylesheet" href="/static/components.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',sans-serif;background:#060b18;color:#f1f5f9;
+         min-height:100vh;display:flex;align-items:center;justify-content:center;padding:40px 16px}
+    .bg-glow{position:fixed;inset:0;pointer-events:none;
+        background:radial-gradient(ellipse at 50% 0%,rgba(239,68,68,.08) 0%,transparent 60%)}
+    .card{width:100%;max-width:520px;background:#0d1526;border:1px solid rgba(239,68,68,.2);
+        border-radius:20px;padding:48px 40px;position:relative;z-index:1;text-align:center}
+    .icon{width:72px;height:72px;border-radius:50%;margin:0 auto 24px;
+        background:rgba(239,68,68,.1);display:flex;align-items:center;justify-content:center}
+    .icon i{font-size:32px;color:#ef4444}
+    h1{font-size:24px;font-weight:800;margin-bottom:12px;letter-spacing:-.5px}
+    .msg{color:#94a3b8;font-size:15px;line-height:1.7;margin-bottom:32px}
+    .msg strong{color:#f1f5f9}
+    .btns{display:flex;flex-direction:column;gap:12px}
+    .btn-pay{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;
+        border-radius:12px;padding:16px;font-size:16px;font-weight:700;cursor:pointer;
+        text-decoration:none;display:flex;align-items:center;justify-content:center;gap:8px;transition:.2s}
+    .btn-pay:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(99,102,241,.4)}
+    .btn-wpp{background:rgba(37,211,102,.1);border:1px solid rgba(37,211,102,.3);color:#25d366;
+        border-radius:12px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;
+        text-decoration:none;display:flex;align-items:center;justify-content:center;gap:8px;transition:.2s}
+    .btn-wpp:hover{background:rgba(37,211,102,.15)}
+    .stats{display:flex;gap:20px;justify-content:center;margin-bottom:28px;flex-wrap:wrap}
+    .stat{text-align:center}
+    .stat-n{font-size:1.5rem;font-weight:800;color:#6366f1}
+    .stat-l{font-size:11px;color:#64748b;margin-top:2px}
+    .footer{margin-top:24px;font-size:13px;color:#475569}
+    .footer a{color:#818cf8;text-decoration:none}
+  </style>
+</head>
+<body>
+<div class="bg-glow"></div>
+<div class="card">
+  <div class="icon"><i class="fa fa-clock"></i></div>
+  <h1>Seu teste gratuito terminou</h1>
+  <p class="msg">
+    Você ainda tem seus <strong>leads e histórico salvos</strong>.
+    Para continuar prospectando, escolha um plano.
+  </p>
+
+  {% if stats %}
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-n">{{ stats.total_leads }}</div>
+      <div class="stat-l">Leads gerados</div>
+    </div>
+    <div class="stat">
+      <div class="stat-n">{{ stats.contactadas }}</div>
+      <div class="stat-l">Contactados</div>
+    </div>
+    <div class="stat">
+      <div class="stat-n">{{ stats.responderam }}</div>
+      <div class="stat-l">Responderam</div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="btns">
+    <a href="/precos" class="btn-pay"
+       onclick="if(typeof gtag==='function')gtag('event','checkout_started',{event_category:'trial_expired',value:97})">
+      <i class="fa fa-bolt"></i> Assinar Starter por R$97/mês
+    </a>
+    <a href="https://wa.me/5554999648368?text=Oi%2C%20meu%20teste%20do%20TurboVenda%20expirou%20e%20quero%20saber%20mais%20sobre%20os%20planos"
+       target="_blank" rel="noopener" class="btn-wpp"
+       onclick="if(typeof gtag==='function')gtag('event','whatsapp_click',{event_category:'trial_expired'})">
+      <i class="fab fa-whatsapp"></i> Falar no WhatsApp
+    </a>
+  </div>
+
+  <div class="footer">
+    <a href="/logout">Sair</a> · <a href="/precos">Ver todos os planos</a>
+  </div>
+</div>
+
+<script>if(typeof gtag==='function')gtag('event','trial_expired');</script>
+</body>
+</html>

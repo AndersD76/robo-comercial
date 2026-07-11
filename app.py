@@ -188,6 +188,12 @@ def _init_public_schema_safe():
             "mp_customer_id TEXT",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
             "mp_subscription_id TEXT",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+            "utm_source TEXT",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+            "utm_medium TEXT",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+            "utm_campaign TEXT",
             """CREATE TABLE IF NOT EXISTS pagamentos (
                 id BIGSERIAL PRIMARY KEY,
                 user_id BIGINT REFERENCES users(id),
@@ -868,6 +874,11 @@ def cadastro():
         pw = request.form.get('senha', '')
         empresa = request.form.get('empresa_nome', '').strip()
         website = request.form.get('website', '').strip()
+        segmento = request.form.get('segmento', '').strip()
+        regiao = request.form.get('regiao', '').strip()
+        utm_source = request.form.get('utm_source', '').strip() or None
+        utm_medium = request.form.get('utm_medium', '').strip() or None
+        utm_campaign = request.form.get('utm_campaign', '').strip() or None
         if not email or not pw or not empresa:
             error = 'Preencha todos os campos obrigatórios'
         elif len(pw) < 6:
@@ -880,9 +891,11 @@ def cadastro():
                 if c.fetchone():
                     error = 'Email já cadastrado'
                 else:
-                    c.execute("""INSERT INTO users (email, password_hash, empresa_nome, website, plano_expira)
-                                 VALUES (%s,%s,%s,%s, NOW() + INTERVAL '%s days') RETURNING id""",
-                              (email, _hash_pw(pw), empresa, website or None, TRIAL_DAYS))
+                    c.execute("""INSERT INTO users (email, password_hash, empresa_nome, website, plano_expira,
+                                 utm_source, utm_medium, utm_campaign)
+                                 VALUES (%s,%s,%s,%s, NOW() + INTERVAL '%s days', %s,%s,%s) RETURNING id""",
+                              (email, _hash_pw(pw), empresa, website or None, TRIAL_DAYS,
+                               utm_source, utm_medium, utm_campaign))
                     uid = c.fetchone()['id']
                     schema = f'emp_{uid}'
                     c.execute('UPDATE users SET schema_name=%s WHERE id=%s', (schema, uid))
@@ -891,8 +904,16 @@ def cadastro():
                     _init_user_schema(schema)
                     conn2 = _conn(schema)
                     c2 = conn2.cursor()
-                    c2.execute('INSERT INTO bot_config (empresa_nome, website) VALUES (%s,%s)',
-                               (empresa, website or None))
+                    termos = []
+                    if segmento:
+                        termos.append(segmento)
+                    if regiao:
+                        termos.append(regiao)
+                    c2.execute("""INSERT INTO bot_config (empresa_nome, website, descricao, termos_busca)
+                                  VALUES (%s,%s,%s,%s)""",
+                               (empresa, website or None,
+                                segmento or None,
+                                json.dumps(termos) if termos else '[]'))
                     conn2.commit()
                     conn2.close()
                     session['user_id'] = uid
@@ -1370,6 +1391,7 @@ def blog_post(slug):
     return render_template('blog_post.html',
                            post=post,
                            posts=BLOG_POSTS,
+                           segmentos=SEGMENTOS,
                            ga_id=GA_MEASUREMENT_ID)
 
 
@@ -1397,18 +1419,108 @@ def robots_txt():
 
 
 SEGMENTOS = [
-    {'slug': 'agronegocio', 'nome': 'Agronegócio', 'desc': 'Encontre cooperativas, distribuidores de insumos, revendas agrícolas e agroindústrias automaticamente. O TurboVenda prospecta compradores do agro em todo o Brasil.',
-     'exemplos': 'cooperativas, revendas de insumos, distribuidores de defensivos, agroindústrias, cerealistas, frigoríficos, fazendas produtoras'},
-    {'slug': 'industria', 'nome': 'Indústria', 'desc': 'Prospecte fábricas, metalúrgicas, indústrias alimentícias e manufaturas. Encontre compradores industriais com telefone, email e decisores.',
-     'exemplos': 'metalúrgicas, fábricas, indústrias alimentícias, indústrias químicas, manufaturas, siderúrgicas, embalagens'},
-    {'slug': 'tecnologia', 'nome': 'Tecnologia', 'desc': 'Encontre software houses, consultorias de TI, startups e empresas de tecnologia. Prospecte decisores de tech com IA.',
-     'exemplos': 'software houses, consultorias de TI, startups SaaS, integradores de sistemas, empresas de cloud, fintechs'},
-    {'slug': 'saude', 'nome': 'Saúde', 'desc': 'Prospecte clínicas, hospitais, laboratórios e distribuidores de equipamentos médicos. Encontre compradores do setor de saúde.',
-     'exemplos': 'clínicas, hospitais, laboratórios, distribuidores de equipamentos médicos, farmácias de manipulação, planos de saúde'},
-    {'slug': 'servicos', 'nome': 'Serviços', 'desc': 'Encontre empresas de contabilidade, advocacia, engenharia, arquitetura e consultorias. Prospecte prestadores de serviço B2B.',
-     'exemplos': 'contabilidades, escritórios de advocacia, consultorias, empresas de engenharia, seguradoras, empresas de RH'},
-    {'slug': 'comercio', 'nome': 'Comércio', 'desc': 'Prospecte distribuidoras, atacadistas, varejistas e redes de lojas. Encontre compradores comerciais em qualquer região.',
-     'exemplos': 'distribuidoras, atacadistas, redes de lojas, importadoras, exportadoras, representantes comerciais'},
+    {
+        'slug': 'agronegocio', 'nome': 'Agronegócio',
+        'desc': 'Encontre cooperativas, distribuidores de insumos, revendas agrícolas e agroindústrias automaticamente. O TurboVenda prospecta compradores do agro em todo o Brasil.',
+        'exemplos': 'cooperativas, revendas de insumos, distribuidores de defensivos, agroindústrias, cerealistas, frigoríficos, fazendas produtoras',
+        'dores': [
+            'Encontrar decisores de compra (gerentes de compras, diretores de cooperativas) sem depender de indicação ou feira agrícola',
+            'Prospectar revendas e distribuidoras em regiões remotas onde visitas presenciais são caras e demoradas',
+            'Manter um pipeline constante de leads qualificados entre safras, quando o fluxo comercial diminui',
+            'Identificar agroindústrias que estão expandindo capacidade ou abrindo novas unidades',
+        ],
+        'msg_exemplo': 'Olá [Nome], vi que a [Empresa] atua com distribuição de insumos na região de [Cidade]. Trabalho com uma solução que ajuda fornecedores do agro a encontrar novas revendas e cooperativas para vender — já entregamos listas de mais de 200 compradores por mês para empresas do setor. Posso mostrar como funciona em 5 minutos?',
+        'faq': [
+            ('Funciona para empresas que vendem para o agro?', 'Sim. O TurboVenda encontra cooperativas, revendas, distribuidores e agroindústrias a partir de buscas inteligentes com IA. Você define o perfil (ex: "distribuidores de fertilizantes no Mato Grosso") e o robô prospecta 24/7.'),
+            ('Quais dados o TurboVenda extrai de empresas do agronegócio?', 'Telefone, email, CNPJ, razão social, endereço, site e nome de decisores (quando disponível publicamente). Dados de fontes públicas como Google, LinkedIn e sites institucionais.'),
+            ('Consigo filtrar por região ou tipo de cultura?', 'Sim. Você pode definir termos como "cooperativas de soja no Paraná" ou "revendas de sementes em Goiás". A IA gera variações e o robô varre resultados regionalizados.'),
+        ],
+    },
+    {
+        'slug': 'industria', 'nome': 'Indústria',
+        'desc': 'Prospecte fábricas, metalúrgicas, indústrias alimentícias e manufaturas. Encontre compradores industriais com telefone, email e decisores.',
+        'exemplos': 'metalúrgicas, fábricas, indústrias alimentícias, indústrias químicas, manufaturas, siderúrgicas, embalagens',
+        'dores': [
+            'Mapear compradores industriais (diretores de produção, engenheiros de processo) sem acesso a bases de dados caras como Econodata',
+            'Prospectar fábricas de médio porte que não aparecem em feiras ou não têm site atualizado',
+            'Encontrar novas indústrias em parques industriais ou distritos que estão expandindo operações',
+            'Manter cadência de prospecção outbound mesmo com equipe comercial reduzida',
+        ],
+        'msg_exemplo': 'Olá [Nome], vi que a [Empresa] é uma metalúrgica em [Cidade] e trabalha com usinagem de peças. Ajudo fornecedores industriais a encontrar novos compradores automaticamente — o sistema gera listas de fábricas com contato direto do decisor. Podemos conversar 5 minutos sobre como funciona?',
+        'faq': [
+            ('O TurboVenda encontra indústrias de qualquer segmento?', 'Sim. Metalúrgicas, alimentícias, químicas, plásticos, embalagens, usinagem, eletrônica — você define o perfil industrial desejado e a IA adapta a busca.'),
+            ('Consigo prospectar por porte ou localização da indústria?', 'Sim. Defina termos como "indústrias alimentícias médio porte em São Paulo" ou "fábricas de embalagens no Sul". O robô filtra e entrega contatos regionalizados.'),
+            ('Os dados incluem nome do comprador/decisor?', 'Quando disponível publicamente (LinkedIn, site institucional), sim. O TurboVenda extrai nomes de diretores, gerentes de compras e engenheiros listados em fontes públicas.'),
+        ],
+    },
+    {
+        'slug': 'tecnologia', 'nome': 'Tecnologia',
+        'desc': 'Encontre software houses, consultorias de TI, startups e empresas de tecnologia. Prospecte decisores de tech com IA.',
+        'exemplos': 'software houses, consultorias de TI, startups SaaS, integradores de sistemas, empresas de cloud, fintechs',
+        'dores': [
+            'Encontrar CTOs e heads de engenharia de empresas que estão contratando ou escalando time (sinal de orçamento disponível)',
+            'Prospectar startups em estágio seed/série A que precisam de ferramentas mas não aparecem em diretórios tradicionais',
+            'Mapear integradores e consultorias de TI que revendem soluções ou fazem parcerias tecnológicas',
+            'Manter pipeline ativo num mercado onde decisores trocam de empresa frequentemente',
+        ],
+        'msg_exemplo': 'Olá [Nome], vi que a [Empresa] é uma software house em [Cidade] focada em [nicho]. Trabalho com uma ferramenta que encontra empresas de tecnologia que estão expandindo — entrega nome, email e telefone do decisor. Já ajudamos consultorias de TI a gerar 50+ leads qualificados por semana. Quer ver como funciona?',
+        'faq': [
+            ('Funciona para vender SaaS B2B?', 'Sim. Defina o perfil (ex: "empresas de e-commerce com mais de 50 funcionários") e o TurboVenda entrega contatos com email e telefone do decisor. Ideal para SDRs de SaaS.'),
+            ('Consigo encontrar startups que acabaram de receber investimento?', 'O TurboVenda busca em fontes públicas. Se a startup tem site, LinkedIn ou aparece em diretórios, ela será encontrada. Combinando termos como "startup série A fintech" você refina bastante.'),
+            ('Integra com meu CRM atual?', 'Você pode exportar em CSV para importar em qualquer CRM. O plano Pro tem API REST para integração direta com HubSpot, Pipedrive e outros via webhook.'),
+        ],
+    },
+    {
+        'slug': 'saude', 'nome': 'Saúde',
+        'desc': 'Prospecte clínicas, hospitais, laboratórios e distribuidores de equipamentos médicos. Encontre compradores do setor de saúde.',
+        'exemplos': 'clínicas, hospitais, laboratórios, distribuidores de equipamentos médicos, farmácias de manipulação, planos de saúde',
+        'dores': [
+            'Encontrar administradores e diretores de clínicas que tomam decisão de compra (não apenas o médico)',
+            'Prospectar laboratórios e clínicas que estão abrindo ou expandindo unidades em novas cidades',
+            'Mapear distribuidores de material hospitalar em regiões fora dos grandes centros',
+            'Manter pipeline de vendas consultivas com ciclo longo sem perder follow-up',
+        ],
+        'msg_exemplo': 'Olá [Nome], vi que a [Empresa] atua como distribuidora de equipamentos médicos em [Estado]. Ajudo empresas do setor de saúde a encontrar novas clínicas e laboratórios para prospectar — o sistema entrega lista com telefone e email do responsável. Posso mostrar um exemplo real em 5 minutos?',
+        'faq': [
+            ('O TurboVenda encontra clínicas e consultórios?', 'Sim. Clínicas médicas, odontológicas, laboratórios, hospitais, farmácias de manipulação — qualquer estabelecimento de saúde com presença online é prospectado.'),
+            ('Os dados respeitam sigilo médico/LGPD?', 'Sim. O TurboVenda prospecta apenas dados empresariais públicos (CNPJ, telefone comercial, email institucional). Não coleta dados de pacientes ou informações clínicas.'),
+            ('Funciona para vender equipamentos médicos ou insumos hospitalares?', 'Perfeitamente. Defina termos como "clínicas de imagem em Minas Gerais" ou "laboratórios de análises clínicas" e receba contatos dos decisores de compra.'),
+        ],
+    },
+    {
+        'slug': 'servicos', 'nome': 'Serviços',
+        'desc': 'Encontre empresas de contabilidade, advocacia, engenharia, arquitetura e consultorias. Prospecte prestadores de serviço B2B.',
+        'exemplos': 'contabilidades, escritórios de advocacia, consultorias, empresas de engenharia, seguradoras, empresas de RH',
+        'dores': [
+            'Encontrar empresas que precisam dos seus serviços mas não estão buscando ativamente (demanda latente)',
+            'Prospectar escritórios e consultorias de médio porte que pagam ticket alto mas são difíceis de localizar',
+            'Mapear empresas novas que acabaram de abrir CNPJ e precisam de contabilidade, advocacia ou seguros',
+            'Escalar prospecção outbound sem contratar SDR (custo alto para empresas de serviço)',
+        ],
+        'msg_exemplo': 'Olá [Nome], vi que a [Empresa] é um escritório de contabilidade em [Cidade]. Ajudo prestadores de serviço B2B a encontrar novas empresas para prospectar — o sistema entrega lista de CNPJs recém-abertos ou empresas em crescimento, com telefone e email do sócio. Quer ver como funciona?',
+        'faq': [
+            ('Funciona para escritórios de contabilidade ou advocacia prospectarem clientes?', 'Sim. Defina o perfil (ex: "empresas de comércio abertas nos últimos 6 meses em Curitiba") e receba leads prontos para abordar. Ideal para serviços que atendem PMEs.'),
+            ('Consigo encontrar empresas que acabaram de abrir?', 'O TurboVenda busca em fontes públicas incluindo dados de CNPJ. Combinando termos como "empresa nova" + região + segmento, você encontra negócios recém-criados.'),
+            ('Serve para consultorias B2B que vendem projetos?', 'Sim. Consultorias de RH, engenharia, gestão, TI — defina o ICP (tamanho, setor, região) e o robô entrega contatos do decisor para abordagem outbound.'),
+        ],
+    },
+    {
+        'slug': 'comercio', 'nome': 'Comércio',
+        'desc': 'Prospecte distribuidoras, atacadistas, varejistas e redes de lojas. Encontre compradores comerciais em qualquer região.',
+        'exemplos': 'distribuidoras, atacadistas, redes de lojas, importadoras, exportadoras, representantes comerciais',
+        'dores': [
+            'Encontrar novos pontos de venda (PDVs) e redes de lojas para expandir distribuição em regiões novas',
+            'Mapear atacadistas e distribuidoras que compram em volume mas não estão em cadastros públicos facilmente',
+            'Prospectar representantes comerciais ativos em territórios onde não há cobertura própria',
+            'Manter visibilidade de novas lojas abrindo (oportunidade de first-mover com produto/serviço)',
+        ],
+        'msg_exemplo': 'Olá [Nome], vi que a [Empresa] é uma distribuidora de [produto] em [Região]. Ajudo empresas comerciais a encontrar novos PDVs e atacadistas para expandir território — o sistema entrega lista com contato direto do comprador. Posso mostrar em 5 minutos como funciona?',
+        'faq': [
+            ('O TurboVenda encontra lojas e pontos de venda?', 'Sim. Varejistas, redes, lojas de bairro, e-commerces — qualquer negócio com presença online. Você define o tipo de comércio e a região desejada.'),
+            ('Serve para distribuidoras que querem expandir carteira?', 'Perfeitamente. Defina termos como "pet shops em Santa Catarina" ou "farmácias no interior de SP" e receba contatos do proprietário ou comprador.'),
+            ('Consigo encontrar representantes comerciais?', 'Sim. Busque por "representante comercial" + segmento + região. O sistema encontra representantes com registro e contato disponível publicamente.'),
+        ],
+    },
 ]
 
 
@@ -1417,7 +1529,7 @@ def segmento_page(slug):
     seg = next((s for s in SEGMENTOS if s['slug'] == slug), None)
     if not seg:
         return render_template('404.html'), 404
-    return render_template('segmento.html', seg=seg, ga_id=GA_MEASUREMENT_ID)
+    return render_template('segmento.html', seg=seg, segmentos=SEGMENTOS, ga_id=GA_MEASUREMENT_ID)
 
 
 @app.route('/sitemap.xml')
@@ -1492,6 +1604,51 @@ def indexnow_key():
     return app.response_class(_INDEXNOW_KEY, mimetype='text/plain')
 
 
+def _ping_indexnow(urls=None):
+    """Submit URLs to IndexNow (Bing/Yandex/etc) + ping Google sitemap."""
+    import requests as http
+    if not urls:
+        urls = [
+            'https://www.turbovenda.com.br/',
+            'https://www.turbovenda.com.br/precos',
+            'https://www.turbovenda.com.br/cadastro',
+            'https://www.turbovenda.com.br/blog',
+        ]
+        for p in BLOG_POSTS:
+            urls.append(f"https://www.turbovenda.com.br/blog/{p['slug']}")
+        for s in SEGMENTOS:
+            urls.append(f"https://www.turbovenda.com.br/para/{s['slug']}")
+    payload = {
+        "host": "www.turbovenda.com.br",
+        "key": _INDEXNOW_KEY,
+        "keyLocation": f"https://www.turbovenda.com.br/{_INDEXNOW_KEY}.txt",
+        "urlList": urls
+    }
+    results = {}
+    try:
+        r = http.post('https://api.indexnow.org/indexnow',
+                      json=payload, timeout=10)
+        results['indexnow'] = r.status_code
+    except Exception as e:
+        results['indexnow'] = str(e)
+    try:
+        r = http.get(
+            'https://www.google.com/ping?sitemap=https://www.turbovenda.com.br/sitemap.xml',
+            timeout=10)
+        results['google_ping'] = r.status_code
+    except Exception as e:
+        results['google_ping'] = str(e)
+    return results
+
+
+@app.route('/admin/indexnow', methods=['POST'])
+def admin_indexnow():
+    if not session.get('admin_auth'):
+        return jsonify({'error': 'unauthorized'}), 401
+    results = _ping_indexnow()
+    return jsonify(results)
+
+
 @app.route('/manifest.json')
 def manifest_json():
     m = {
@@ -1536,6 +1693,27 @@ def precos():
     return render_template('precos.html', ga_id=GA_MEASUREMENT_ID)
 
 
+@app.route('/trial-expirado')
+@login_required
+def trial_expirado():
+    user = get_current_user()
+    if not user:
+        return redirect(url_for('login'))
+    plano = (user.get('plano') or 'trial')
+    if plano != 'trial':
+        return redirect(url_for('dashboard'))
+    expira = user.get('plano_expira')
+    if expira:
+        from datetime import datetime
+        if isinstance(expira, str):
+            expira = datetime.fromisoformat(expira)
+        if expira >= datetime.now():
+            return redirect(url_for('dashboard'))
+    schema = user.get('schema_name') or f'emp_{user["id"]}'
+    stats = get_stats(schema)
+    return render_template('trial_expirado.html', user=user, stats=stats)
+
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
@@ -1543,6 +1721,14 @@ def dashboard():
     schema = f'emp_{uid}'
     user = get_current_user() or {'id': uid, 'schema_name': schema,
                                    'empresa_nome': '', 'email': ''}
+    # Redirecionar para tela de trial expirado
+    if (user.get('plano') or 'trial') == 'trial' and user.get('plano_expira'):
+        from datetime import datetime
+        _exp = user['plano_expira']
+        if isinstance(_exp, str):
+            _exp = datetime.fromisoformat(_exp)
+        if _exp < datetime.now():
+            return redirect(url_for('trial_expirado'))
     if not user.get('schema_name'):
         user['schema_name'] = schema
         try:

@@ -49,7 +49,7 @@
     "offers": [
       {
         "@type": "Offer",
-        "name": "Trial",
+        "name": "Grátis",
         "price": "0",
         "priceCurrency": "BRL",
         "description": "50 leads grátis"
@@ -391,7 +391,7 @@
   <div class="nav-links">
     <a href="#features">Recursos</a>
     <a href="#how">Como funciona</a>
-    <a href="/precos">Planos</a>
+    <a href="/precos">Planos e Preços</a>
     <a href="/blog">Blog</a>
     <a href="/login">Entrar</a>
     <a href="/cadastro" class="btn-nav">Começar grátis</a>
@@ -404,27 +404,27 @@
   <div class="hero-bg"></div>
   <div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center">
     <div class="hero-badge">
-      <i class="fa fa-circle"></i> Usado por empresas B2B no Brasil
+      <i class="fa fa-circle"></i> Prospecção B2B com IA
     </div>
-    <h1>Encontre clientes no<br><span class="grad">piloto automático</span></h1>
+    <h1>Receba empresas prontas para<br><span class="grad">prospectar todos os dias</span></h1>
     <p class="hero-sub">
-      O TurboVenda busca empresas, coleta contatos e envia mensagens
-      personalizadas com IA. Você só fecha negócio.
+      O TurboVenda encontra empresas com potencial de compra, coleta contatos,
+      organiza no CRM e ajuda sua equipe a abordar por e-mail ou WhatsApp.
     </p>
     <div class="hero-cta">
-      <a href="/cadastro" class="btn-primary">
-        <i class="fa fa-bolt"></i> Começar grátis em 2 minutos
+      <a href="/cadastro" class="btn-primary" onclick="if(typeof gtag==='function')gtag('event','click_start_free',{event_category:'hero'})">
+        <i class="fa fa-bolt"></i> Começar grátis com 50 leads
       </a>
-      <a href="/precos" class="btn-ghost">
+      <a href="/precos" class="btn-ghost" onclick="if(typeof gtag==='function')gtag('event','view_pricing',{event_category:'hero'})">
         <i class="fa fa-tag"></i> Ver planos
       </a>
     </div>
     <p style="color:var(--muted);font-size:13px;margin-top:-20px;margin-bottom:40px">
       <i class="fa fa-check" style="color:var(--green);margin-right:4px"></i> Sem cartão de crédito
       <span style="margin:0 12px">·</span>
-      <i class="fa fa-check" style="color:var(--green);margin-right:4px"></i> 50 leads grátis
+      <i class="fa fa-check" style="color:var(--green);margin-right:4px"></i> Configuração em 2 minutos
       <span style="margin:0 12px">·</span>
-      <i class="fa fa-check" style="color:var(--green);margin-right:4px"></i> Cancele quando quiser
+      <i class="fa fa-check" style="color:var(--green);margin-right:4px"></i> Ideal para vendas B2B
     </p>
     <div class="hero-stats">
       <div class="hero-stat">
@@ -510,6 +510,50 @@
   </div>
 </div>
 
+<!-- O QUE VOCÊ RECEBE NA PRÁTICA -->
+<section style="padding:80px 24px;max-width:1000px;margin:0 auto" class="fade-in">
+  <div style="text-align:center;margin-bottom:48px">
+    <p class="section-badge">Na prática</p>
+    <h2 class="section-title">O que você recebe ao criar sua conta</h2>
+    <p class="section-sub" style="margin:0 auto">Nada de promessas vagas. Veja exatamente o que o TurboVenda entrega.</p>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px">
+      <div style="width:44px;height:44px;border-radius:12px;background:rgba(99,102,241,.15);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:14px">
+        <i class="fa fa-building"></i>
+      </div>
+      <div style="font-size:1rem;font-weight:700;margin-bottom:8px">Empresas encontradas</div>
+      <div style="color:var(--muted2);font-size:14px;line-height:1.6">Nome da empresa, cidade, segmento, site e CNPJ. Tudo extraído automaticamente.</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px">
+      <div style="width:44px;height:44px;border-radius:12px;background:rgba(16,185,129,.15);color:var(--green);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:14px">
+        <i class="fa fa-address-book"></i>
+      </div>
+      <div style="font-size:1rem;font-weight:700;margin-bottom:8px">Contatos para abordagem</div>
+      <div style="color:var(--muted2);font-size:14px;line-height:1.6">Telefone, e-mail, WhatsApp e possíveis decisores de cada empresa.</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px">
+      <div style="width:44px;height:44px;border-radius:12px;background:rgba(59,130,246,.15);color:#60a5fa;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:14px">
+        <i class="fa fa-table-columns"></i>
+      </div>
+      <div style="font-size:1rem;font-weight:700;margin-bottom:8px">Funil organizado</div>
+      <div style="color:var(--muted2);font-size:14px;line-height:1.6">Novo, contactado, respondeu, qualificado, proposta e convertido.</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px">
+      <div style="width:44px;height:44px;border-radius:12px;background:rgba(236,72,153,.15);color:#ec4899;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:14px">
+        <i class="fa fa-robot"></i>
+      </div>
+      <div style="font-size:1rem;font-weight:700;margin-bottom:8px">Mensagens com IA</div>
+      <div style="color:var(--muted2);font-size:14px;line-height:1.6">Sugestões de abordagem personalizadas para e-mail e WhatsApp.</div>
+    </div>
+  </div>
+  <div style="text-align:center;margin-top:40px">
+    <a href="/cadastro" class="btn-primary" onclick="if(typeof gtag==='function')gtag('event','click_start_free',{event_category:'pratica'})">
+      <i class="fa fa-bolt"></i> Gerar meus 50 leads grátis
+    </a>
+  </div>
+</section>
+
 <!-- FEATURES -->
 <section class="features" id="features">
   <div class="fade-in">
@@ -564,6 +608,12 @@
       <div class="feat-desc">Conecte com seu ERP, sistema ou automação via API REST com Bearer tokens. Crie e gerencie leads programaticamente.</div>
     </div>
   </div>
+  <!-- CTA após Recursos -->
+  <div style="text-align:center;margin-top:48px" class="fade-in">
+    <a href="/precos" class="btn-ghost" style="font-size:15px;padding:12px 28px" onclick="if(typeof gtag==='function')gtag('event','view_pricing',{event_category:'after_features'})">
+      <i class="fa fa-tag"></i> Ver planos e preços
+    </a>
+  </div>
 </section>
 
 <!-- HOW IT WORKS -->
@@ -598,6 +648,14 @@
   </div>
 </section>
 
+<!-- CTA após Como funciona -->
+<div style="text-align:center;padding:40px 24px 0" class="fade-in">
+  <a href="/cadastro" class="btn-primary" style="font-size:15px" onclick="if(typeof gtag==='function')gtag('event','click_start_free',{event_category:'after_how'})">
+    <i class="fa fa-bolt"></i> Começar grátis com 50 leads
+  </a>
+  <p style="color:var(--muted);font-size:12px;margin-top:10px">Sem cartão de crédito · Configuração em 2 minutos</p>
+</div>
+
 <!-- PRICING -->
 <section class="pricing" id="pricing">
   <div class="fade-in">
@@ -606,57 +664,74 @@
     <p class="section-sub" style="margin:0 auto">Sem cartão de crédito. Cancele quando quiser.</p>
   </div>
   <div class="pricing-grid">
-    <!-- Trial -->
+    <!-- Grátis -->
     <div class="plan-card fade-in">
-      <div class="plan-name">Trial</div>
-      <div class="plan-price">R$0<span>/mês</span></div>
-      <div class="plan-sub">Grátis para testar</div>
+      <div class="plan-name">Grátis</div>
+      <div class="plan-price">R$0</div>
+      <div class="plan-sub">50 leads para testar, sem cartão</div>
       <ul class="plan-features">
-        <li><i class="fa fa-check"></i> 50 leads</li>
+        <li><i class="fa fa-check"></i> 50 leads (uma única vez)</li>
         <li><i class="fa fa-check"></i> Busca com IA</li>
         <li><i class="fa fa-check"></i> Pipeline Kanban</li>
         <li><i class="fa fa-check"></i> Enriquecimento CNPJ</li>
-        <li><i class="fa fa-check"></i> Export CSV</li>
+        <li><i class="fa fa-check"></i> Export CSV limitado</li>
         <li class="no"><i class="fa fa-times"></i> Email em massa</li>
         <li class="no"><i class="fa fa-times"></i> Sequências automáticas</li>
-        <li class="no"><i class="fa fa-times"></i> WhatsApp em massa</li>
+        <li class="no"><i class="fa fa-times"></i> Suporte prioritário</li>
       </ul>
-      <a href="/cadastro" class="btn-plan btn-plan-ghost">Criar conta grátis</a>
+      <a href="/cadastro" class="btn-plan btn-plan-ghost" onclick="if(typeof gtag==='function')gtag('event','click_start_free',{event_category:'pricing'})">Gerar meus 50 leads grátis</a>
     </div>
     <!-- Starter -->
-    <div class="plan-card fade-in">
-      <div class="plan-name">Starter</div>
-      <div class="plan-price">R$97<span>/mês</span></div>
-      <div class="plan-sub">Para quem está começando</div>
-      <ul class="plan-features">
-        <li><i class="fa fa-check"></i> 500 leads</li>
-        <li><i class="fa fa-check"></i> Busca com IA</li>
-        <li><i class="fa fa-check"></i> Pipeline Kanban</li>
-        <li><i class="fa fa-check"></i> Enriquecimento CNPJ</li>
-        <li><i class="fa fa-check"></i> Email em massa</li>
-        <li><i class="fa fa-check"></i> Export CSV</li>
-        <li class="no"><i class="fa fa-times"></i> Sequências automáticas</li>
-        <li class="no"><i class="fa fa-times"></i> WhatsApp em massa</li>
-      </ul>
-      <a href="/cadastro" class="btn-plan btn-plan-ghost">Começar com Starter</a>
-    </div>
-    <!-- Pro -->
     <div class="plan-card featured fade-in">
       <div class="plan-badge">MAIS POPULAR</div>
+      <div class="plan-name">Starter</div>
+      <div class="plan-price">R$97<span>/mês</span></div>
+      <div class="plan-sub">Para quem quer crescer</div>
+      <ul class="plan-features">
+        <li><i class="fa fa-check"></i> 500 leads/mês</li>
+        <li><i class="fa fa-check"></i> Busca com IA</li>
+        <li><i class="fa fa-check"></i> CRM completo</li>
+        <li><i class="fa fa-check"></i> Email em massa</li>
+        <li><i class="fa fa-check"></i> Export CSV</li>
+        <li><i class="fa fa-check"></i> WhatsApp manual assistido</li>
+        <li><i class="fa fa-check"></i> Suporte padrão</li>
+        <li class="no"><i class="fa fa-times"></i> Sequências automáticas</li>
+      </ul>
+      <a href="/cadastro" class="btn-plan btn-plan-primary" onclick="if(typeof gtag==='function')gtag('event','click_plan_starter',{event_category:'pricing'})">Assinar Starter por R$97/mês</a>
+    </div>
+    <!-- Pro -->
+    <div class="plan-card fade-in">
       <div class="plan-name">Pro</div>
       <div class="plan-price">R$297<span>/mês</span></div>
-      <div class="plan-sub">Tudo ilimitado</div>
+      <div class="plan-sub">Tudo ilimitado + automações</div>
       <ul class="plan-features">
         <li><i class="fa fa-check"></i> Leads ilimitados</li>
         <li><i class="fa fa-check"></i> Prospecção IA 24/7</li>
         <li><i class="fa fa-check"></i> CRM completo (Kanban + Timeline)</li>
-        <li><i class="fa fa-check"></i> Email em massa (Resend)</li>
+        <li><i class="fa fa-check"></i> Email em massa</li>
         <li><i class="fa fa-check"></i> WhatsApp em massa</li>
         <li><i class="fa fa-check"></i> Sequências automáticas</li>
         <li><i class="fa fa-check"></i> API REST + Tokens</li>
         <li><i class="fa fa-check"></i> Suporte prioritário</li>
       </ul>
-      <a href="/cadastro" class="btn-plan btn-plan-primary">Começar agora</a>
+      <a href="/cadastro" class="btn-plan btn-plan-ghost">Assinar Pro</a>
+    </div>
+  </div>
+</section>
+
+<!-- CONFIANÇA / LGPD -->
+<section style="padding:60px 24px;max-width:800px;margin:0 auto" class="fade-in">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px;display:flex;gap:20px;align-items:flex-start">
+    <div style="flex-shrink:0;width:48px;height:48px;border-radius:12px;background:rgba(16,185,129,.12);display:flex;align-items:center;justify-content:center">
+      <i class="fa fa-shield-halved" style="color:var(--green);font-size:22px"></i>
+    </div>
+    <div>
+      <div style="font-size:1rem;font-weight:700;margin-bottom:8px">Uso responsável de dados</div>
+      <div style="color:var(--muted2);font-size:14px;line-height:1.7">
+        O TurboVenda trabalha com <strong style="color:var(--text)">fontes públicas</strong> (Google, sites empresariais, Receita Federal),
+        organização comercial e abordagem B2B. A ferramenta deve ser usada com boas práticas comerciais,
+        sem spam e respeitando a <strong style="color:var(--text)">LGPD</strong>.
+      </div>
     </div>
   </div>
 </section>
@@ -687,7 +762,7 @@
     <h2>Seus concorrentes já estão<br><span style="color:var(--accent)">prospectando com IA</span></h2>
     <p>Configure em 2 minutos. 50 leads grátis. Sem cartão de crédito.</p>
     <a href="/cadastro" class="btn-primary" style="font-size:17px;padding:16px 40px">
-      <i class="fa fa-bolt"></i> Começar agora — é grátis
+      <i class="fa fa-bolt"></i> Gerar meus 50 leads grátis
     </a>
     <p style="color:var(--muted);font-size:13px;margin-top:12px">Mais de 500 leads gerados por mês para empresas B2B</p>
   </div>
@@ -698,13 +773,30 @@
 <!-- FOOTER -->
 <footer>
   <div class="footer-logo">Turbo<span>Venda</span></div>
-  <p>&copy; 2026 TurboVenda. Todos os direitos reservados.</p>
-  <div style="margin-top:12px;display:flex;gap:20px;justify-content:center">
-    <a href="/precos" style="color:#94a3b8;text-decoration:none;font-size:13px">Preços</a>
+  <div style="margin-top:16px;margin-bottom:16px">
+    <p style="color:#64748b;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Prospecção por segmento</p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
+      <a href="/para/agronegocio" style="color:#94a3b8;text-decoration:none;font-size:13px">Agronegócio</a>
+      <a href="/para/industria" style="color:#94a3b8;text-decoration:none;font-size:13px">Indústria</a>
+      <a href="/para/tecnologia" style="color:#94a3b8;text-decoration:none;font-size:13px">Tecnologia</a>
+      <a href="/para/saude" style="color:#94a3b8;text-decoration:none;font-size:13px">Saúde</a>
+      <a href="/para/servicos" style="color:#94a3b8;text-decoration:none;font-size:13px">Serviços</a>
+      <a href="/para/comercio" style="color:#94a3b8;text-decoration:none;font-size:13px">Comércio</a>
+    </div>
+  </div>
+  <div style="display:flex;gap:20px;justify-content:center;margin-bottom:16px">
+    <a href="/precos" style="color:#94a3b8;text-decoration:none;font-size:13px">Planos e Preços</a>
     <a href="/blog" style="color:#94a3b8;text-decoration:none;font-size:13px">Blog</a>
     <a href="/termos" style="color:#64748b;text-decoration:none;font-size:13px">Termos</a>
     <a href="/privacidade" style="color:#64748b;text-decoration:none;font-size:13px">Privacidade</a>
   </div>
+  <div style="display:flex;gap:16px;justify-content:center;margin-bottom:16px">
+    <a href="https://prismabiz.com.br" target="_blank" rel="noopener" style="color:#475569;text-decoration:none;font-size:12px">PrismaBiz</a>
+    <a href="https://pcmonitor.com.br" target="_blank" rel="noopener" style="color:#475569;text-decoration:none;font-size:12px">PC Monitor</a>
+    <a href="https://anderstech.net" target="_blank" rel="noopener" style="color:#475569;text-decoration:none;font-size:12px">AndersTech</a>
+    <a href="https://andersdev.com.br" target="_blank" rel="noopener" style="color:#475569;text-decoration:none;font-size:12px">AndersDev</a>
+  </div>
+  <p style="color:#475569;font-size:12px">&copy; 2026 TurboVenda. Todos os direitos reservados.</p>
 </footer>
 
 <!-- CTA fixo mobile -->
@@ -719,6 +811,7 @@
    id="wpp-btn" style="position:fixed;bottom:24px;right:24px;z-index:90;width:56px;height:56px;
    border-radius:50%;background:#25d366;display:flex;align-items:center;justify-content:center;
    box-shadow:0 4px 16px rgba(0,0,0,.3);transition:.3s;text-decoration:none"
+   onclick="if(typeof gtag==='function')gtag('event','whatsapp_click',{event_category:'float_btn'})"
    onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
   <svg width="28" height="28" fill="#fff" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.556 4.126 1.528 5.865L.06 23.49l5.753-1.508A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75c-1.94 0-3.75-.573-5.27-1.558l-.378-.224-3.916 1.027 1.045-3.818-.247-.393A9.7 9.7 0 012.25 12 9.75 9.75 0 0112 2.25 9.75 9.75 0 0121.75 12 9.75 9.75 0 0112 21.75z"/></svg>
 </a>
@@ -749,6 +842,12 @@
 </div>
 
 <script>
+  // UTM capture → localStorage
+  (function(){var p=new URLSearchParams(location.search);['utm_source','utm_medium','utm_campaign'].forEach(function(k){var v=p.get(k);if(v)localStorage.setItem(k,v)})})();
+
+  // GA4: view_home
+  if(typeof gtag==='function') gtag('event','view_home');
+
   const obs = new IntersectionObserver((entries) => {
     entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible') })
   }, {threshold: 0.1})
