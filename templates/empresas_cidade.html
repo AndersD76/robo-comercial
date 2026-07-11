@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ titulo }}</title>
+  <meta name="description" content="{{ descricao }}">
+  <meta name="robots" content="{{ robots_meta }}">
+  <link rel="canonical" href="{{ canonical }}">
+  <meta property="og:title" content="{{ titulo }}">
+  <meta property="og:description" content="{{ descricao }}">
+  <meta property="og:url" content="{{ canonical }}">
+  <meta property="og:image" content="https://www.turbovenda.com.br/static/og-image.png">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="pt_BR">
+  <meta property="og:site_name" content="TurboVenda">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect rx='20' width='100' height='100' fill='%236366f1'/><text x='50' y='72' font-size='60' text-anchor='middle' fill='white'>⚡</text></svg>">
+  <script async src="https://www.googletagmanager.com/gtag/js?id={{ ga_id }}"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','{{ ga_id }}');</script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <script type="application/ld+json">{{ ld_breadcrumb|safe }}</script>
+  <script type="application/ld+json">{{ ld_itemlist|safe }}</script>
+  <script type="application/ld+json">{{ ld_faq|safe }}</script>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',sans-serif;background:#060b18;color:#f1f5f9}
+    nav{position:fixed;top:0;left:0;right:0;z-index:100;height:64px;display:flex;align-items:center;
+        justify-content:space-between;padding:0 40px;backdrop-filter:blur(20px);
+        background:rgba(6,11,24,.85);border-bottom:1px solid rgba(255,255,255,.05)}
+    .nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none}
+    .nav-logo-mark{width:36px;height:36px;border-radius:10px;
+        background:linear-gradient(135deg,#6366f1,#8b5cf6);
+        display:flex;align-items:center;justify-content:center;font-size:16px}
+    .nav-logo-text{font-size:18px;font-weight:800;color:#fff;letter-spacing:-.4px}
+    .nav-logo-text span{color:#6366f1}
+    .btn-nav{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff!important;
+        padding:8px 18px;border-radius:8px;font-weight:700;font-size:13px}
+    .nav-links{display:flex;align-items:center;gap:6px}
+    .nav-links a{color:#94a3b8;text-decoration:none;font-size:14px;font-weight:500;padding:6px 14px;border-radius:8px}
+    .nav-links a:hover{color:#fff;background:rgba(255,255,255,.05)}
+    .wrap{max-width:860px;margin:0 auto;padding:100px 24px 40px}
+    .crumbs{font-size:13px;color:#64748b;margin-bottom:18px}
+    .crumbs a{color:#818cf8;text-decoration:none}
+    h1{font-size:1.9rem;font-weight:900;letter-spacing:-.5px;line-height:1.2;margin-bottom:10px}
+    .meta-line{color:#64748b;font-size:13px;margin-bottom:24px}
+    .intro p{color:#cbd5e1;font-size:15px;line-height:1.8;margin-bottom:14px}
+    .cta-box{background:linear-gradient(135deg,rgba(99,102,241,.15),rgba(139,92,246,.1));
+        border:1px solid rgba(99,102,241,.3);border-radius:14px;padding:22px 24px;margin:26px 0;
+        display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+    .cta-box p{color:#cbd5e1;font-size:14px}
+    .cta-btn{display:inline-block;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;
+        padding:13px 26px;border-radius:10px;font-weight:700;font-size:15px;text-decoration:none;
+        transition:.2s;box-shadow:0 4px 20px rgba(99,102,241,.3);white-space:nowrap}
+    .cta-btn:hover{transform:translateY(-2px)}
+    h2{font-size:1.25rem;font-weight:800;margin:34px 0 16px}
+    .tbl-wrap{overflow-x:auto;border:1px solid rgba(255,255,255,.07);border-radius:12px}
+    table{width:100%;border-collapse:collapse;font-size:14px;min-width:560px}
+    th{background:#0d1526;text-align:left;padding:12px 14px;color:#94a3b8;font-size:12px;
+        text-transform:uppercase;letter-spacing:.5px}
+    td{padding:11px 14px;border-top:1px solid rgba(255,255,255,.05);color:#e2e8f0}
+    td small{display:block;color:#64748b}
+    tr:hover td{background:rgba(99,102,241,.04)}
+    .pager{display:flex;gap:8px;justify-content:center;margin:22px 0;flex-wrap:wrap}
+    .pager a,.pager span{padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;
+        text-decoration:none;border:1px solid rgba(255,255,255,.08);color:#94a3b8}
+    .pager .atual{background:#6366f1;color:#fff;border-color:#6366f1}
+    .faq-item{background:#0d1526;border:1px solid rgba(255,255,255,.06);border-radius:12px;
+        padding:20px 24px;margin-bottom:12px}
+    .faq-item h3{font-size:15px;font-weight:700;margin-bottom:8px;color:#f1f5f9}
+    .faq-item p{color:#94a3b8;font-size:14px;line-height:1.7}
+    .related-links{display:flex;flex-wrap:wrap;gap:10px}
+    .related-links a{background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.15);
+        color:#818cf8;font-size:13px;font-weight:600;padding:8px 16px;border-radius:8px;
+        text-decoration:none;transition:.2s}
+    .related-links a:hover{background:rgba(99,102,241,.12)}
+    .fonte{color:#64748b;font-size:12px;line-height:1.7;margin-top:30px;
+        border-top:1px solid rgba(255,255,255,.05);padding-top:16px}
+    .fonte a{color:#818cf8}
+    footer{text-align:center;padding:40px 24px;border-top:1px solid rgba(255,255,255,.05);margin-top:40px}
+    footer p{color:#64748b;font-size:13px}
+    footer a{color:#64748b;text-decoration:none;font-size:13px;margin:0 8px}
+    footer a:hover{color:#f1f5f9}
+    @media(max-width:768px){
+      nav{padding:0 16px}
+      .nav-links a:not(.btn-nav){display:none}
+      h1{font-size:1.4rem}
+      .wrap{padding:90px 16px 30px}
+    }
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="/">
+    <div class="nav-logo-mark">⚡</div>
+    <div class="nav-logo-text">Turbo<span>Venda</span></div>
+  </a>
+  <div class="nav-links">
+    <a href="/empresas">Empresas</a>
+    <a href="/precos">Planos e Preços</a>
+    <a href="/blog">Blog</a>
+    <a href="/cadastro" class="btn-nav">Começar grátis</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="crumbs">
+    <a href="/">Home</a> › <a href="/empresas">Empresas</a> ›
+    <a href="/empresas/{{ seg.slug }}">{{ seg.label }}</a> › {{ municipio }} - {{ uf }}
+  </div>
+
+  <h1>Empresas de {{ seg.nome }} em {{ municipio }} - {{ uf }} ({{ n }} ativas)</h1>
+  <p class="meta-line">CNAE {{ cnae_fmt }} · {{ uf_nome }} · Fonte: dados abertos do CNPJ (Receita Federal)</p>
+
+  <div class="intro">
+    {% for p in texto %}
+    <p>{{ p }}</p>
+    {% endfor %}
+  </div>
+
+  <div class="cta-box">
+    <p><strong>Chega de copiar CNPJ um por um.</strong><br>
+       A IA do TurboVenda enriquece essas empresas com telefone, e-mail e site — e escreve a abordagem.</p>
+    <a href="{{ cta_url }}" class="cta-btn"
+       onclick="if(typeof gtag==='function')gtag('event','pseo_cta_click',{cnae_slug:'{{ seg.slug }}',cidade:'{{ combo.mun_slug }}',empresas:{{ n }}})">
+      Prospectar essas {{ n }} empresas com IA — grátis
+    </a>
+  </div>
+
+  <h2>Lista de empresas de {{ seg.nome }} em {{ municipio }}{% if total_paginas > 1 %} (página {{ pagina }} de {{ total_paginas }}){% endif %}</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th>Empresa</th><th>Bairro</th><th>Porte</th><th>Abertura</th></tr>
+      </thead>
+      <tbody>
+        {% for e in empresas %}
+        <tr>
+          <td>{{ e.nome }}{% if e.fantasia %}<small>{{ e.fantasia }}</small>{% endif %}</td>
+          <td>{{ e.bairro }}</td>
+          <td>{{ e.porte }}</td>
+          <td>{{ e.ano }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if total_paginas > 1 %}
+  <div class="pager">
+    {% if pagina > 1 %}<a href="?pagina={{ pagina - 1 }}" rel="prev">‹ Anterior</a>{% endif %}
+    {% for p in range(1, total_paginas + 1) %}
+      {% if p == pagina %}<span class="atual">{{ p }}</span>
+      {% elif p == 1 %}<a href="/empresas/{{ seg.slug }}/{{ combo.mun_slug }}">1</a>
+      {% else %}<a href="?pagina={{ p }}">{{ p }}</a>{% endif %}
+    {% endfor %}
+    {% if pagina < total_paginas %}<a href="?pagina={{ pagina + 1 }}" rel="next">Próxima ›</a>{% endif %}
+  </div>
+  {% endif %}
+
+  <h2>Perguntas frequentes</h2>
+  {% for q, a in faq %}
+  <div class="faq-item">
+    <h3>{{ q }}</h3>
+    <p>{{ a }}</p>
+  </div>
+  {% endfor %}
+
+  {% if links_cidades %}
+  <h2>{{ seg.label }} em outras cidades</h2>
+  <div class="related-links">
+    {% for c in links_cidades %}
+    <a href="/empresas/{{ seg.slug }}/{{ c.mun_slug }}">{{ c.municipio }} - {{ c.uf }} ({{ c.n }})</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if links_cnaes %}
+  <h2>Outros segmentos em {{ municipio }}</h2>
+  <div class="related-links">
+    {% for c in links_cnaes %}
+    <a href="/empresas/{{ c.cnae_slug }}/{{ combo.mun_slug }}">{{ c.seg.label }} ({{ c.n }})</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <p class="fonte">
+    Fonte: dados abertos do CNPJ — Receita Federal do Brasil. Esta página exibe apenas
+    dados cadastrais públicos (razão social, bairro, CNAE, porte e data de abertura).
+    Não publicamos telefone, e-mail ou dados de sócios.
+    <a href="/empresas/sobre-os-dados">Sobre os dados e pedidos de remoção</a>.
+  </p>
+</div>
+
+<footer>
+  <p>&copy; 2026 TurboVenda. Todos os direitos reservados.</p>
+  <div style="margin-top:8px">
+    <a href="/">Home</a>
+    <a href="/empresas">Empresas</a>
+    <a href="/empresas/sobre-os-dados">Sobre os dados</a>
+    <a href="/privacidade">Privacidade</a>
+  </div>
+</footer>
+<script>(function(){var p=new URLSearchParams(location.search);['utm_source','utm_medium','utm_campaign'].forEach(function(k){var v=p.get(k);if(v)localStorage.setItem(k,v)})})();</script>
+</body>
+</html>

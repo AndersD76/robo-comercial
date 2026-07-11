@@ -33,3 +33,6 @@ Thumbs.db
 _ul
 _ul-*
 .streamlit/
+
+# pSEO dev (SQLite de teste local)
+pseo_dev.sqlite

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Empresas por segmento e cidade — dados abertos do CNPJ | TurboVenda</title>
+  <meta name="description" content="Listas de empresas ativas por CNAE e cidade no Sul do Brasil, com base nos dados abertos do CNPJ da Receita Federal. {{ total_empresas }} empresas mapeadas. Prospecte com IA grátis.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://www.turbovenda.com.br/empresas">
+  <meta property="og:title" content="Empresas por segmento e cidade — TurboVenda">
+  <meta property="og:description" content="Listas de empresas ativas por CNAE e cidade, com base nos dados abertos do CNPJ da Receita Federal.">
+  <meta property="og:url" content="https://www.turbovenda.com.br/empresas">
+  <meta property="og:image" content="https://www.turbovenda.com.br/static/og-image.png">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="pt_BR">
+  <meta property="og:site_name" content="TurboVenda">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect rx='20' width='100' height='100' fill='%236366f1'/><text x='50' y='72' font-size='60' text-anchor='middle' fill='white'>⚡</text></svg>">
+  <script async src="https://www.googletagmanager.com/gtag/js?id={{ ga_id }}"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','{{ ga_id }}');</script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',sans-serif;background:#060b18;color:#f1f5f9}
+    nav{position:fixed;top:0;left:0;right:0;z-index:100;height:64px;display:flex;align-items:center;
+        justify-content:space-between;padding:0 40px;backdrop-filter:blur(20px);
+        background:rgba(6,11,24,.85);border-bottom:1px solid rgba(255,255,255,.05)}
+    .nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none}
+    .nav-logo-mark{width:36px;height:36px;border-radius:10px;
+        background:linear-gradient(135deg,#6366f1,#8b5cf6);
+        display:flex;align-items:center;justify-content:center;font-size:16px}
+    .nav-logo-text{font-size:18px;font-weight:800;color:#fff;letter-spacing:-.4px}
+    .nav-logo-text span{color:#6366f1}
+    .btn-nav{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff!important;
+        padding:8px 18px;border-radius:8px;font-weight:700;font-size:13px}
+    .nav-links{display:flex;align-items:center;gap:6px}
+    .nav-links a{color:#94a3b8;text-decoration:none;font-size:14px;font-weight:500;padding:6px 14px;border-radius:8px}
+    .nav-links a:hover{color:#fff;background:rgba(255,255,255,.05)}
+    .wrap{max-width:860px;margin:0 auto;padding:110px 24px 40px}
+    h1{font-size:2rem;font-weight:900;letter-spacing:-.6px;line-height:1.2;margin-bottom:12px}
+    .sub{color:#94a3b8;font-size:15px;line-height:1.7;margin-bottom:28px;max-width:640px}
+    .busca{background:#0d1526;border:1px solid rgba(255,255,255,.07);border-radius:14px;
+        padding:22px;display:flex;gap:12px;flex-wrap:wrap;margin-bottom:36px}
+    .busca select,.busca input{background:#060b18;border:1px solid rgba(255,255,255,.1);
+        color:#f1f5f9;border-radius:8px;padding:11px 14px;font-size:14px;font-family:inherit;flex:1;min-width:180px}
+    .busca button{background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;color:#fff;
+        padding:11px 24px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit}
+    h2{font-size:1.25rem;font-weight:800;margin:34px 0 16px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+    .grid a{background:#0d1526;border:1px solid rgba(255,255,255,.06);border-radius:10px;
+        padding:13px 16px;text-decoration:none;display:flex;justify-content:space-between;
+        align-items:center;gap:8px;transition:.2s}
+    .grid a:hover{border-color:rgba(99,102,241,.4)}
+    .grid .nome{color:#e2e8f0;font-size:13.5px;font-weight:600}
+    .grid .qtd{color:#818cf8;font-size:12.5px;font-weight:700;white-space:nowrap}
+    .grid span.nolink{color:#e2e8f0}
+    footer{text-align:center;padding:40px 24px;border-top:1px solid rgba(255,255,255,.05);margin-top:50px}
+    footer p{color:#64748b;font-size:13px}
+    footer a{color:#64748b;text-decoration:none;font-size:13px;margin:0 8px}
+    footer a:hover{color:#f1f5f9}
+    .fonte{color:#64748b;font-size:12px;line-height:1.7;margin-top:36px;
+        border-top:1px solid rgba(255,255,255,.05);padding-top:16px}
+    .fonte a{color:#818cf8}
+    @media(max-width:768px){nav{padding:0 16px}.nav-links a:not(.btn-nav){display:none}h1{font-size:1.5rem}}
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-logo" href="/">
+    <div class="nav-logo-mark">⚡</div>
+    <div class="nav-logo-text">Turbo<span>Venda</span></div>
+  </a>
+  <div class="nav-links">
+    <a href="/precos">Planos e Preços</a>
+    <a href="/blog">Blog</a>
+    <a href="/cadastro" class="btn-nav">Começar grátis</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <h1>Empresas por segmento e cidade</h1>
+  <p class="sub">{{ total_empresas }} empresas ativas mapeadas a partir dos dados abertos
+     do CNPJ da Receita Federal (RS, SC e PR). Escolha um segmento e uma cidade para ver a
+     lista — e prospecte com a IA do TurboVenda.</p>
+
+  <form class="busca" method="GET" action="/empresas/busca">
+    <select name="segmento" required aria-label="Segmento">
+      <option value="">Escolha o segmento…</option>
+      {% for item in cnaes %}
+      <option value="{{ item.seg.slug }}">{{ item.seg.label }} ({{ item.total }})</option>
+      {% endfor %}
+    </select>
+    <input type="text" name="cidade" placeholder="Cidade (ex.: Passo Fundo)" aria-label="Cidade">
+    <button type="submit">Buscar empresas</button>
+  </form>
+
+  <h2>Segmentos com empresas mapeadas</h2>
+  <div class="grid">
+    {% for item in cnaes %}
+    <a href="/empresas/{{ item.seg.slug }}">
+      <span class="nome">{{ item.seg.label }}</span>
+      <span class="qtd">{{ item.total }}</span>
+    </a>
+    {% endfor %}
+  </div>
+
+  <h2>Cidades com mais empresas</h2>
+  <div class="grid">
+    {% for c in top_cidades %}
+    {% if c.url %}
+    <a href="{{ c.url }}">
+      <span class="nome">{{ c.municipio }} - {{ c.uf }}</span>
+      <span class="qtd">{{ c.total }}</span>
+    </a>
+    {% else %}
+    <a href="/empresas/busca?cidade={{ c.municipio }}">
+      <span class="nome">{{ c.municipio }} - {{ c.uf }}</span>
+      <span class="qtd">{{ c.total }}</span>
+    </a>
+    {% endif %}
+    {% endfor %}
+  </div>
+
+  <p class="fonte">
+    Fonte: dados abertos do CNPJ — Receita Federal do Brasil. Exibimos apenas dados
+    cadastrais públicos, sem telefone, e-mail ou dados de sócios.
+    <a href="/empresas/sobre-os-dados">Sobre os dados e pedidos de remoção</a>.
+  </p>
+</div>
+
+<footer>
+  <p>&copy; 2026 TurboVenda. Todos os direitos reservados.</p>
+  <div style="margin-top:8px">
+    <a href="/">Home</a>
+    <a href="/empresas">Empresas</a>
+    <a href="/empresas/sobre-os-dados">Sobre os dados</a>
+    <a href="/privacidade">Privacidade</a>
+  </div>
+</footer>
+<script>(function(){var p=new URLSearchParams(location.search);['utm_source','utm_medium','utm_campaign'].forEach(function(k){var v=p.get(k);if(v)localStorage.setItem(k,v)})})();</script>
+</body>
+</html>

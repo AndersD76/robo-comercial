@@ -4,6 +4,7 @@ TurboVenda — SaaS CRM multi-tenant
 Prospecção IA + CRM + Email + WhatsApp + Agendamento
 """
 
+import datetime as _dt
 import hashlib
 import hmac as _hmac
 import json
@@ -24,6 +25,9 @@ from flask import (Flask, jsonify, make_response, redirect, render_template,
                    request, send_file, session, url_for)
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+
+from pseo_data import (CNAE_B2B, CNAE_POR_CODIGO, CNAE_POR_SLUG,
+                       PORTE_LABELS, UF_NOMES, cnae_formatado, slugify)
 
 app = Flask(__name__)
 
@@ -203,6 +207,23 @@ def _init_public_schema_safe():
                 plano TEXT,
                 criado_em TIMESTAMP DEFAULT NOW()
             )""",
+            # pSEO: dados cadastrais públicos (dados abertos CNPJ / Receita)
+            """CREATE TABLE IF NOT EXISTS empresas_publicas (
+                cnpj_basico    TEXT PRIMARY KEY,
+                razao_social   TEXT,
+                nome_fantasia  TEXT,
+                municipio      TEXT,
+                uf             TEXT,
+                bairro         TEXT,
+                cnae_principal TEXT,
+                porte          TEXT,
+                data_abertura  DATE,
+                situacao       TEXT
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_emp_pub_cnae_uf_mun "
+            "ON empresas_publicas (cnae_principal, uf, municipio)",
+            "CREATE INDEX IF NOT EXISTS idx_emp_pub_uf_mun "
+            "ON empresas_publicas (uf, municipio)",
         ]:
             try:
                 c.execute(stmt)
@@ -1532,8 +1553,7 @@ def segmento_page(slug):
     return render_template('segmento.html', seg=seg, segmentos=SEGMENTOS, ga_id=GA_MEASUREMENT_ID)
 
 
-@app.route('/sitemap.xml')
-def sitemap_xml():
+def _static_sitemap_urls():
     urls = [
         ('https://www.turbovenda.com.br/', '2026-06-01', 'weekly', '1.0'),
         ('https://www.turbovenda.com.br/cadastro', '2026-06-01', 'monthly', '0.8'),
@@ -1553,6 +1573,10 @@ def sitemap_xml():
             f"https://www.turbovenda.com.br/para/{s['slug']}",
             '2026-06-27', 'monthly', '0.8'
         ))
+    return urls
+
+
+def _render_urlset(urls):
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
     xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
     for loc, lastmod, freq, pri in urls:
@@ -1562,6 +1586,41 @@ def sitemap_xml():
                 f'    <priority>{pri}</priority>\n  </url>\n')
     xml += '</urlset>\n'
     return app.response_class(xml, mimetype='application/xml')
+
+
+@app.route('/sitemap.xml')
+def sitemap_xml():
+    """Sitemap index quando há páginas pSEO; senão urlset legado."""
+    pseo_urls = _pseo_sitemap_urls()
+    if not pseo_urls:
+        return _render_urlset(_static_sitemap_urls())
+    hoje = _dt.date.today().isoformat()
+    n_chunks = (len(pseo_urls) + PSEO_SITEMAP_CHUNK - 1) // PSEO_SITEMAP_CHUNK
+    xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    xml += '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    xml += ('  <sitemap>\n    <loc>https://www.turbovenda.com.br/sitemap-pages.xml</loc>\n'
+            f'    <lastmod>{hoje}</lastmod>\n  </sitemap>\n')
+    for i in range(1, n_chunks + 1):
+        xml += (f'  <sitemap>\n    <loc>https://www.turbovenda.com.br/sitemap-empresas-{i}.xml</loc>\n'
+                f'    <lastmod>{hoje}</lastmod>\n  </sitemap>\n')
+    xml += '</sitemapindex>\n'
+    return app.response_class(xml, mimetype='application/xml')
+
+
+@app.route('/sitemap-pages.xml')
+def sitemap_pages_xml():
+    return _render_urlset(_static_sitemap_urls())
+
+
+@app.route('/sitemap-empresas-<int:n>.xml')
+def sitemap_empresas_xml(n):
+    pseo_urls = _pseo_sitemap_urls()
+    inicio = (n - 1) * PSEO_SITEMAP_CHUNK
+    chunk = pseo_urls[inicio:inicio + PSEO_SITEMAP_CHUNK]
+    if n < 1 or not chunk:
+        return render_template('404.html'), 404
+    hoje = _dt.date.today().isoformat()
+    return _render_urlset([(u, hoje, 'monthly', '0.7') for u in chunk])
 
 
 _INDEXNOW_KEY = 'b4f7e2a1c9d84f6e8a3b5c7d9e1f0a2b'
@@ -1595,6 +1654,8 @@ def llms_txt():
         "- Criar conta: https://www.turbovenda.com.br/cadastro\n"
         "- Blog: https://www.turbovenda.com.br/blog\n"
         "- Preços: https://www.turbovenda.com.br/precos\n"
+        "- Empresas por segmento e cidade (dados abertos CNPJ): "
+        "https://www.turbovenda.com.br/empresas\n"
     )
     return app.response_class(txt, mimetype='text/plain')
 
@@ -1618,19 +1679,26 @@ def _ping_indexnow(urls=None):
             urls.append(f"https://www.turbovenda.com.br/blog/{p['slug']}")
         for s in SEGMENTOS:
             urls.append(f"https://www.turbovenda.com.br/para/{s['slug']}")
-    payload = {
-        "host": "www.turbovenda.com.br",
-        "key": _INDEXNOW_KEY,
-        "keyLocation": f"https://www.turbovenda.com.br/{_INDEXNOW_KEY}.txt",
-        "urlList": urls
-    }
+        # páginas pSEO indexáveis (tier >= 15 empresas, cap MAX_PSEO_PAGES)
+        urls.extend(_pseo_sitemap_urls())
     results = {}
-    try:
-        r = http.post('https://api.indexnow.org/indexnow',
-                      json=payload, timeout=10)
-        results['indexnow'] = r.status_code
-    except Exception as e:
-        results['indexnow'] = str(e)
+    statuses = []
+    # IndexNow em lotes de 500 URLs por POST
+    for i in range(0, len(urls), 500):
+        payload = {
+            "host": "www.turbovenda.com.br",
+            "key": _INDEXNOW_KEY,
+            "keyLocation": f"https://www.turbovenda.com.br/{_INDEXNOW_KEY}.txt",
+            "urlList": urls[i:i + 500]
+        }
+        try:
+            r = http.post('https://api.indexnow.org/indexnow',
+                          json=payload, timeout=10)
+            statuses.append(r.status_code)
+        except Exception as e:
+            statuses.append(str(e))
+    results['indexnow'] = statuses[0] if len(statuses) == 1 else statuses
+    results['urls_enviadas'] = len(urls)
     try:
         r = http.get(
             'https://www.google.com/ping?sitemap=https://www.turbovenda.com.br/sitemap.xml',
@@ -1647,6 +1715,411 @@ def admin_indexnow():
         return jsonify({'error': 'unauthorized'}), 401
     results = _ping_indexnow()
     return jsonify(results)
+
+
+# =============================================================================
+# pSEO — /empresas/{cnae}/{municipio-uf} com dados abertos CNPJ (Receita)
+# =============================================================================
+
+# Rollout gate: nº máx. de páginas de cidade no sitemap/índice (por contagem desc)
+MAX_PSEO_PAGES = int(os.environ.get('MAX_PSEO_PAGES', '200'))
+PSEO_SITEMAP_CHUNK = 5000
+PSEO_PAGE_SIZE = int(os.environ.get('PSEO_PAGE_SIZE', '50'))
+PSEO_MIN_EMPRESAS = 8       # < 8  -> 404
+PSEO_MIN_INDEX = 15         # 8-14 -> noindex,follow | >= 15 -> indexável
+_PSEO_SQLITE = os.environ.get('PSEO_SQLITE', '')  # SÓ dev local (fallback)
+_PSEO_BASE = 'https://www.turbovenda.com.br'
+
+
+def _pseo_query(sql, params=()):
+    """Consulta a empresas_publicas. Postgres em produção; SQLite só em dev
+    (env PSEO_SQLITE) para rodar o app localmente sem Postgres."""
+    try:
+        if _PSEO_SQLITE:
+            import sqlite3
+            conn = sqlite3.connect(_PSEO_SQLITE)
+            conn.row_factory = sqlite3.Row
+            try:
+                cur = conn.execute(sql.replace('%s', '?'), params)
+                return [dict(r) for r in cur.fetchall()]
+            finally:
+                conn.close()
+        if not DATABASE_URL:
+            return []
+        conn = _conn()
+        try:
+            c = conn.cursor()
+            c.execute(sql, params)
+            return [dict(r) for r in c.fetchall()]
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f'[pseo] query error: {e}', flush=True)
+        return []
+
+
+_pseo_cache = {'ts': 0.0, 'data': None}
+
+
+def _pseo_agg():
+    """Agregação global (cacheada 15 min): contagens por CNAE x cidade."""
+    import time
+    if _pseo_cache['data'] is not None and time.time() - _pseo_cache['ts'] < 900:
+        return _pseo_cache['data']
+    rows = _pseo_query(
+        "SELECT cnae_principal AS cnae, municipio, uf, COUNT(*) AS n "
+        "FROM empresas_publicas WHERE situacao = '02' "
+        "GROUP BY cnae_principal, municipio, uf")
+    combos = {}      # (cnae_slug, mun_slug) -> combo
+    cidades = {}     # mun_slug -> {'municipio','uf','total'}
+    por_cnae = {}    # cnae_slug -> {'total', 'cidades': [combos ordenados]}
+    por_cidade = {}  # mun_slug -> [combos ordenados]
+    for r in rows:
+        info = CNAE_POR_CODIGO.get(str(r['cnae']))
+        if not info or not r['municipio'] or not r['uf']:
+            continue
+        mun_slug = slugify(f"{r['municipio']}-{r['uf']}")
+        combo = {'cnae_slug': info['slug'], 'cnae': str(r['cnae']),
+                 'municipio': r['municipio'], 'uf': r['uf'],
+                 'mun_slug': mun_slug, 'n': int(r['n'])}
+        combos[(info['slug'], mun_slug)] = combo
+        cid = cidades.setdefault(mun_slug, {'municipio': r['municipio'],
+                                            'uf': r['uf'], 'total': 0})
+        cid['total'] += combo['n']
+        pc = por_cnae.setdefault(info['slug'], {'total': 0, 'cidades': []})
+        pc['total'] += combo['n']
+        pc['cidades'].append(combo)
+        por_cidade.setdefault(mun_slug, []).append(combo)
+    for pc in por_cnae.values():
+        pc['cidades'].sort(key=lambda c: -c['n'])
+    for lst in por_cidade.values():
+        lst.sort(key=lambda c: -c['n'])
+    ranked = sorted((c for c in combos.values() if c['n'] >= PSEO_MIN_INDEX),
+                    key=lambda c: -c['n'])
+    sitemap_set = {(c['cnae_slug'], c['mun_slug'])
+                   for c in ranked[:MAX_PSEO_PAGES]}
+    data = {'combos': combos, 'cidades': cidades, 'por_cnae': por_cnae,
+            'por_cidade': por_cidade, 'ranked': ranked,
+            'sitemap_set': sitemap_set}
+    _pseo_cache['data'] = data
+    _pseo_cache['ts'] = time.time()
+    return data
+
+
+def _pseo_sitemap_urls():
+    """URLs pSEO indexáveis: hub + sobre + páginas CNAE + top cidades (cap)."""
+    agg = _pseo_agg()
+    if not agg['sitemap_set']:
+        return []
+    urls = [f'{_PSEO_BASE}/empresas', f'{_PSEO_BASE}/empresas/sobre-os-dados']
+    cnaes_no_ar = sorted({cs for cs, _ in agg['sitemap_set']})
+    urls += [f'{_PSEO_BASE}/empresas/{cs}' for cs in cnaes_no_ar]
+    urls += [f"{_PSEO_BASE}/empresas/{c['cnae_slug']}/{c['mun_slug']}"
+             for c in agg['ranked'][:MAX_PSEO_PAGES]]
+    return urls
+
+
+def _pseo_stats(cnae, municipio, uf):
+    """Estatísticas reais usadas no texto/FAQ da página de cidade."""
+    portes = _pseo_query(
+        "SELECT porte, COUNT(*) AS n FROM empresas_publicas "
+        "WHERE cnae_principal = %s AND municipio = %s AND uf = %s "
+        "AND situacao = '02' GROUP BY porte ORDER BY n DESC",
+        (cnae, municipio, uf))
+    bairros = _pseo_query(
+        "SELECT bairro, COUNT(*) AS n FROM empresas_publicas "
+        "WHERE cnae_principal = %s AND municipio = %s AND uf = %s "
+        "AND situacao = '02' AND bairro IS NOT NULL AND bairro != '' "
+        "GROUP BY bairro ORDER BY n DESC LIMIT 1",
+        (cnae, municipio, uf))
+    corte5 = (_dt.date.today() - _dt.timedelta(days=5 * 365)).isoformat()
+    novas = _pseo_query(
+        "SELECT COUNT(*) AS n FROM empresas_publicas "
+        "WHERE cnae_principal = %s AND municipio = %s AND uf = %s "
+        "AND situacao = '02' AND data_abertura >= %s",
+        (cnae, municipio, uf, corte5))
+    porte_top = None
+    if portes:
+        pt = max((p for p in portes if p['porte']), key=lambda p: p['n'],
+                 default=None)
+        if pt:
+            porte_top = {'label': PORTE_LABELS.get(str(pt['porte']),
+                                                   'Não informado'),
+                         'n': int(pt['n'])}
+    return {
+        'porte_top': porte_top,
+        'bairro_top': ({'nome': bairros[0]['bairro'], 'n': int(bairros[0]['n'])}
+                       if bairros else None),
+        'novas_5anos': int(novas[0]['n']) if novas else 0,
+    }
+
+
+def _pseo_texto(seg, combo, stats, vizinhos):
+    """120-200 palavras com variáveis reais, 4 templates de frase rotacionados
+    por hash do slug (nunca idêntico entre páginas)."""
+    h = int(hashlib.md5(
+        f"{seg['slug']}|{combo['mun_slug']}".encode()).hexdigest(), 16)
+    mun, uf, n = combo['municipio'], combo['uf'], combo['n']
+    nome, label = seg['nome'], seg['label']
+    uf_nome = UF_NOMES.get(uf, uf)
+
+    intro = [
+        f"{mun} - {uf} concentra {n} empresas ativas de {nome}, segundo os dados abertos do CNPJ da Receita Federal. É um dos mercados mapeados pelo TurboVenda no {uf_nome} para quem vende produtos ou serviços a esse segmento e precisa de uma lista confiável para começar a prospectar.",
+        f"Segundo os dados abertos do CNPJ da Receita Federal, existem {n} empresas ativas de {nome} em {mun} - {uf}. A lista completa abaixo vem da base oficial de CNPJs e traz razão social, bairro, porte e ano de abertura de cada uma delas.",
+        f"O mercado de {nome} em {mun} - {uf} soma {n} CNPJs ativos na base oficial da Receita Federal. Para quem prospecta {label.lower()}, é um território do {uf_nome} que merece entrar no radar do time comercial — a relação completa está na tabela abaixo.",
+        f"Quem vende para {label.lower()} encontra em {mun} - {uf} um mercado com {n} empresas ativas, conforme os dados públicos do CNPJ da Receita Federal consolidados pelo TurboVenda — cada uma listada abaixo com bairro, porte e ano de abertura.",
+    ]
+    porte_txts = []
+    if stats['porte_top']:
+        pl, pn = stats['porte_top']['label'], stats['porte_top']['n']
+        porte_txts = [
+            f"O porte predominante é {pl}: são {pn} das {n} empresas do segmento na cidade, o que ajuda a calibrar o discurso comercial e o ticket médio da abordagem.",
+            f"Entre elas, {pn} são classificadas como {pl} — o perfil mais comum do segmento na cidade, um dado útil na hora de definir a proposta de valor.",
+            f"Em porte, destaque para {pl}, com {pn} empresas — informação que vale ouro para segmentar a oferta antes do primeiro contato.",
+            f"A classificação de porte mais frequente é {pl} ({pn} empresas), o que indica o tamanho típico do cliente que você vai encontrar por lá.",
+        ]
+    bairro_txts = []
+    if stats['bairro_top']:
+        bn, bq = stats['bairro_top']['nome'], stats['bairro_top']['n']
+        bairro_txts = [
+            f"Geograficamente, o bairro {bn} lidera com {bq} empresas registradas do segmento.",
+            f"O endereço mais comum é o bairro {bn}, com {bq} CNPJs do segmento.",
+            f"Dentro da cidade, {bn} é o bairro com mais empresas do ramo: {bq} no total.",
+            f"A maior concentração está no bairro {bn}, que reúne {bq} dessas empresas.",
+        ]
+    viz_txts = []
+    if len(vizinhos) >= 2:
+        v1, v2 = vizinhos[0], vizinhos[1]
+        viz_txts = [
+            f"Na comparação regional, {v1['municipio']} - {v1['uf']} tem {v1['n']} empresas do mesmo segmento e {v2['municipio']} - {v2['uf']} tem {v2['n']} — ampliar o raio de prospecção pode multiplicar sua lista.",
+            f"Perto dali, o mesmo CNAE soma {v1['n']} empresas em {v1['municipio']} - {v1['uf']} e {v2['n']} em {v2['municipio']} - {v2['uf']}, boas opções para expandir o território.",
+            f"Se a meta pedir volume, vale somar as vizinhas: {v1['municipio']} - {v1['uf']} ({v1['n']} empresas) e {v2['municipio']} - {v2['uf']} ({v2['n']}) no mesmo segmento.",
+            f"Para efeito de comparação, {v1['municipio']} - {v1['uf']} registra {v1['n']} e {v2['municipio']} - {v2['uf']} registra {v2['n']} empresas ativas do mesmo CNAE.",
+        ]
+    fecho = [
+        f"Com o TurboVenda, essas {n} empresas viram uma lista de prospecção com enriquecimento por IA: telefone, e-mail e site localizados em fontes públicas, prontos para a primeira abordagem comercial — sem planilha manual.",
+        f"O TurboVenda transforma esses {n} CNPJs em pipeline de vendas: a IA enriquece cada empresa com contatos de fontes públicas e escreve mensagens personalizadas de abordagem para e-mail e WhatsApp.",
+        f"Em vez de garimpar CNPJ por CNPJ, o TurboVenda entrega essas {n} empresas organizadas em um CRM com Kanban, contatos enriquecidos por IA e mensagens de prospecção prontas para enviar.",
+        f"São {n} oportunidades reais de negócio na cidade — e o TurboVenda automatiza a prospecção de todas elas com IA, do primeiro contato até o agendamento da reunião comercial.",
+    ]
+
+    partes = [intro[h % 4]]
+    if porte_txts:
+        partes.append(porte_txts[(h // 4) % 4])
+    if bairro_txts:
+        partes.append(bairro_txts[(h // 16) % 4])
+    if viz_txts:
+        partes.append(viz_txts[(h // 64) % 4])
+    partes.append(fecho[(h // 256) % 4])
+    # 2 parágrafos: contexto (intro+porte+bairro) e ação (vizinhos+fecho)
+    corte = 3 if len(partes) >= 4 else 2
+    return [' '.join(partes[:corte]), ' '.join(partes[corte:])]
+
+
+def _pseo_404():
+    return render_template('404.html'), 404
+
+
+@app.route('/empresas')
+def pseo_hub():
+    agg = _pseo_agg()
+    cnaes = []
+    for seg in CNAE_B2B:
+        pc = agg['por_cnae'].get(seg['slug'])
+        if pc and pc['total'] > 0:
+            cnaes.append({'seg': seg, 'total': pc['total']})
+    cnaes.sort(key=lambda x: -x['total'])
+    top_cidades = []
+    for mun_slug, cid in sorted(agg['cidades'].items(),
+                                key=lambda kv: -kv[1]['total'])[:20]:
+        melhores = [c for c in agg['por_cidade'].get(mun_slug, [])
+                    if c['n'] >= PSEO_MIN_EMPRESAS]
+        top_cidades.append({
+            'municipio': cid['municipio'], 'uf': cid['uf'],
+            'total': cid['total'],
+            'url': (f"/empresas/{melhores[0]['cnae_slug']}/{mun_slug}"
+                    if melhores else None)})
+    total_empresas = sum(x['total'] for x in cnaes)
+    return render_template('empresas_hub.html', cnaes=cnaes,
+                           top_cidades=top_cidades,
+                           total_empresas=total_empresas,
+                           ga_id=GA_MEASUREMENT_ID)
+
+
+@app.route('/empresas/busca')
+def pseo_busca():
+    seg_slug = request.args.get('segmento', '').strip()
+    cidade = request.args.get('cidade', '').strip()
+    if seg_slug not in CNAE_POR_SLUG:
+        return redirect('/empresas')
+    if cidade:
+        agg = _pseo_agg()
+        alvo = slugify(cidade)
+        for c in agg['por_cnae'].get(seg_slug, {}).get('cidades', []):
+            if c['n'] >= PSEO_MIN_EMPRESAS and c['mun_slug'].startswith(alvo):
+                return redirect(f"/empresas/{seg_slug}/{c['mun_slug']}")
+    return redirect(f'/empresas/{seg_slug}')
+
+
+@app.route('/empresas/sobre-os-dados')
+def pseo_sobre_dados():
+    return render_template('empresas_sobre.html', ga_id=GA_MEASUREMENT_ID)
+
+
+@app.route('/empresas/<cnae_slug>')
+def pseo_cnae(cnae_slug):
+    seg = CNAE_POR_SLUG.get(cnae_slug)
+    if not seg:
+        return _pseo_404()
+    agg = _pseo_agg()
+    pc = agg['por_cnae'].get(cnae_slug)
+    if not pc or pc['total'] == 0:
+        return _pseo_404()
+    por_uf = {}
+    for c in pc['cidades']:
+        d = por_uf.setdefault(c['uf'], {'uf': c['uf'],
+                                        'uf_nome': UF_NOMES.get(c['uf'], c['uf']),
+                                        'total': 0, 'cidades': []})
+        d['total'] += c['n']
+        d['cidades'].append({**c, 'tem_pagina': c['n'] >= PSEO_MIN_EMPRESAS})
+    ufs = sorted(por_uf.values(), key=lambda d: -d['total'])
+    return render_template('empresas_cnae.html', seg=seg, ufs=ufs,
+                           total=pc['total'],
+                           cnae_fmt=cnae_formatado(seg['codigo']),
+                           ga_id=GA_MEASUREMENT_ID)
+
+
+@app.route('/empresas/<cnae_slug>/<mun_slug>')
+def pseo_cidade(cnae_slug, mun_slug):
+    seg = CNAE_POR_SLUG.get(cnae_slug)
+    if not seg:
+        return _pseo_404()
+    agg = _pseo_agg()
+    combo = agg['combos'].get((cnae_slug, mun_slug))
+    # QUALITY GATE: < 8 empresas -> 404
+    if not combo or combo['n'] < PSEO_MIN_EMPRESAS:
+        return _pseo_404()
+    n = combo['n']
+    mun, uf = combo['municipio'], combo['uf']
+    try:
+        pagina = max(1, int(request.args.get('pagina', 1)))
+    except (TypeError, ValueError):
+        pagina = 1
+    total_paginas = max(1, (n + PSEO_PAGE_SIZE - 1) // PSEO_PAGE_SIZE)
+    if pagina > total_paginas:
+        return _pseo_404()
+
+    rows = _pseo_query(
+        "SELECT razao_social, nome_fantasia, bairro, porte, data_abertura "
+        "FROM empresas_publicas WHERE cnae_principal = %s AND municipio = %s "
+        "AND uf = %s AND situacao = '02' "
+        "ORDER BY COALESCE(razao_social, nome_fantasia, cnpj_basico) "
+        "LIMIT %s OFFSET %s",
+        (combo['cnae'], mun, uf, PSEO_PAGE_SIZE,
+         (pagina - 1) * PSEO_PAGE_SIZE))
+    empresas = []
+    for r in rows:
+        empresas.append({
+            'nome': r['razao_social'] or r['nome_fantasia'] or 'Empresa sem razão social divulgada',
+            'fantasia': (r['nome_fantasia']
+                         if r['nome_fantasia'] and r['razao_social'] else None),
+            'bairro': r['bairro'] or '—',
+            'porte': PORTE_LABELS.get(str(r['porte'] or '00'), 'Não informado'),
+            'ano': str(r['data_abertura'])[:4] if r['data_abertura'] else '—',
+        })
+
+    stats = _pseo_stats(combo['cnae'], mun, uf)
+    vizinhos = [c for c in agg['por_cnae'][cnae_slug]['cidades']
+                if c['mun_slug'] != mun_slug and c['uf'] == uf][:2]
+    if len(vizinhos) < 2:
+        vizinhos = [c for c in agg['por_cnae'][cnae_slug]['cidades']
+                    if c['mun_slug'] != mun_slug][:2]
+    texto = _pseo_texto(seg, combo, stats, vizinhos)
+
+    # Links cruzados: 10 cidades do mesmo CNAE + 10 CNAEs da mesma cidade
+    links_cidades = [c for c in agg['por_cnae'][cnae_slug]['cidades']
+                     if c['mun_slug'] != mun_slug
+                     and c['n'] >= PSEO_MIN_EMPRESAS][:10]
+    links_cnaes = []
+    for c in agg['por_cidade'].get(mun_slug, []):
+        if c['cnae_slug'] != cnae_slug and c['n'] >= PSEO_MIN_EMPRESAS:
+            links_cnaes.append({**c, 'seg': CNAE_POR_SLUG[c['cnae_slug']]})
+    links_cnaes = links_cnaes[:10]
+
+    # FAQ com números reais
+    cnae_fmt = cnae_formatado(seg['codigo'])
+    faq = [
+        (f"Quantas empresas de {seg['nome']} existem em {mun}?",
+         f"Segundo os dados abertos do CNPJ da Receita Federal, {mun} - {uf} "
+         f"tem {n} empresas ativas de {seg['nome']} (CNAE {cnae_fmt}). "
+         f"Dessas, {stats['novas_5anos']} abriram nos últimos 5 anos."),
+        (f"Como conseguir os contatos dessas {n} empresas?",
+         f"Esta página mostra apenas dados cadastrais públicos. No TurboVenda, "
+         f"a IA enriquece cada uma das {n} empresas com telefone, e-mail e site "
+         f"localizados em fontes públicas, e gera mensagens de prospecção "
+         f"personalizadas. O plano grátis inclui 50 leads."),
+    ]
+
+    # Indexação: só tier >= 15 dentro do rollout gate; paginações nunca
+    indexavel = (pagina == 1 and n >= PSEO_MIN_INDEX
+                 and (cnae_slug, mun_slug) in agg['sitemap_set'])
+    robots_meta = 'index, follow' if indexavel else 'noindex, follow'
+    canonical = f'{_PSEO_BASE}/empresas/{cnae_slug}/{mun_slug}'
+
+    # JSON-LD (montado em Python -> sempre parseável)
+    ld_breadcrumb = json.dumps({
+        "@context": "https://schema.org", "@type": "BreadcrumbList",
+        "itemListElement": [
+            {"@type": "ListItem", "position": 1, "name": "Home",
+             "item": f"{_PSEO_BASE}/"},
+            {"@type": "ListItem", "position": 2, "name": "Empresas",
+             "item": f"{_PSEO_BASE}/empresas"},
+            {"@type": "ListItem", "position": 3, "name": seg['label'],
+             "item": f"{_PSEO_BASE}/empresas/{cnae_slug}"},
+            {"@type": "ListItem", "position": 4,
+             "name": f"{mun} - {uf}", "item": canonical},
+        ]}, ensure_ascii=False)
+    ld_itemlist = json.dumps({
+        "@context": "https://schema.org", "@type": "ItemList",
+        "name": f"Empresas de {seg['nome']} em {mun} - {uf}",
+        "numberOfItems": n,
+        "itemListElement": [
+            {"@type": "ListItem", "position": i + 1,
+             "item": {"@type": "Organization", "name": e['nome'],
+                      "address": {"@type": "PostalAddress",
+                                  "addressLocality": mun,
+                                  "addressRegion": uf,
+                                  "addressCountry": "BR"}}}
+            for i, e in enumerate(empresas[:10])
+        ]}, ensure_ascii=False)
+    ld_faq = json.dumps({
+        "@context": "https://schema.org", "@type": "FAQPage",
+        "mainEntity": [
+            {"@type": "Question", "name": q,
+             "acceptedAnswer": {"@type": "Answer", "text": a}}
+            for q, a in faq
+        ]}, ensure_ascii=False)
+
+    titulo = (f"Empresas de {seg['nome']} em {mun} - {uf} "
+              f"({n} ativas) | TurboVenda")
+    descricao = (f"Lista com {n} empresas ativas de {seg['nome']} em "
+                 f"{mun} - {uf}, com bairro, porte e ano de abertura. "
+                 f"Dados abertos do CNPJ. Prospecte com IA grátis.")
+    cta_url = (f"/cadastro?utm_source=pseo&utm_medium=organic"
+               f"&utm_campaign={cnae_slug}-{mun_slug}")
+
+    return render_template('empresas_cidade.html', seg=seg, combo=combo,
+                           n=n, municipio=mun, uf=uf,
+                           uf_nome=UF_NOMES.get(uf, uf),
+                           empresas=empresas, pagina=pagina,
+                           total_paginas=total_paginas, texto=texto,
+                           faq=faq, links_cidades=links_cidades,
+                           links_cnaes=links_cnaes, cnae_fmt=cnae_fmt,
+                           robots_meta=robots_meta, canonical=canonical,
+                           ld_breadcrumb=ld_breadcrumb,
+                           ld_itemlist=ld_itemlist, ld_faq=ld_faq,
+                           titulo=titulo, descricao=descricao,
+                           cta_url=cta_url, ga_id=GA_MEASUREMENT_ID)
 
 
 @app.route('/manifest.json')
