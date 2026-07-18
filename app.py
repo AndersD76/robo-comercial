@@ -224,6 +224,10 @@ def _init_public_schema_safe():
             "ON empresas_publicas (cnae_principal, uf, municipio)",
             "CREATE INDEX IF NOT EXISTS idx_emp_pub_uf_mun "
             "ON empresas_publicas (uf, municipio)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+            "trial_email_3d_sent BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+            "trial_email_expired_sent BOOLEAN DEFAULT FALSE",
         ]:
             try:
                 c.execute(stmt)
@@ -2194,13 +2198,14 @@ def dashboard():
     schema = f'emp_{uid}'
     user = get_current_user() or {'id': uid, 'schema_name': schema,
                                    'empresa_nome': '', 'email': ''}
-    # Redirecionar para tela de trial expirado
+    # Redirecionar para tela de trial expirado (exceto se veio para upgrade)
+    upgrade_param = request.args.get('upgrade')
     if (user.get('plano') or 'trial') == 'trial' and user.get('plano_expira'):
         from datetime import datetime
         _exp = user['plano_expira']
         if isinstance(_exp, str):
             _exp = datetime.fromisoformat(_exp)
-        if _exp < datetime.now():
+        if _exp < datetime.now() and not upgrade_param:
             return redirect(url_for('trial_expirado'))
     if not user.get('schema_name'):
         user['schema_name'] = schema
@@ -6258,6 +6263,232 @@ def admin_api_payments():
         return jsonify(result)
     except Exception as e:
         print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+
+
+# =============================================================================
+# CRON — Trial lifecycle emails
+# =============================================================================
+
+CRON_SECRET = os.environ.get('CRON_SECRET', '')
+
+APP_URL = os.environ.get('APP_URL', 'https://turbovenda.com.br')
+
+
+def _send_system_email(to_email, subject, html):
+    """Envia email de sistema via Resend API (usa RESEND_API_KEY global)."""
+    resend_key = os.environ.get('RESEND_API_KEY', '')
+    sender_email = os.environ.get('EMAIL_FROM', 'contato@turbovenda.com.br')
+    if not resend_key:
+        print('[CRON] RESEND_API_KEY nao configurada — email nao enviado', flush=True)
+        return False
+    try:
+        import requests as http
+        payload = {
+            'from': f'TurboVenda <{sender_email}>',
+            'to': [to_email],
+            'subject': subject,
+            'html': html,
+        }
+        r = http.post('https://api.resend.com/emails',
+                      headers={'Authorization': f'Bearer {resend_key}',
+                               'Content-Type': 'application/json'},
+                      json=payload,
+                      timeout=15)
+        if r.status_code in (200, 201):
+            print(f'[CRON] Email enviado para {to_email}: {subject}', flush=True)
+            return True
+        else:
+            print(f'[CRON] Resend erro {r.status_code}: {r.text}', flush=True)
+            return False
+    except Exception as e:
+        print(f'[CRON] Erro ao enviar email: {e}', flush=True)
+        return False
+
+
+def _trial_email_3d_html(empresa_nome, total_leads, upgrade_url):
+    """HTML do email '3 dias restantes no trial'."""
+    return f'''<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#1e293b">
+  <div style="text-align:center;margin-bottom:32px">
+    <h1 style="color:#6366f1;font-size:24px;margin:0">TurboVenda</h1>
+  </div>
+  <p style="font-size:16px;line-height:1.6">Ola, <strong>{empresa_nome}</strong>.</p>
+  <p style="font-size:16px;line-height:1.6">
+    Seu periodo de teste do TurboVenda expira em <strong>3 dias</strong>.
+  </p>
+  <div style="background:#f8fafc;border-left:4px solid #6366f1;padding:16px 20px;margin:24px 0;border-radius:0 8px 8px 0">
+    <p style="margin:0 0 8px;font-size:15px;color:#475569">Ate agora voce gerou:</p>
+    <p style="margin:0;font-size:28px;font-weight:700;color:#6366f1">{total_leads} leads</p>
+  </div>
+  <p style="font-size:16px;line-height:1.6">
+    Ao expirar o trial, voce perde acesso a prospeccao automatizada, busca de leads por IA
+    e todas as ferramentas de outreach. Seus dados ficam salvos, mas nao sera possivel
+    gerar novos leads ou enviar emails.
+  </p>
+  <div style="text-align:center;margin:32px 0">
+    <a href="{upgrade_url}" style="display:inline-block;background:#6366f1;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600">
+      Fazer upgrade agora
+    </a>
+  </div>
+  <p style="font-size:14px;color:#94a3b8;line-height:1.5">
+    Tem duvidas? Responda este email — nossa equipe responde em ate 24h.
+  </p>
+  <hr style="border:none;border-top:1px solid #e2e8f0;margin:32px 0">
+  <p style="font-size:12px;color:#94a3b8;text-align:center">
+    TurboVenda — Prospeccao comercial inteligente
+  </p>
+</div>'''
+
+
+def _trial_email_expired_html(empresa_nome, total_leads, upgrade_url):
+    """HTML do email 'trial expirou'."""
+    return f'''<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#1e293b">
+  <div style="text-align:center;margin-bottom:32px">
+    <h1 style="color:#6366f1;font-size:24px;margin:0">TurboVenda</h1>
+  </div>
+  <p style="font-size:16px;line-height:1.6">Ola, <strong>{empresa_nome}</strong>.</p>
+  <p style="font-size:16px;line-height:1.6">
+    Seu periodo de teste do TurboVenda <strong>expirou</strong>.
+  </p>
+  <div style="background:#f8fafc;border-left:4px solid #6366f1;padding:16px 20px;margin:24px 0;border-radius:0 8px 8px 0">
+    <p style="margin:0 0 8px;font-size:15px;color:#475569">Durante o trial voce construiu:</p>
+    <p style="margin:0;font-size:28px;font-weight:700;color:#6366f1">{total_leads} leads</p>
+    <p style="margin:8px 0 0;font-size:14px;color:#64748b">Todos os seus dados continuam salvos.</p>
+  </div>
+  <p style="font-size:16px;line-height:1.6">
+    Para voltar a prospectar e acessar seus leads, ative um plano.
+    Voce nao perde nenhum dado — tudo continua exatamente onde parou.
+  </p>
+  <div style="text-align:center;margin:32px 0">
+    <a href="{upgrade_url}" style="display:inline-block;background:#6366f1;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600">
+      Reativar minha conta
+    </a>
+  </div>
+  <p style="font-size:14px;color:#94a3b8;line-height:1.5">
+    Precisa de ajuda para escolher o plano certo? Responda este email.
+  </p>
+  <hr style="border:none;border-top:1px solid #e2e8f0;margin:32px 0">
+  <p style="font-size:12px;color:#94a3b8;text-align:center">
+    TurboVenda — Prospeccao comercial inteligente
+  </p>
+</div>'''
+
+
+def _get_lead_count(schema):
+    """Retorna total de leads do user (0 se erro)."""
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute('SELECT COUNT(*) AS n FROM empresas')
+        n = c.fetchone()['n']
+        conn.close()
+        return n
+    except Exception:
+        return 0
+
+
+@app.route('/api/cron/trial-emails')
+@limiter.limit("6 per hour")
+def cron_trial_emails():
+    """Endpoint chamado por cron externo para enviar emails do ciclo de trial.
+
+    Protegido por CRON_SECRET. Envia:
+    - Aviso de 3 dias restantes (plano_expira entre 2 e 4 dias no futuro)
+    - Aviso de trial expirado (plano_expira entre ontem e anteontem)
+
+    Janelas de 2 dias em vez de exatas para tolerar cron que roda 1x/dia.
+    """
+    token = request.args.get('token', '') or request.headers.get('X-Cron-Secret', '')
+    if not CRON_SECRET or not token or not _hmac.compare_digest(token, CRON_SECRET):
+        return jsonify({'error': 'Nao autorizado'}), 401
+
+    if not DATABASE_URL:
+        return jsonify({'error': 'DATABASE_URL nao configurado'}), 500
+
+    upgrade_url = f'{APP_URL}/dashboard?upgrade=starter'
+    sent_3d = 0
+    sent_expired = 0
+    errors = 0
+
+    try:
+        conn = _conn()
+        c = conn.cursor()
+
+        # --- Usuarios cujo trial expira em 2-4 dias (janela para "3 dias") ---
+        c.execute("""
+            SELECT id, email, empresa_nome, schema_name, plano_expira
+            FROM users
+            WHERE plano = 'trial'
+              AND plano_expira IS NOT NULL
+              AND plano_expira > NOW()
+              AND plano_expira <= NOW() + INTERVAL '4 days'
+              AND plano_expira > NOW() + INTERVAL '2 days'
+              AND ativo = TRUE
+              AND (trial_email_3d_sent IS NULL OR trial_email_3d_sent = FALSE)
+        """)
+        users_3d = c.fetchall()
+
+        for u in users_3d:
+            schema = u.get('schema_name') or f'emp_{u["id"]}'
+            total = _get_lead_count(schema)
+            empresa = u.get('empresa_nome') or 'Equipe'
+            html = _trial_email_3d_html(empresa, total, upgrade_url)
+            ok = _send_system_email(
+                u['email'],
+                'Seu trial do TurboVenda expira em 3 dias',
+                html
+            )
+            if ok:
+                c.execute('UPDATE users SET trial_email_3d_sent = TRUE WHERE id = %s',
+                          (u['id'],))
+                conn.commit()
+                sent_3d += 1
+            else:
+                errors += 1
+
+        # --- Usuarios cujo trial expirou entre ontem e anteontem ---
+        c.execute("""
+            SELECT id, email, empresa_nome, schema_name, plano_expira
+            FROM users
+            WHERE plano = 'trial'
+              AND plano_expira IS NOT NULL
+              AND plano_expira < NOW()
+              AND plano_expira >= NOW() - INTERVAL '2 days'
+              AND ativo = TRUE
+              AND (trial_email_expired_sent IS NULL OR trial_email_expired_sent = FALSE)
+        """)
+        users_expired = c.fetchall()
+
+        for u in users_expired:
+            schema = u.get('schema_name') or f'emp_{u["id"]}'
+            total = _get_lead_count(schema)
+            empresa = u.get('empresa_nome') or 'Equipe'
+            html = _trial_email_expired_html(empresa, total, upgrade_url)
+            ok = _send_system_email(
+                u['email'],
+                'Seu trial do TurboVenda expirou',
+                html
+            )
+            if ok:
+                c.execute('UPDATE users SET trial_email_expired_sent = TRUE WHERE id = %s',
+                          (u['id'],))
+                conn.commit()
+                sent_expired += 1
+            else:
+                errors += 1
+
+        conn.close()
+    except Exception as e:
+        print(f'[CRON] Erro geral: {e}', flush=True)
+        return jsonify({'error': 'Erro interno'}), 500
+
+    result = {
+        'ok': True,
+        'sent_3d_warning': sent_3d,
+        'sent_expired': sent_expired,
+        'errors': errors,
+    }
+    print(f'[CRON] trial-emails concluido: {result}', flush=True)
+    return jsonify(result)
 
 
 # =============================================================================

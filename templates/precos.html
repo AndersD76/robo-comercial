@@ -203,5 +203,37 @@
   </div>
 </footer>
 <script>if(typeof gtag==='function')gtag('event','view_pricing');</script>
+<script>
+// Se o usuario ja esta logado, redirecionar CTAs para o dashboard com modal de upgrade
+(async function(){
+  try{
+    const r=await fetch('/api/meu-plano');
+    if(!r.ok) return; // nao logado — manter links para /cadastro
+    const d=await r.json();
+    // Usuario logado: atualizar CTAs dos planos pagos
+    const ctaStarter=document.querySelector('.plan.featured .btn-plan');
+    const ctaPro=document.querySelector('.plan:last-child .btn-plan');
+    if(ctaStarter){
+      ctaStarter.href='/dashboard?upgrade=starter';
+      ctaStarter.textContent='Assinar Starter por R$97/mes';
+    }
+    if(ctaPro){
+      ctaPro.href='/dashboard?upgrade=pro';
+      ctaPro.textContent='Assinar Pro';
+    }
+    // Atualizar nav: trocar "Entrar" e "Comecar gratis" por "Meu Painel"
+    const navLinks=document.querySelector('.nav-links');
+    if(navLinks){
+      const loginLink=navLinks.querySelector('a[href="/login"]');
+      const cadastroLink=navLinks.querySelector('a[href="/cadastro"]');
+      if(loginLink) loginLink.remove();
+      if(cadastroLink){
+        cadastroLink.href='/dashboard';
+        cadastroLink.textContent='Meu Painel';
+      }
+    }
+  }catch(e){/* nao logado ou erro de rede — manter links padrao */}
+})();
+</script>
 </body>
 </html>
