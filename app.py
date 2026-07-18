@@ -6279,7 +6279,7 @@ def _send_system_email(to_email, subject, html):
     resend_key = os.environ.get('RESEND_API_KEY', '')
     sender_email = os.environ.get('EMAIL_FROM', 'contato@turbovenda.com.br')
     if not resend_key:
-        print('[CRON] RESEND_API_KEY nao configurada — email nao enviado', flush=True)
+        print('[CRON] RESEND_API_KEY não configurada — email não enviado', flush=True)
         return False
     try:
         import requests as http
@@ -6311,17 +6311,17 @@ def _trial_email_3d_html(empresa_nome, total_leads, upgrade_url):
   <div style="text-align:center;margin-bottom:32px">
     <h1 style="color:#6366f1;font-size:24px;margin:0">TurboVenda</h1>
   </div>
-  <p style="font-size:16px;line-height:1.6">Ola, <strong>{empresa_nome}</strong>.</p>
+  <p style="font-size:16px;line-height:1.6">Olá, <strong>{empresa_nome}</strong>.</p>
   <p style="font-size:16px;line-height:1.6">
-    Seu periodo de teste do TurboVenda expira em <strong>3 dias</strong>.
+    Seu período de teste do TurboVenda expira em <strong>3 dias</strong>.
   </p>
   <div style="background:#f8fafc;border-left:4px solid #6366f1;padding:16px 20px;margin:24px 0;border-radius:0 8px 8px 0">
-    <p style="margin:0 0 8px;font-size:15px;color:#475569">Ate agora voce gerou:</p>
+    <p style="margin:0 0 8px;font-size:15px;color:#475569">Até agora você gerou:</p>
     <p style="margin:0;font-size:28px;font-weight:700;color:#6366f1">{total_leads} leads</p>
   </div>
   <p style="font-size:16px;line-height:1.6">
-    Ao expirar o trial, voce perde acesso a prospeccao automatizada, busca de leads por IA
-    e todas as ferramentas de outreach. Seus dados ficam salvos, mas nao sera possivel
+    Ao expirar o trial, você perde acesso à prospecção automatizada, busca de leads por IA
+    e todas as ferramentas de outreach. Seus dados ficam salvos, mas não será possível
     gerar novos leads ou enviar emails.
   </p>
   <div style="text-align:center;margin:32px 0">
@@ -6330,11 +6330,11 @@ def _trial_email_3d_html(empresa_nome, total_leads, upgrade_url):
     </a>
   </div>
   <p style="font-size:14px;color:#94a3b8;line-height:1.5">
-    Tem duvidas? Responda este email — nossa equipe responde em ate 24h.
+    Tem dúvidas? Responda este email — nossa equipe responde em até 24h.
   </p>
   <hr style="border:none;border-top:1px solid #e2e8f0;margin:32px 0">
   <p style="font-size:12px;color:#94a3b8;text-align:center">
-    TurboVenda — Prospeccao comercial inteligente
+    TurboVenda — Prospecção comercial inteligente
   </p>
 </div>'''
 
@@ -6345,18 +6345,18 @@ def _trial_email_expired_html(empresa_nome, total_leads, upgrade_url):
   <div style="text-align:center;margin-bottom:32px">
     <h1 style="color:#6366f1;font-size:24px;margin:0">TurboVenda</h1>
   </div>
-  <p style="font-size:16px;line-height:1.6">Ola, <strong>{empresa_nome}</strong>.</p>
+  <p style="font-size:16px;line-height:1.6">Olá, <strong>{empresa_nome}</strong>.</p>
   <p style="font-size:16px;line-height:1.6">
-    Seu periodo de teste do TurboVenda <strong>expirou</strong>.
+    Seu período de teste do TurboVenda <strong>expirou</strong>.
   </p>
   <div style="background:#f8fafc;border-left:4px solid #6366f1;padding:16px 20px;margin:24px 0;border-radius:0 8px 8px 0">
-    <p style="margin:0 0 8px;font-size:15px;color:#475569">Durante o trial voce construiu:</p>
+    <p style="margin:0 0 8px;font-size:15px;color:#475569">Durante o trial você construiu:</p>
     <p style="margin:0;font-size:28px;font-weight:700;color:#6366f1">{total_leads} leads</p>
     <p style="margin:8px 0 0;font-size:14px;color:#64748b">Todos os seus dados continuam salvos.</p>
   </div>
   <p style="font-size:16px;line-height:1.6">
     Para voltar a prospectar e acessar seus leads, ative um plano.
-    Voce nao perde nenhum dado — tudo continua exatamente onde parou.
+    Você não perde nenhum dado — tudo continua exatamente onde parou.
   </p>
   <div style="text-align:center;margin:32px 0">
     <a href="{upgrade_url}" style="display:inline-block;background:#6366f1;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600">
@@ -6368,7 +6368,7 @@ def _trial_email_expired_html(empresa_nome, total_leads, upgrade_url):
   </p>
   <hr style="border:none;border-top:1px solid #e2e8f0;margin:32px 0">
   <p style="font-size:12px;color:#94a3b8;text-align:center">
-    TurboVenda — Prospeccao comercial inteligente
+    TurboVenda — Prospecção comercial inteligente
   </p>
 </div>'''
 
@@ -6399,10 +6399,10 @@ def cron_trial_emails():
     """
     token = request.args.get('token', '') or request.headers.get('X-Cron-Secret', '')
     if not CRON_SECRET or not token or not _hmac.compare_digest(token, CRON_SECRET):
-        return jsonify({'error': 'Nao autorizado'}), 401
+        return jsonify({'error': 'Não autorizado'}), 401
 
     if not DATABASE_URL:
-        return jsonify({'error': 'DATABASE_URL nao configurado'}), 500
+        return jsonify({'error': 'DATABASE_URL não configurado'}), 500
 
     upgrade_url = f'{APP_URL}/dashboard?upgrade=starter'
     sent_3d = 0
@@ -6487,7 +6487,7 @@ def cron_trial_emails():
         'sent_expired': sent_expired,
         'errors': errors,
     }
-    print(f'[CRON] trial-emails concluido: {result}', flush=True)
+    print(f'[CRON] trial-emails concluído: {result}', flush=True)
     return jsonify(result)
 
 
