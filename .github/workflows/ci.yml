@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Verify syntax
+        run: python -c "import py_compile; py_compile.compile('app.py', doraise=True)"
+
+      - name: Run tests
+        env:
+          DATABASE_URL: ""
+        run: pytest tests/ -v --tb=short
+
+      - name: Validate templates
+        run: |
+          echo "Checking that all .html template files exist and are non-empty..."
+          found=0
+          for f in templates/*.html; do
+            [ -e "$f" ] || continue
+            if [ ! -s "$f" ]; then
+              echo "FAIL: $f is empty"
+              exit 1
+            fi
+            echo "  OK: $f"
+            found=$((found + 1))
+          done
+          echo "Validated $found template(s)."
