@@ -42,7 +42,7 @@ import zipfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pseo_data import CNAE_CODIGOS, UFS_INGEST  # noqa: E402
 
-BASE_URL = 'https://arquivos.receitafederal.gov.br/dados/cnpj/dados_abertos_cnpj/'
+BASE_URL = 'https://dados-abertos-rf-cnpj.casadosdados.com.br/arquivos/'
 BATCH = 5000
 
 # Posições no CSV Estabelecimentos (layout oficial dados abertos CNPJ)
@@ -92,45 +92,77 @@ class PgDB:
     def __init__(self, dsn):
         import psycopg2
         import psycopg2.extras
+        self._psycopg2 = psycopg2
         self._extras = psycopg2.extras
+        self._dsn = dsn
         self.conn = psycopg2.connect(dsn)
 
+    def _reconnect(self):
+        try:
+            self.conn.close()
+        except Exception:
+            pass
+        import time
+        for attempt in range(5):
+            try:
+                self.conn = self._psycopg2.connect(self._dsn)
+                return
+            except Exception:
+                time.sleep(2 ** attempt)
+        raise RuntimeError('Falha ao reconectar ao Postgres após 5 tentativas')
+
+    def _exec_with_retry(self, fn, max_retries=3):
+        for attempt in range(max_retries):
+            try:
+                return fn()
+            except (self._psycopg2.OperationalError,
+                    self._psycopg2.InterfaceError):
+                print(f'[db] conexão perdida, reconectando (tentativa {attempt + 1})...')
+                self._reconnect()
+        return fn()
+
     def ensure_schema(self):
-        with self.conn.cursor() as c:
-            c.execute(DDL_PG)
-            for idx in INDEXES:
-                c.execute(idx)
-        self.conn.commit()
+        def _do():
+            with self.conn.cursor() as c:
+                c.execute(DDL_PG)
+                for idx in INDEXES:
+                    c.execute(idx)
+            self.conn.commit()
+        self._exec_with_retry(_do)
 
     def insert_batch(self, rows):
-        """rows: (cnpj_basico, razao, fantasia, municipio, uf, bairro, cnae, porte, data, situacao)"""
         if not rows:
             return
-        with self.conn.cursor() as c:
-            self._extras.execute_values(
-                c,
-                'INSERT INTO empresas_publicas (cnpj_basico, razao_social, nome_fantasia, '
-                'municipio, uf, bairro, cnae_principal, porte, data_abertura, situacao) '
-                'VALUES %s ON CONFLICT (cnpj_basico) DO NOTHING',
-                rows)
-        self.conn.commit()
+        def _do():
+            with self.conn.cursor() as c:
+                self._extras.execute_values(
+                    c,
+                    'INSERT INTO empresas_publicas (cnpj_basico, razao_social, nome_fantasia, '
+                    'municipio, uf, bairro, cnae_principal, porte, data_abertura, situacao) '
+                    'VALUES %s ON CONFLICT (cnpj_basico) DO NOTHING',
+                    rows)
+            self.conn.commit()
+        self._exec_with_retry(_do)
 
     def update_razao_batch(self, rows):
-        """rows: (cnpj_basico, razao_social, porte)"""
         if not rows:
             return
-        with self.conn.cursor() as c:
-            self._extras.execute_values(
-                c,
-                'UPDATE empresas_publicas AS e SET razao_social = v.rs, porte = v.pt '
-                'FROM (VALUES %s) AS v(cb, rs, pt) WHERE e.cnpj_basico = v.cb',
-                rows)
-        self.conn.commit()
+        def _do():
+            with self.conn.cursor() as c:
+                self._extras.execute_values(
+                    c,
+                    'UPDATE empresas_publicas AS e SET razao_social = v.rs, porte = v.pt '
+                    'FROM (VALUES %s) AS v(cb, rs, pt) WHERE e.cnpj_basico = v.cb',
+                    rows)
+            self.conn.commit()
+        self._exec_with_retry(_do)
 
     def count(self):
-        with self.conn.cursor() as c:
-            c.execute('SELECT COUNT(*) FROM empresas_publicas')
-            return c.fetchone()[0]
+        def _do():
+            with self.conn.cursor() as c:
+                c.execute('SELECT COUNT(*) FROM empresas_publicas')
+                return c.fetchone()[0]
+        return self._exec_with_retry(_do)
 
     def close(self):
         self.conn.close()
@@ -196,10 +228,10 @@ def _http():
     return s
 
 def latest_month_folder(session):
-    """Descobre a pasta AAAA-MM mais recente no índice do site da Receita."""
+    """Descobre a pasta mais recente no índice (AAAA-MM ou AAAA-MM-DD)."""
     r = session.get(BASE_URL, timeout=60)
     r.raise_for_status()
-    months = sorted(set(re.findall(r'href="(\d{4}-\d{2})/"', r.text)))
+    months = sorted(set(re.findall(r'href="(\d{4}-\d{2}(?:-\d{2})?)/"', r.text)))
     if not months:
         raise RuntimeError('Nenhuma pasta AAAA-MM encontrada em ' + BASE_URL)
     return months[-1]
@@ -211,21 +243,33 @@ def list_zip_names(session, month):
     return sorted(set(re.findall(r'href="([^"]+\.zip)"', r.text)))
 
 
-def download(session, month, name, dest_dir):
+def download(session, month, name, dest_dir, max_retries=5):
+    import time
     os.makedirs(dest_dir, exist_ok=True)
     dest = os.path.join(dest_dir, name)
     if os.path.exists(dest) and os.path.getsize(dest) > 0:
         print(f'[down] {name} já existe, pulando')
         return dest
     url = f'{BASE_URL}{month}/{name}'
-    print(f'[down] {url}')
-    with session.get(url, stream=True, timeout=120) as r:
-        r.raise_for_status()
-        tmp = dest + '.part'
-        with open(tmp, 'wb') as f:
-            for chunk in r.iter_content(chunk_size=1 << 20):
-                f.write(chunk)
-        os.replace(tmp, dest)
+    for attempt in range(max_retries):
+        try:
+            print(f'[down] {url}' + (f' (tentativa {attempt + 1})' if attempt else ''))
+            with session.get(url, stream=True, timeout=300) as r:
+                r.raise_for_status()
+                tmp = dest + '.part'
+                with open(tmp, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=1 << 20):
+                        f.write(chunk)
+                os.replace(tmp, dest)
+            return dest
+        except Exception as e:
+            print(f'[down] ERRO: {e}')
+            if attempt < max_retries - 1:
+                wait = 10 * (attempt + 1)
+                print(f'[down] aguardando {wait}s antes de tentar novamente...')
+                time.sleep(wait)
+            else:
+                raise
     return dest
 
 

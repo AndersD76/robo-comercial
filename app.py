@@ -21,8 +21,9 @@ import psycopg2
 import psycopg2.extras
 from psycopg2 import sql as psql
 from functools import wraps
-from flask import (Flask, jsonify, make_response, redirect, render_template,
-                   request, send_file, session, url_for)
+import logging
+from flask import (Flask, abort, jsonify, make_response, redirect,
+                   render_template, request, send_file, session, url_for)
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
@@ -30,6 +31,7 @@ from pseo_data import (CNAE_B2B, CNAE_POR_CODIGO, CNAE_POR_SLUG,
                        PORTE_LABELS, UF_NOMES, cnae_formatado, slugify)
 
 app = Flask(__name__)
+logger = logging.getLogger(__name__)
 
 _secret = os.environ.get('SECRET_KEY', '')
 if not _secret or _secret == 'mv-saas-2025-change-in-prod':
@@ -43,7 +45,7 @@ app.config['PREFERRED_URL_SCHEME'] = 'https'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['PERMANENT_SESSION_LIFETIME'] = 86400
+app.config['PERMANENT_SESSION_LIFETIME'] = _dt.timedelta(hours=8)
 
 from werkzeug.middleware.proxy_fix import ProxyFix
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
@@ -103,7 +105,6 @@ def _check_csrf():
         return
     token = request.form.get('_csrf') or request.headers.get('X-CSRF-Token', '')
     if not token or not _hmac.compare_digest(token, session.get('_csrf', '')):
-        from flask import abort
         abort(403)
 
 
@@ -147,7 +148,8 @@ def _internal_error(e):
 
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 if not DATABASE_URL:
-    print('[FATAL] DATABASE_URL não configurado — defina a variável de ambiente')
+    print('[FATAL] DATABASE_URL não configurado — defina a variável de ambiente', flush=True)
+    sys.exit(1)
 if DATABASE_URL.startswith('psql://'):
     DATABASE_URL = 'postgresql://' + DATABASE_URL[7:]
 elif DATABASE_URL.startswith('postgres://'):
@@ -160,6 +162,7 @@ _procs: dict = {}
 def _init_public_schema_safe():
     if not DATABASE_URL:
         return
+    conn = None
     try:
         conn = psycopg2.connect(DATABASE_URL,
                                 cursor_factory=psycopg2.extras.RealDictCursor)
@@ -236,9 +239,14 @@ def _init_public_schema_safe():
         # Set users as pro
         c.execute("UPDATE users SET plano = 'pro' WHERE email IN ('suporte@pcmonitor.com.br', 'comercial1@pili.ind.br') AND plano != 'pro'")
         conn.commit()
-        conn.close()
     except Exception as e:
         print(f'[startup] init_public_schema: {e}')
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 _init_public_schema_safe()
 
@@ -255,12 +263,21 @@ def _serialize_row(row: dict) -> dict:
     return row
 
 
+def _safe_sql_name(name: str) -> bool:
+    """Valida que um nome SQL contem apenas alfanumerico e underscore."""
+    return bool(name) and bool(re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', name))
+
+
 def _conn(schema=None):
     conn = psycopg2.connect(DATABASE_URL,
                             cursor_factory=psycopg2.extras.RealDictCursor)
     if schema:
+        if not _safe_sql_name(schema):
+            conn.close()
+            raise ValueError(f'Schema invalido: {schema}')
         with conn.cursor() as c:
-            c.execute('SET search_path TO %s, public', (schema,))
+            c.execute(psql.SQL('SET search_path TO {}, public').format(
+                psql.Identifier(schema)))
         conn.commit()
     return conn
 
@@ -268,6 +285,7 @@ def _conn(schema=None):
 def _init_public_schema():
     if not DATABASE_URL:
         return
+    conn = None
     try:
         conn = _conn()
         c = conn.cursor()
@@ -292,20 +310,25 @@ def _init_public_schema():
             criado_em TIMESTAMP DEFAULT NOW()
         )""")
         conn.commit()
-        conn.close()
     except Exception as e:
         print(f'[init_public] erro: {e}')
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def _init_user_schema(schema: str):
     if not re.match(r'^emp_\d+$', schema):
         raise ValueError(f'Schema inválido: {schema}')
     conn = _conn()
-    c = conn.cursor()
-    c.execute(psql.SQL('CREATE SCHEMA IF NOT EXISTS {}').format(psql.Identifier(schema)))
-    c.execute('SET search_path TO %s, public', (schema,))
-    conn.commit()
-    c.execute("""CREATE TABLE IF NOT EXISTS empresas (
+    try:
+        c = conn.cursor()
+        c.execute(psql.SQL('CREATE SCHEMA IF NOT EXISTS {}').format(psql.Identifier(schema)))
+        c.execute('SET search_path TO %s, public', (schema,))
+        c.execute("""CREATE TABLE IF NOT EXISTS empresas (
         id BIGSERIAL PRIMARY KEY, cnpj TEXT UNIQUE,
         razao_social TEXT, nome_fantasia TEXT, segmento TEXT,
         porte TEXT, funcionarios TEXT, endereco TEXT, cidade TEXT, estado TEXT,
@@ -315,151 +338,152 @@ def _init_user_schema(schema: str):
         status TEXT DEFAULT 'novo', demo_agendado TIMESTAMP,
         demo_status TEXT, email_enviado TIMESTAMP,
         observacoes TEXT
-    )""")
-    conn.commit()
-    c.execute("""CREATE TABLE IF NOT EXISTS contatos (
-        id BIGSERIAL PRIMARY KEY, empresa_id BIGINT REFERENCES empresas(id),
-        nome TEXT, cargo TEXT, telefone TEXT, whatsapp TEXT,
-        email TEXT, linkedin TEXT, decisor INTEGER DEFAULT 0
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS interacoes (
-        id BIGSERIAL PRIMARY KEY, empresa_id BIGINT REFERENCES empresas(id),
-        contato_id BIGINT REFERENCES contatos(id),
-        canal TEXT, tipo TEXT, mensagem TEXT,
-        enviado_em TIMESTAMP DEFAULT NOW(),
-        respondeu INTEGER DEFAULT 0, resposta TEXT, respondido_em TIMESTAMP
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS leads_linkedin (
-        id BIGSERIAL PRIMARY KEY, nome TEXT, cargo TEXT, empresa TEXT,
-        url_perfil TEXT UNIQUE, termo_busca TEXT,
-        status TEXT DEFAULT 'encontrado', encontrado_em TIMESTAMP DEFAULT NOW(),
-        conexao_em TIMESTAMP, dm_enviada_em TIMESTAMP,
-        respondeu INTEGER DEFAULT 0, ultima_resposta TEXT, demo_status TEXT
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS buscas (
-        id BIGSERIAL PRIMARY KEY, termo TEXT, fonte TEXT,
-        resultados INTEGER DEFAULT 0, executado_em TIMESTAMP DEFAULT NOW()
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS acoes_diarias (
-        id BIGSERIAL PRIMARY KEY, data DATE DEFAULT CURRENT_DATE,
-        tipo TEXT, quantidade INTEGER DEFAULT 0, UNIQUE(data, tipo)
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS logs (
-        id BIGSERIAL PRIMARY KEY, timestamp TIMESTAMP DEFAULT NOW(),
-        tipo TEXT, mensagem TEXT, detalhes TEXT
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS atividades (
-        id BIGSERIAL PRIMARY KEY,
-        empresa_id BIGINT REFERENCES empresas(id) ON DELETE CASCADE,
-        tipo TEXT,
-        descricao TEXT,
-        dados JSONB,
-        criado_em TIMESTAMP DEFAULT NOW()
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS tarefas (
-        id BIGSERIAL PRIMARY KEY,
-        empresa_id BIGINT REFERENCES empresas(id) ON DELETE CASCADE,
-        tipo TEXT,
-        descricao TEXT,
-        data_vencimento TIMESTAMP,
-        concluida BOOLEAN DEFAULT FALSE,
-        concluida_em TIMESTAMP,
-        criado_em TIMESTAMP DEFAULT NOW()
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS execucao (
-        id INTEGER PRIMARY KEY, status TEXT DEFAULT 'parado',
-        ultima_execucao TIMESTAMP, modo TEXT DEFAULT 'busca'
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS bot_config (
-        id           SERIAL PRIMARY KEY,
-        empresa_nome TEXT, website TEXT, descricao TEXT,
-        termos_busca JSONB DEFAULT '[]',
-        linkedin_email TEXT, linkedin_password TEXT,
-        linkedin_cargos JSONB DEFAULT '[]',
-        msg_inicial TEXT,
-        email_assunto_padrao TEXT,
-        email_html_template TEXT,
-        email_remetente TEXT,
-        email_remetente_nome TEXT,
-        resend_api_key TEXT,
-        smtp_host TEXT, smtp_port INTEGER DEFAULT 587,
-        smtp_user TEXT, smtp_password TEXT,
-        serper_api_key TEXT,
-        horario_inicio INTEGER DEFAULT 9,
-        horario_fim INTEGER DEFAULT 18,
-        duracao_reuniao INTEGER DEFAULT 30,
-        dias_semana TEXT DEFAULT '1,2,3,4,5',
-        atualizado_em TIMESTAMP DEFAULT NOW()
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS agenda (
-        id BIGSERIAL PRIMARY KEY,
-        empresa_id BIGINT REFERENCES empresas(id) ON DELETE SET NULL,
-        titulo TEXT NOT NULL,
-        descricao TEXT,
-        data_inicio TIMESTAMP NOT NULL,
-        data_fim TIMESTAMP,
-        tipo TEXT DEFAULT 'reuniao',
-        local TEXT,
-        concluido BOOLEAN DEFAULT FALSE,
-        criado_em TIMESTAMP DEFAULT NOW()
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS sequencias (
-        id BIGSERIAL PRIMARY KEY,
-        nome TEXT NOT NULL,
-        passos JSONB DEFAULT '[]',
-        ativo BOOLEAN DEFAULT TRUE,
-        criado_em TIMESTAMP DEFAULT NOW(),
-        atualizado_em TIMESTAMP DEFAULT NOW()
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS sequencia_leads (
-        id BIGSERIAL PRIMARY KEY,
-        sequencia_id BIGINT REFERENCES sequencias(id) ON DELETE CASCADE,
-        empresa_id BIGINT REFERENCES empresas(id) ON DELETE CASCADE,
-        passo_atual INTEGER DEFAULT 0,
-        proximo_envio TIMESTAMP,
-        status TEXT DEFAULT 'ativo',
-        iniciado_em TIMESTAMP DEFAULT NOW(),
-        atualizado_em TIMESTAMP DEFAULT NOW(),
-        UNIQUE(sequencia_id, empresa_id)
-    )""")
-    c.execute("INSERT INTO execucao (id) VALUES (1) ON CONFLICT DO NOTHING")
-    conn.commit()
-    # Migrations para schemas antigos
-    for stmt in [
-        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS observacoes TEXT",
-        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS wa_enviado TIMESTAMP",
-        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS agenda_token TEXT",
-        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS enriquecido BOOLEAN DEFAULT FALSE",
-        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS enriquecido_em TIMESTAMP",
-        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS natureza_juridica TEXT",
-        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS situacao_cadastral TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_remetente TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_remetente_nome TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS resend_api_key TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_host TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_port INTEGER DEFAULT 587",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_user TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS serper_api_key TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS brave_api_key TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS google_cse_key TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS google_cse_cx TEXT",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_inicio INTEGER DEFAULT 9",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_fim INTEGER DEFAULT 18",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS duracao_reuniao INTEGER DEFAULT 30",
-        "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS dias_semana TEXT DEFAULT '1,2,3,4,5'",
-        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS email_aberto TIMESTAMP",
-        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS email_clicado TIMESTAMP",
-        "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS email_track_token TEXT",
-        "ALTER TABLE contatos ADD COLUMN IF NOT EXISTS instagram TEXT",
-        "ALTER TABLE contatos ADD COLUMN IF NOT EXISTS fonte TEXT",
-    ]:
-        try:
-            c.execute(stmt)
-        except Exception:
-            conn.rollback()
-    conn.commit()
-    conn.close()
+        )""")
+        conn.commit()
+        c.execute("""CREATE TABLE IF NOT EXISTS contatos (
+            id BIGSERIAL PRIMARY KEY, empresa_id BIGINT REFERENCES empresas(id),
+            nome TEXT, cargo TEXT, telefone TEXT, whatsapp TEXT,
+            email TEXT, linkedin TEXT, decisor INTEGER DEFAULT 0
+        )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS interacoes (
+            id BIGSERIAL PRIMARY KEY, empresa_id BIGINT REFERENCES empresas(id),
+            contato_id BIGINT REFERENCES contatos(id),
+            canal TEXT, tipo TEXT, mensagem TEXT,
+            enviado_em TIMESTAMP DEFAULT NOW(),
+            respondeu INTEGER DEFAULT 0, resposta TEXT, respondido_em TIMESTAMP
+        )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS leads_linkedin (
+            id BIGSERIAL PRIMARY KEY, nome TEXT, cargo TEXT, empresa TEXT,
+            url_perfil TEXT UNIQUE, termo_busca TEXT,
+            status TEXT DEFAULT 'encontrado', encontrado_em TIMESTAMP DEFAULT NOW(),
+            conexao_em TIMESTAMP, dm_enviada_em TIMESTAMP,
+            respondeu INTEGER DEFAULT 0, ultima_resposta TEXT, demo_status TEXT
+        )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS buscas (
+            id BIGSERIAL PRIMARY KEY, termo TEXT, fonte TEXT,
+            resultados INTEGER DEFAULT 0, executado_em TIMESTAMP DEFAULT NOW()
+        )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS acoes_diarias (
+            id BIGSERIAL PRIMARY KEY, data DATE DEFAULT CURRENT_DATE,
+            tipo TEXT, quantidade INTEGER DEFAULT 0, UNIQUE(data, tipo)
+        )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS logs (
+            id BIGSERIAL PRIMARY KEY, timestamp TIMESTAMP DEFAULT NOW(),
+            tipo TEXT, mensagem TEXT, detalhes TEXT
+        )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS atividades (
+            id BIGSERIAL PRIMARY KEY,
+            empresa_id BIGINT REFERENCES empresas(id) ON DELETE CASCADE,
+            tipo TEXT,
+            descricao TEXT,
+            dados JSONB,
+            criado_em TIMESTAMP DEFAULT NOW()
+        )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS tarefas (
+            id BIGSERIAL PRIMARY KEY,
+            empresa_id BIGINT REFERENCES empresas(id) ON DELETE CASCADE,
+            tipo TEXT,
+            descricao TEXT,
+            data_vencimento TIMESTAMP,
+            concluida BOOLEAN DEFAULT FALSE,
+            concluida_em TIMESTAMP,
+            criado_em TIMESTAMP DEFAULT NOW()
+        )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS execucao (
+            id INTEGER PRIMARY KEY, status TEXT DEFAULT 'parado',
+            ultima_execucao TIMESTAMP, modo TEXT DEFAULT 'busca'
+        )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS bot_config (
+            id           SERIAL PRIMARY KEY,
+            empresa_nome TEXT, website TEXT, descricao TEXT,
+            termos_busca JSONB DEFAULT '[]',
+            linkedin_email TEXT, linkedin_password TEXT,
+            linkedin_cargos JSONB DEFAULT '[]',
+            msg_inicial TEXT,
+            email_assunto_padrao TEXT,
+            email_html_template TEXT,
+            email_remetente TEXT,
+            email_remetente_nome TEXT,
+            resend_api_key TEXT,
+            smtp_host TEXT, smtp_port INTEGER DEFAULT 587,
+            smtp_user TEXT, smtp_password TEXT,
+            serper_api_key TEXT,
+            horario_inicio INTEGER DEFAULT 9,
+            horario_fim INTEGER DEFAULT 18,
+            duracao_reuniao INTEGER DEFAULT 30,
+            dias_semana TEXT DEFAULT '1,2,3,4,5',
+            atualizado_em TIMESTAMP DEFAULT NOW()
+        )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS agenda (
+            id BIGSERIAL PRIMARY KEY,
+            empresa_id BIGINT REFERENCES empresas(id) ON DELETE SET NULL,
+            titulo TEXT NOT NULL,
+            descricao TEXT,
+            data_inicio TIMESTAMP NOT NULL,
+            data_fim TIMESTAMP,
+            tipo TEXT DEFAULT 'reuniao',
+            local TEXT,
+            concluido BOOLEAN DEFAULT FALSE,
+            criado_em TIMESTAMP DEFAULT NOW()
+        )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS sequencias (
+            id BIGSERIAL PRIMARY KEY,
+            nome TEXT NOT NULL,
+            passos JSONB DEFAULT '[]',
+            ativo BOOLEAN DEFAULT TRUE,
+            criado_em TIMESTAMP DEFAULT NOW(),
+            atualizado_em TIMESTAMP DEFAULT NOW()
+        )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS sequencia_leads (
+            id BIGSERIAL PRIMARY KEY,
+            sequencia_id BIGINT REFERENCES sequencias(id) ON DELETE CASCADE,
+            empresa_id BIGINT REFERENCES empresas(id) ON DELETE CASCADE,
+            passo_atual INTEGER DEFAULT 0,
+            proximo_envio TIMESTAMP,
+            status TEXT DEFAULT 'ativo',
+            iniciado_em TIMESTAMP DEFAULT NOW(),
+            atualizado_em TIMESTAMP DEFAULT NOW(),
+            UNIQUE(sequencia_id, empresa_id)
+        )""")
+        c.execute("INSERT INTO execucao (id) VALUES (1) ON CONFLICT DO NOTHING")
+        conn.commit()
+        # Migrations para schemas antigos
+        for stmt in [
+            "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS observacoes TEXT",
+            "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS wa_enviado TIMESTAMP",
+            "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS agenda_token TEXT",
+            "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS enriquecido BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS enriquecido_em TIMESTAMP",
+            "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS natureza_juridica TEXT",
+            "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS situacao_cadastral TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_remetente TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_remetente_nome TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS resend_api_key TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_host TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_port INTEGER DEFAULT 587",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_user TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS serper_api_key TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS brave_api_key TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS google_cse_key TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS google_cse_cx TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_inicio INTEGER DEFAULT 9",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS horario_fim INTEGER DEFAULT 18",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS duracao_reuniao INTEGER DEFAULT 30",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS dias_semana TEXT DEFAULT '1,2,3,4,5'",
+            "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS email_aberto TIMESTAMP",
+            "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS email_clicado TIMESTAMP",
+            "ALTER TABLE empresas ADD COLUMN IF NOT EXISTS email_track_token TEXT",
+            "ALTER TABLE contatos ADD COLUMN IF NOT EXISTS instagram TEXT",
+            "ALTER TABLE contatos ADD COLUMN IF NOT EXISTS fonte TEXT",
+        ]:
+            try:
+                c.execute(stmt)
+            except Exception:
+                conn.rollback()
+        conn.commit()
+    finally:
+        conn.close()
 
 
 # =============================================================================
@@ -492,15 +516,21 @@ def get_current_user():
     uid = session.get('user_id')
     if not uid:
         return None
+    conn = None
     try:
         conn = _conn()
         c = conn.cursor()
         c.execute('SELECT * FROM users WHERE id = %s AND ativo = TRUE', (uid,))
         row = c.fetchone()
-        conn.close()
         return dict(row) if row else None
     except Exception:
         return None
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 PLAN_LEAD_LIMITS = {
@@ -524,15 +554,21 @@ def _get_user_plano(uid=None):
     uid = uid or session.get('user_id')
     if not uid:
         return 'trial'
+    conn = None
     try:
         conn = _conn()
         c = conn.cursor()
         c.execute('SELECT plano FROM users WHERE id = %s', (uid,))
         row = c.fetchone()
-        conn.close()
         return (row['plano'] if row else 'trial') or 'trial'
     except Exception:
         return 'trial'
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def _check_feature(feature, uid=None):
@@ -552,16 +588,22 @@ def _check_lead_limit(schema, uid=None):
     # Admin logado = sem limite
     if session.get('admin_auth'):
         return True, ''
+    conn = None
     try:
         conn = _conn()
         c = conn.cursor()
         c.execute('SELECT plano, plano_expira FROM users WHERE id = %s', (uid,))
         row = c.fetchone()
-        conn.close()
         plano = (row['plano'] if row else 'trial') or 'trial'
     except Exception:
         plano = 'trial'
         row = None
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
     if plano == 'trial' and row and row.get('plano_expira'):
         from datetime import datetime
         expira = row['plano_expira']
@@ -572,14 +614,20 @@ def _check_lead_limit(schema, uid=None):
     limite = PLAN_LEAD_LIMITS.get(plano)
     if limite is None:
         return True, ''
+    conn2 = None
     try:
         conn2 = _conn(schema)
         c2 = conn2.cursor()
         c2.execute('SELECT COUNT(*) AS total FROM empresas')
         total = c2.fetchone()['total']
-        conn2.close()
     except Exception:
         return True, ''
+    finally:
+        if conn2:
+            try:
+                conn2.close()
+            except Exception:
+                pass
     if total >= limite:
         return False, f'Limite de {limite} leads atingido no plano {plano}. Faça upgrade para continuar.'
     return True, ''
@@ -592,6 +640,7 @@ def token_required(f):
         if not auth.startswith('Bearer '):
             return jsonify({'error': 'Bearer token obrigatório'}), 401
         token = auth[7:]
+        conn = None
         try:
             conn = _conn()
             c = conn.cursor()
@@ -600,12 +649,17 @@ def token_required(f):
                          WHERE t.token = %s AND t.ativo = TRUE AND u.ativo = TRUE""",
                       (token,))
             row = c.fetchone()
-            conn.close()
             if not row:
                 return jsonify({'error': 'token inválido'}), 401
             request.token_user = dict(row)
         except Exception as e:
             print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
         return f(*args, **kwargs)
     return decorated
 
@@ -621,6 +675,7 @@ def get_stats(schema: str) -> dict:
          'emails_abertos': 0, 'emails_clicados': 0}
     if not DATABASE_URL or not schema:
         return z
+    conn = None
     try:
         conn = _conn(schema)
         c = conn.cursor()
@@ -665,9 +720,14 @@ def get_stats(schema: str) -> dict:
             z['linkedin_total'] = c.fetchone()['n']
         except Exception as e:
             print(f'[stats/{schema}] linkedin_total: {e}')
-        conn.close()
     except Exception as e:
         print(f'[stats/{schema}] {e}')
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
     return z
 
 
@@ -687,9 +747,13 @@ def _fmt_tel(raw) -> str:
     return str(raw)
 
 
-def get_leads(schema: str, limite: int = 5000) -> list:
+def get_leads(schema: str, limite: int = 50, page: int = 1, per_page: int = 50) -> list:
     if not DATABASE_URL or not schema:
         return []
+    per_page = max(1, min(per_page, 200))
+    page = max(1, page)
+    offset = (page - 1) * per_page
+    conn = None
     try:
         conn = _conn(schema)
         c = conn.cursor()
@@ -712,15 +776,17 @@ def get_leads(schema: str, limite: int = 5000) -> list:
             try:
                 c.execute(
                     f"SELECT {_base}, e.email_aberto, e.email_clicado, {_sub}"
-                    " FROM empresas e ORDER BY e.encontrado_em DESC LIMIT %s",
-                    (limite,))
+                    " FROM empresas e ORDER BY e.encontrado_em DESC"
+                    " LIMIT %s OFFSET %s",
+                    (per_page, offset))
             except Exception:
                 conn.rollback()
                 c.execute(
                     f"SELECT {_base}, NULL as email_aberto,"
                     f" NULL as email_clicado, {_sub}"
-                    " FROM empresas e ORDER BY e.encontrado_em DESC LIMIT %s",
-                    (limite,))
+                    " FROM empresas e ORDER BY e.encontrado_em DESC"
+                    " LIMIT %s OFFSET %s",
+                    (per_page, offset))
         try:
             _exec()
         except Exception:
@@ -741,26 +807,37 @@ def get_leads(schema: str, limite: int = 5000) -> list:
                     conn.rollback()
             _exec()
         rows = [_serialize_row(dict(r)) for r in c.fetchall()]
-        conn.close()
         return rows
     except Exception as e:
         print(f'[leads/{schema}] {e}')
         return []
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def get_logs(schema: str, limite: int = 60) -> list:
     if not DATABASE_URL or not schema:
         return []
+    conn = None
     try:
         conn = _conn(schema)
         c = conn.cursor()
         c.execute("SELECT tipo, mensagem, timestamp FROM logs ORDER BY timestamp DESC LIMIT %s", (limite,))
         rows = [_serialize_row(dict(r)) for r in c.fetchall()]
-        conn.close()
         return rows
     except Exception as e:
         print(f'[logs/{schema}] {e}')
         return []
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def get_bot_config(schema: str) -> dict:
@@ -817,19 +894,25 @@ def get_bot_config(schema: str) -> dict:
 def _get_schema():
     user = get_current_user()
     if not user:
-        return None
+        abort(403)
     schema = user.get('schema_name')
     if not schema:
         schema = f'emp_{user["id"]}'
+        conn = None
         try:
             conn = _conn()
             c = conn.cursor()
             c.execute('UPDATE users SET schema_name=%s WHERE id=%s',
                       (schema, user['id']))
             conn.commit()
-            conn.close()
         except Exception:
-            pass
+            logger.exception("Erro ao atualizar schema_name em _get_schema")
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
     return schema
 
 
@@ -851,40 +934,66 @@ def login():
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
         pw = request.form.get('senha', '')
+        conn = None
         try:
             conn = _conn()
             c = conn.cursor()
             c.execute('SELECT * FROM users WHERE email = %s AND ativo = TRUE', (email,))
             user = c.fetchone()
             conn.close()
+            conn = None
             if user and _verify_pw(pw, user['password_hash']):
                 session['user_id'] = user['id']
                 session.permanent = True
                 # Migra hash SHA-256 legado para bcrypt
                 if not user['password_hash'].startswith('$2'):
-                    conn_up = _conn()
-                    cu = conn_up.cursor()
-                    cu.execute('UPDATE users SET password_hash=%s WHERE id=%s',
-                               (_hash_pw(pw), user['id']))
-                    conn_up.commit()
-                    conn_up.close()
+                    conn_up = None
+                    try:
+                        conn_up = _conn()
+                        cu = conn_up.cursor()
+                        cu.execute('UPDATE users SET password_hash=%s WHERE id=%s',
+                                   (_hash_pw(pw), user['id']))
+                        conn_up.commit()
+                    except Exception:
+                        logger.exception("Erro ao migrar hash bcrypt no login")
+                    finally:
+                        if conn_up:
+                            try:
+                                conn_up.close()
+                            except Exception:
+                                pass
                 schema = user.get('schema_name') or f'emp_{user["id"]}'
                 if not user.get('schema_name'):
-                    c2 = _conn()
-                    cc = c2.cursor()
-                    cc.execute('UPDATE users SET schema_name=%s WHERE id=%s',
-                               (schema, user['id']))
-                    c2.commit()
-                    c2.close()
+                    c2 = None
+                    try:
+                        c2 = _conn()
+                        cc = c2.cursor()
+                        cc.execute('UPDATE users SET schema_name=%s WHERE id=%s',
+                                   (schema, user['id']))
+                        c2.commit()
+                    except Exception:
+                        logger.exception("Erro ao atualizar schema_name no login")
+                    finally:
+                        if c2:
+                            try:
+                                c2.close()
+                            except Exception:
+                                pass
                 try:
                     _init_user_schema(schema)
                 except Exception:
-                    pass
+                    logger.exception("Erro ao inicializar schema no login")
                 return redirect(url_for('dashboard'))
             error = 'Email ou senha incorretos'
         except Exception as e:
-            print(f'[login] erro: {e}', flush=True)
+            logger.exception("Erro no login")
             error = 'Erro interno. Tente novamente.'
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
     return render_template('login.html', error=error)
 
 
@@ -909,6 +1018,8 @@ def cadastro():
         elif len(pw) < 6:
             error = 'Senha mínimo 6 caracteres'
         else:
+            conn = None
+            conn2 = None
             try:
                 conn = _conn()
                 c = conn.cursor()
@@ -926,6 +1037,7 @@ def cadastro():
                     c.execute('UPDATE users SET schema_name=%s WHERE id=%s', (schema, uid))
                     conn.commit()
                     conn.close()
+                    conn = None
                     _init_user_schema(schema)
                     conn2 = _conn(schema)
                     c2 = conn2.cursor()
@@ -940,13 +1052,23 @@ def cadastro():
                                 segmento or None,
                                 json.dumps(termos) if termos else '[]'))
                     conn2.commit()
-                    conn2.close()
                     session['user_id'] = uid
                     session['just_registered'] = True
                     return redirect(url_for('config_page'))
             except Exception as e:
                 print(f'[cadastro] erro: {e}', flush=True)
                 error = 'Erro interno. Tente novamente.'
+            finally:
+                if conn:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+                if conn2:
+                    try:
+                        conn2.close()
+                    except Exception:
+                        pass
     return render_template('register.html', error=error)
 
 
@@ -957,18 +1079,24 @@ def admin_users():
     admin_key = os.environ.get('ADMIN_KEY', '')
     if not admin_key:
         return jsonify({'error': 'unauthorized'}), 401
+    conn = None
     try:
         conn = _conn()
         c = conn.cursor()
         c.execute('SELECT id, email, empresa_nome, plano, ativo, criado_em FROM users ORDER BY id')
         users = c.fetchall()
-        conn.close()
         for u in users:
             if u.get('criado_em'):
                 u['criado_em'] = str(u['criado_em'])
         return jsonify(users)
     except Exception as e:
         print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.route('/logout')
@@ -1393,6 +1521,273 @@ BLOG_POSTS = [
 <p>A maioria dos CRMs do mercado só organiza leads que você já tem. O TurboVenda vai além: ele <a href="/blog/como-prospectar-clientes-b2b">prospecta automaticamente</a> usando IA, extrai contatos completos e alimenta seu <a href="/blog/pipeline-de-vendas-como-montar">pipeline</a> sem esforço. É CRM e prospecção numa única ferramenta, a partir de R$0/mês.</p>
 """
     },
+    {
+        'slug': 'como-prospectar-clinicas-e-consultorios',
+        'titulo': 'Como Prospectar Clínicas e Consultórios: Guia para Vendas no Setor de Saúde',
+        'desc': 'Aprenda a encontrar clínicas médicas, odontológicas e laboratórios para prospectar. Estratégias específicas para vender no setor de saúde.',
+        'keywords': 'prospectar clínicas, vender para consultórios, leads saúde, prospecção médica, vendas saúde',
+        'data': '2026-07-25',
+        'tempo': '7 min',
+        'conteudo': """
+<p>O setor de saúde no Brasil tem mais de 350 mil estabelecimentos ativos. Para quem vende equipamentos médicos, software para clínicas, insumos hospitalares ou serviços B2B para saúde, prospectar esse mercado exige abordagem específica.</p>
+
+<h2>Por que prospectar clínicas é diferente</h2>
+<p>Diferente de outros segmentos B2B, o setor de saúde tem particularidades:</p>
+<ul>
+<li><strong>Decisor nem sempre é o médico</strong> — em clínicas de médio porte, quem compra é o administrador ou gerente de compras</li>
+<li><strong>Ciclo de venda consultivo</strong> — equipamentos médicos exigem demonstração e aprovação técnica</li>
+<li><strong>Regulação pesada</strong> — ANVISA, conselhos regionais e normas sanitárias influenciam decisões</li>
+<li><strong>Horário restrito</strong> — profissionais de saúde atendem pacientes durante o dia, o melhor horário de contato é entre 12h-14h ou após 18h</li>
+</ul>
+
+<h2>Onde encontrar clínicas para prospectar</h2>
+<h3>1. Dados abertos da Receita Federal</h3>
+<p>Toda clínica tem CNPJ. Os dados abertos do CNPJ permitem filtrar por CNAE (atividade econômica), cidade e data de abertura. O TurboVenda usa esses dados para montar listas segmentadas — veja <a href="/empresas">empresas por segmento e cidade</a> com dados reais.</p>
+
+<h3>2. Conselhos regionais (CRM, CRO)</h3>
+<p>Os conselhos de medicina e odontologia publicam cadastros de profissionais. Cruzar com dados de CNPJ revela quais médicos também são sócios de clínicas — ou seja, decisores.</p>
+
+<h3>3. Google Maps e diretórios de saúde</h3>
+<p>Plataformas como Doctoralia, BoaConsulta e o próprio Google Maps listam milhares de clínicas com telefone, endereço e especialidade. O TurboVenda automatiza essa coleta.</p>
+
+<h2>Modelo de abordagem para clínicas</h2>
+<p>E-mails para clínicas que funcionam seguem uma fórmula: <strong>menção ao segmento + dor específica + prova rápida</strong>.</p>
+<p>Exemplo: <em>"Olá [Nome], vi que a [Clínica] atua com ortopedia em [Cidade]. Ajudo fornecedores do setor de saúde a encontrar clínicas novas — semana passada entregamos 47 contatos de clínicas recém-abertas no Paraná. Posso mostrar em 5 min?"</em></p>
+
+<h2>Automatizando a prospecção no setor de saúde</h2>
+<p>Com o TurboVenda, você descreve seu público (ex: "clínicas odontológicas com mais de 3 dentistas no Sul do Brasil") e a IA monta a lista com razão social, CNPJ, bairro e porte. Depois, o CRM organiza a abordagem por <a href="/blog/email-marketing-b2b-templates">e-mail</a> ou <a href="/blog/whatsapp-para-vendas-b2b">WhatsApp</a>. Conheça mais sobre <a href="/para/saude">prospecção para o setor de saúde</a>.</p>
+"""
+    },
+    {
+        'slug': 'crm-para-distribuidora',
+        'titulo': 'CRM para Distribuidora: Como Organizar Vendas e Expandir Carteira',
+        'desc': 'Saiba como distribuidoras e atacadistas usam CRM para prospectar novos PDVs, organizar rotas e aumentar faturamento.',
+        'keywords': 'CRM distribuidora, CRM atacadista, sistema vendas distribuidora, prospectar PDV, expandir carteira',
+        'data': '2026-07-23',
+        'tempo': '7 min',
+        'conteudo': """
+<p>Distribuidoras vivem de volume e capilaridade. Quanto mais PDVs (pontos de venda) ativos na carteira, maior o faturamento. Mas gerenciar centenas de clientes, rotas e pedidos sem um CRM é receita para perder vendas.</p>
+
+<h2>O problema de distribuidoras sem CRM</h2>
+<ul>
+<li><strong>Vendedores usam planilha ou caderno</strong> — quando saem, levam a carteira junto</li>
+<li><strong>Sem visibilidade de pipeline</strong> — não sabe quantos PDVs novos estão em negociação</li>
+<li><strong>Follow-up esquecido</strong> — prospects esfriam porque ninguém ligou de volta</li>
+<li><strong>Territórios sem cobertura</strong> — regiões inteiras sem prospecção ativa</li>
+</ul>
+
+<h2>O que muda com um CRM</h2>
+<p>Um CRM para distribuidora centraliza toda a operação comercial:</p>
+<ul>
+<li><strong>Cadastro de PDVs</strong> com endereço, contato do comprador, frequência de pedido</li>
+<li><strong>Pipeline visual</strong> — arraste cards entre "Primeiro contato", "Visita agendada", "Proposta enviada", "Cliente ativo"</li>
+<li><strong>Histórico de interações</strong> — cada ligação, visita e e-mail registrado</li>
+<li><strong>Métricas por vendedor</strong> — quantos PDVs cada um prospecta, visita e converte</li>
+</ul>
+
+<h2>Prospectar novos PDVs automaticamente</h2>
+<p>O maior diferencial de um CRM com prospecção integrada: encontrar novos pontos de venda sem esforço manual. O TurboVenda busca empresas por segmento e região — por exemplo, "pet shops em Santa Catarina" ou "farmácias no interior de SP" — e entrega nome, CNPJ e contato do responsável. Veja <a href="/empresas">empresas reais por segmento</a> na nossa base.</p>
+
+<p>Combine com <a href="/blog/como-prospectar-clientes-b2b">estratégias de prospecção B2B</a> e um <a href="/blog/pipeline-de-vendas-como-montar">pipeline bem estruturado</a> para escalar sua carteira. Conheça mais sobre <a href="/para/comercio">prospecção para o setor de comércio</a>.</p>
+"""
+    },
+    {
+        'slug': 'automacao-comercial-para-industria',
+        'titulo': 'Automação Comercial para Indústria: Como Prospectar Compradores Industriais',
+        'desc': 'Guia prático de automação comercial para indústrias. Como encontrar compradores, distribuidores e revendas usando IA.',
+        'keywords': 'automação comercial indústria, prospectar compradores industriais, vendas indústria, CRM industrial',
+        'data': '2026-07-21',
+        'tempo': '8 min',
+        'conteudo': """
+<p>Indústrias dependem de vendas B2B de alto ticket e ciclo longo. O desafio é encontrar compradores qualificados — diretores de produção, gerentes de compras, engenheiros de processo — sem depender exclusivamente de feiras e indicações.</p>
+
+<h2>Os canais tradicionais estão saturados</h2>
+<p>Feiras setoriais custam R$20-50 mil por edição. Indicações são valiosas mas não escalam. Ligações frias para PABX têm taxa de contato abaixo de 5%. A automação comercial resolve isso ao combinar <strong>dados públicos + IA + abordagem multi-canal</strong>.</p>
+
+<h2>Como automatizar a prospecção industrial</h2>
+<h3>1. Defina seu ICP industrial</h3>
+<p>Perfil de Cliente Ideal para indústrias é muito específico: porte (faturamento, número de funcionários), CNAE (atividade econômica), região, e se é fabricante, distribuidor ou integrador.</p>
+
+<h3>2. Monte listas com dados da Receita Federal</h3>
+<p>Os dados abertos do CNPJ classificam cada empresa por CNAE, porte e localização. O TurboVenda cruza esses dados para entregar listas segmentadas — por exemplo, <a href="/empresas">metalúrgicas de médio porte no Paraná</a> ou fábricas de embalagens em São Paulo.</p>
+
+<h3>3. Aborde o decisor certo</h3>
+<p>Em indústrias, o comprador raramente é quem atende o telefone geral. A prospecção com IA extrai nomes de diretores e gerentes de fontes públicas (LinkedIn, site institucional) e permite abordagem direta via <a href="/blog/email-marketing-b2b-templates">e-mail personalizado</a>.</p>
+
+<h3>4. Mantenha cadência no CRM</h3>
+<p>Vendas industriais precisam de 6-12 toques antes do primeiro pedido. Um <a href="/blog/pipeline-de-vendas-como-montar">pipeline</a> bem estruturado garante que nenhum follow-up escape. Saiba mais sobre <a href="/para/industria">prospecção para o setor industrial</a>.</p>
+"""
+    },
+    {
+        'slug': 'como-vender-para-cooperativas-agricolas',
+        'titulo': 'Como Vender para Cooperativas Agrícolas: Prospecção no Agronegócio',
+        'desc': 'Estratégias para prospectar cooperativas agrícolas, cerealistas e empresas do agronegócio. Como encontrar compradores no agro.',
+        'keywords': 'vender cooperativas agrícolas, prospecção agronegócio, vendas agro B2B, cooperativas agro',
+        'data': '2026-07-19',
+        'tempo': '7 min',
+        'conteudo': """
+<p>O agronegócio brasileiro representa 24% do PIB. Cooperativas agrícolas, cerealistas, distribuidoras de insumos e indústrias de processamento movimentam bilhões em compras B2B. O problema: encontrar o decisor certo nessas organizações exige estratégia.</p>
+
+<h2>Quem compra no agro</h2>
+<ul>
+<li><strong>Cooperativas</strong> — gerente comercial ou diretor de compras (não o presidente)</li>
+<li><strong>Cerealistas</strong> — proprietário ou gerente de operações</li>
+<li><strong>Distribuidoras de insumos</strong> — comprador ou gerente de produto</li>
+<li><strong>Indústrias de processamento</strong> — gerente industrial ou de suprimentos</li>
+</ul>
+
+<h2>Onde encontrar empresas do agro para prospectar</h2>
+<p>O TurboVenda cruza dados da Receita Federal filtrando por CNAEs do agronegócio — fabricação de rações, comércio de cereais, máquinas agrícolas — e entrega listas com razão social, cidade, porte e ano de abertura. Explore a <a href="/empresas">base de empresas por segmento</a>.</p>
+
+<h2>Calendário de prospecção no agro</h2>
+<p>O agronegócio tem sazonalidade forte:</p>
+<ul>
+<li><strong>Jan-Mar</strong>: colheita de soja/milho — decisores focados na operação, prospecção mais difícil</li>
+<li><strong>Abr-Jun</strong>: entressafra — melhor janela para prospectar equipamentos e serviços</li>
+<li><strong>Jul-Set</strong>: planejamento da safra seguinte — decisões de compra de insumos e maquinário</li>
+<li><strong>Out-Dez</strong>: plantio — investimentos já definidos, foco em entrega</li>
+</ul>
+
+<p>A prospecção contínua com <a href="/blog/automacao-comercial-guia-completo">automação comercial</a> garante presença no momento certo. Conheça as soluções para <a href="/para/agronegocio">prospecção no agronegócio</a>.</p>
+"""
+    },
+    {
+        'slug': 'prospectar-empresas-de-tecnologia',
+        'titulo': 'Como Prospectar Empresas de Tecnologia: Guia para Vendas B2B em Tech',
+        'desc': 'Aprenda a encontrar software houses, startups e consultorias de TI para prospectar. Estratégias de vendas B2B para o setor de tecnologia.',
+        'keywords': 'prospectar empresas tecnologia, vendas B2B tech, leads TI, prospecção startups, vender para software house',
+        'data': '2026-07-17',
+        'tempo': '7 min',
+        'conteudo': """
+<p>Empresas de tecnologia são um dos melhores mercados B2B para prospectar: decisores conectados, orçamento para ferramentas, e ciclos de decisão mais curtos que indústria tradicional. O desafio é se destacar num mercado que já recebe muita prospecção.</p>
+
+<h2>O perfil do comprador tech</h2>
+<p>CTOs, heads de engenharia e founders de startups são bombardeados por e-mails de vendas. Para converter, sua abordagem precisa:</p>
+<ul>
+<li><strong>Ser técnica</strong> — jargão genérico de vendas não funciona com devs e CTOs</li>
+<li><strong>Mostrar valor imediato</strong> — demo ou trial, não slides</li>
+<li><strong>Respeitar o canal</strong> — Slack e e-mail são preferidos a ligação fria</li>
+</ul>
+
+<h2>Encontrando empresas de tech para prospectar</h2>
+<p>Dados da Receita Federal classificam empresas por CNAE. Os CNAEs de tecnologia incluem desenvolvimento de software (6201-5), consultoria em TI (6204-0) e suporte técnico (6209-1). O TurboVenda filtra essas empresas por região e porte — explore a <a href="/empresas">base de empresas de tecnologia</a>.</p>
+
+<h2>Estratégias que funcionam em tech</h2>
+<h3>1. Prospecção por sinal de crescimento</h3>
+<p>Empresas contratando (vagas abertas) ou que receberam investimento têm orçamento disponível. Combine dados de CNPJ com monitoramento de vagas.</p>
+
+<h3>2. Comunidades e eventos</h3>
+<p>Meetups, conferências e comunidades online (Discord, Slack) são onde decisores tech passam tempo. Participar genuinamente gera leads quentes.</p>
+
+<h3>3. Conteúdo técnico</h3>
+<p>Blog posts e ferramentas gratuitas atraem tráfego orgânico de devs e CTOs. Combine com <a href="/blog/como-gerar-leads-qualificados">estratégias de geração de leads</a> para converter visitantes em trials.</p>
+
+<p>Conheça mais sobre <a href="/para/tecnologia">prospecção no setor de tecnologia</a>.</p>
+"""
+    },
+    {
+        'slug': 'como-prospectar-contabilidades',
+        'titulo': 'Como Prospectar Escritórios de Contabilidade: Vendas B2B para Contadores',
+        'desc': 'Estratégias para vender para escritórios de contabilidade. Como encontrar contadores e oferecer produtos e serviços B2B.',
+        'keywords': 'prospectar contabilidade, vender para contadores, leads contabilidade, vendas B2B contabilidade',
+        'data': '2026-07-15',
+        'tempo': '6 min',
+        'conteudo': """
+<p>O Brasil tem mais de 80 mil escritórios de contabilidade ativos. Eles compram software, certificado digital, seguros, materiais de escritório e serviços terceirizados. Se você vende para contadores, a prospecção certa faz toda a diferença.</p>
+
+<h2>Por que contabilidades são bons clientes B2B</h2>
+<ul>
+<li><strong>Ticket recorrente</strong> — assinaturas de software, certificados digitais renovados anualmente</li>
+<li><strong>Decisor acessível</strong> — em escritórios pequenos, o sócio decide; nos maiores, o gerente administrativo</li>
+<li><strong>Multiplicador</strong> — um contador satisfeito indica para outros contadores e para seus clientes</li>
+</ul>
+
+<h2>Onde encontrar escritórios de contabilidade</h2>
+<p>O CNAE 6920-6 (atividades de contabilidade) identifica todos os escritórios registrados na Receita Federal. O TurboVenda filtra por cidade e porte, entregando listas prontas para abordagem. Veja <a href="/empresas">empresas por segmento e região</a>.</p>
+
+<h2>Abordagem que funciona com contadores</h2>
+<p>Contadores são pragmáticos e ocupados. A melhor abordagem é direta e focada em economia de tempo ou dinheiro:</p>
+<p><em>"[Nome], vi que a [Escritório] atende empresas em [Cidade]. Temos [produto] que economiza X horas/mês no processo de [tarefa]. Posso mostrar em 5 min como funciona?"</em></p>
+
+<p>Combine prospecção de contabilidades com as técnicas de <a href="/blog/email-marketing-b2b-templates">e-mail marketing B2B</a> e <a href="/blog/whatsapp-para-vendas-b2b">WhatsApp para vendas</a>. Conheça mais sobre <a href="/para/servicos">prospecção para o setor de serviços</a>.</p>
+"""
+    },
+    {
+        'slug': 'como-prospectar-metalurgicas',
+        'titulo': 'Como Prospectar Metalúrgicas e Indústrias de Usinagem',
+        'desc': 'Guia prático para encontrar metalúrgicas, tornearias e indústrias de usinagem para prospectar. Vendas B2B no setor metalúrgico.',
+        'keywords': 'prospectar metalúrgicas, vendas metalurgia, leads usinagem, prospecção industrial, metalúrgica B2B',
+        'data': '2026-07-13',
+        'tempo': '6 min',
+        'conteudo': """
+<p>O setor metalúrgico brasileiro emprega mais de 500 mil trabalhadores em metalúrgicas, tornearias, funções e indústrias de usinagem. São empresas que compram matéria-prima, ferramentas, equipamentos, EPI, gases industriais e serviços de manutenção. Prospectar esse mercado exige conhecer a cadeia.</p>
+
+<h2>Tipos de metalúrgicas e o que compram</h2>
+<ul>
+<li><strong>Tornearias e usinagem</strong> — ferramentas de corte, fluidos de usinagem, máquinas CNC</li>
+<li><strong>Serralheria e caldeiraria</strong> — chapas, tubos, eletrodos, gases de soldagem</li>
+<li><strong>Fundições</strong> — matéria-prima (sucata, lingotes), refratários, areia</li>
+<li><strong>Tratamento de superfície</strong> — produtos químicos, EPIs, equipamentos de banho</li>
+</ul>
+
+<h2>Como encontrar metalúrgicas para prospectar</h2>
+<p>Os dados da Receita Federal permitem filtrar por CNAEs como fabricação de estruturas metálicas (2511-0), usinagem (2539-0) e obras de caldeiraria (2513-6). O TurboVenda organiza esses dados por cidade e porte — veja na <a href="/empresas">base de empresas por segmento</a>.</p>
+
+<h2>Melhor abordagem para o setor metalúrgico</h2>
+<p>Decisores em metalúrgicas são práticos e técnicos. Evite jargão de marketing; foque em:</p>
+<ul>
+<li>Economia de custo ou tempo (ex: "reduz troca de ferramenta em 40%")</li>
+<li>Prova técnica (fichas técnicas, comparativos de desempenho)</li>
+<li>Visita presencial ou vídeo demonstrativo</li>
+</ul>
+
+<p>Combine com <a href="/blog/prospecao-outbound-guia">prospecção outbound</a> e <a href="/blog/automacao-comercial-guia-completo">automação comercial</a> para escalar. Conheça mais sobre <a href="/para/industria">prospecção para o setor industrial</a>.</p>
+"""
+    },
+    {
+        'slug': 'turbovenda-vs-rdstation',
+        'titulo': 'TurboVenda vs RD Station: Qual CRM Escolher para Prospecção B2B?',
+        'desc': 'Comparativo entre TurboVenda e RD Station CRM. Preços, funcionalidades e qual é melhor para prospecção outbound B2B.',
+        'keywords': 'TurboVenda vs RD Station, alternativa RD Station, comparar CRM, CRM prospecção B2B, RD Station alternativa',
+        'data': '2026-07-27',
+        'tempo': '6 min',
+        'conteudo': """
+<p>Se você está escolhendo um CRM para prospecção B2B, provavelmente já viu o RD Station. É a ferramenta mais conhecida no Brasil — mas será que é a melhor opção para <strong>prospecção outbound</strong>?</p>
+
+<h2>Diferenças fundamentais</h2>
+<p>O RD Station nasceu como ferramenta de <strong>inbound marketing</strong> (landing pages, formulários, automação de e-mail). O CRM veio depois. O TurboVenda nasceu como ferramenta de <strong>prospecção outbound</strong> com IA — o CRM é parte do fluxo de prospecção, não um produto separado.</p>
+
+<h2>Comparativo de funcionalidades</h2>
+<table style="width:100%;border-collapse:collapse;margin:16px 0">
+<tr style="border-bottom:2px solid rgba(255,255,255,.1)"><th style="text-align:left;padding:8px">Funcionalidade</th><th style="padding:8px">TurboVenda</th><th style="padding:8px">RD Station CRM</th></tr>
+<tr style="border-bottom:1px solid rgba(255,255,255,.05)"><td style="padding:8px">Prospecção automática com IA</td><td style="text-align:center;padding:8px">✅</td><td style="text-align:center;padding:8px">❌</td></tr>
+<tr style="border-bottom:1px solid rgba(255,255,255,.05)"><td style="padding:8px">Busca de empresas por CNAE/região</td><td style="text-align:center;padding:8px">✅</td><td style="text-align:center;padding:8px">❌</td></tr>
+<tr style="border-bottom:1px solid rgba(255,255,255,.05)"><td style="padding:8px">Extração de contatos (decisores)</td><td style="text-align:center;padding:8px">✅</td><td style="text-align:center;padding:8px">❌</td></tr>
+<tr style="border-bottom:1px solid rgba(255,255,255,.05)"><td style="padding:8px">CRM com Kanban</td><td style="text-align:center;padding:8px">✅</td><td style="text-align:center;padding:8px">✅</td></tr>
+<tr style="border-bottom:1px solid rgba(255,255,255,.05)"><td style="padding:8px">E-mail em massa</td><td style="text-align:center;padding:8px">✅</td><td style="text-align:center;padding:8px">✅</td></tr>
+<tr style="border-bottom:1px solid rgba(255,255,255,.05)"><td style="padding:8px">Landing pages</td><td style="text-align:center;padding:8px">❌</td><td style="text-align:center;padding:8px">✅</td></tr>
+<tr style="border-bottom:1px solid rgba(255,255,255,.05)"><td style="padding:8px">Automação de inbound</td><td style="text-align:center;padding:8px">❌</td><td style="text-align:center;padding:8px">✅</td></tr>
+<tr><td style="padding:8px">Preço inicial</td><td style="text-align:center;padding:8px">R$ 0/mês</td><td style="text-align:center;padding:8px">R$ 0/mês</td></tr>
+</table>
+
+<h2>Quando escolher o TurboVenda</h2>
+<ul>
+<li>Seu modelo de vendas é <strong>outbound</strong> — você vai atrás do cliente</li>
+<li>Precisa de <strong>listas de empresas</strong> segmentadas por região e setor</li>
+<li>Quer <strong>prospecção automática</strong> rodando 24/7 sem SDR</li>
+<li>Equipe pequena que precisa de <a href="/blog/o-que-e-crm-para-que-serve">CRM simples</a> + prospecção num lugar só</li>
+</ul>
+
+<h2>Quando escolher o RD Station</h2>
+<ul>
+<li>Seu modelo é <strong>inbound</strong> — gera leads via conteúdo e formulários</li>
+<li>Precisa de <strong>landing pages</strong> e automação de marketing</li>
+<li>Já tem base de leads e quer nurturing por e-mail</li>
+</ul>
+
+<p>Para prospecção outbound B2B, o TurboVenda entrega o que o RD Station não faz: encontrar empresas novas. <a href="/cadastro">Teste grátis com 50 leads</a>.</p>
+"""
+    },
 ]
 
 
@@ -1558,14 +1953,15 @@ def segmento_page(slug):
 
 
 def _static_sitemap_urls():
+    hoje = _dt.date.today().isoformat()
     urls = [
-        ('https://www.turbovenda.com.br/', '2026-06-01', 'weekly', '1.0'),
-        ('https://www.turbovenda.com.br/cadastro', '2026-06-01', 'monthly', '0.8'),
-        ('https://www.turbovenda.com.br/blog', '2026-06-01', 'weekly', '0.9'),
-        ('https://www.turbovenda.com.br/login', '2026-05-01', 'monthly', '0.6'),
-        ('https://www.turbovenda.com.br/precos', '2026-06-01', 'monthly', '0.8'),
-        ('https://www.turbovenda.com.br/termos', '2026-06-01', 'yearly', '0.3'),
-        ('https://www.turbovenda.com.br/privacidade', '2026-06-01', 'yearly', '0.3'),
+        ('https://www.turbovenda.com.br/', hoje, 'weekly', '1.0'),
+        ('https://www.turbovenda.com.br/cadastro', hoje, 'monthly', '0.8'),
+        ('https://www.turbovenda.com.br/blog', hoje, 'weekly', '0.9'),
+        ('https://www.turbovenda.com.br/login', hoje, 'monthly', '0.6'),
+        ('https://www.turbovenda.com.br/precos', hoje, 'monthly', '0.8'),
+        ('https://www.turbovenda.com.br/termos', hoje, 'yearly', '0.3'),
+        ('https://www.turbovenda.com.br/privacidade', hoje, 'yearly', '0.3'),
     ]
     for p in BLOG_POSTS:
         urls.append((
@@ -1575,7 +1971,7 @@ def _static_sitemap_urls():
     for s in SEGMENTOS:
         urls.append((
             f"https://www.turbovenda.com.br/para/{s['slug']}",
-            '2026-06-27', 'monthly', '0.8'
+            hoje, 'monthly', '0.8'
         ))
     return urls
 
@@ -1726,7 +2122,7 @@ def admin_indexnow():
 # =============================================================================
 
 # Rollout gate: nº máx. de páginas de cidade no sitemap/índice (por contagem desc)
-MAX_PSEO_PAGES = int(os.environ.get('MAX_PSEO_PAGES', '200'))
+MAX_PSEO_PAGES = int(os.environ.get('MAX_PSEO_PAGES', '10000'))
 PSEO_SITEMAP_CHUNK = 5000
 PSEO_PAGE_SIZE = int(os.environ.get('PSEO_PAGE_SIZE', '50'))
 PSEO_MIN_EMPRESAS = 8       # < 8  -> 404
@@ -2251,7 +2647,7 @@ def config_page():
 @app.route('/api/<bot>/stats')
 @login_required
 def api_stats(bot):
-    return jsonify(get_stats(_get_schema() or bot))
+    return jsonify(get_stats(_get_schema()))
 
 
 @app.route('/api/pipeline')
@@ -2262,6 +2658,7 @@ def api_pipeline():
         return jsonify({})
     stages = ['novo', 'contactada', 'respondeu', 'qualificado', 'demo', 'convertido']
     per_page = request.args.get('per_page', 50, type=int)
+    conn = None
     try:
         conn = _conn(schema)
         c = conn.cursor()
@@ -2288,31 +2685,37 @@ def api_pipeline():
                 'page': page,
                 'pages': max(1, (total + per_page - 1) // per_page)
             }
-        conn.close()
         return jsonify(result)
     except Exception as e:
         print(f'[pipeline/{schema}] {e}')
         print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.route('/api/<bot>/leads')
 @login_required
 def api_leads(bot):
-    schema = _get_schema() or bot
-    limite = request.args.get('limite', 5000, type=int)
-    return jsonify(get_leads(schema, limite))
+    schema = _get_schema()
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 50, type=int)
+    return jsonify(get_leads(schema, per_page=per_page, page=page))
 
 
 @app.route('/api/<bot>/logs')
 @login_required
 def api_logs(bot):
-    return jsonify(get_logs(_get_schema() or bot))
+    return jsonify(get_logs(_get_schema()))
 
 
 @app.route('/api/<bot>/status')
 @login_required
 def api_bot_status(bot):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     wa_proc = _procs.get(schema, {}).get('wa')
     wa_running = wa_proc is not None and wa_proc.poll() is None
     wa_exit = None
@@ -2365,7 +2768,7 @@ def api_bot_qr(bot):
 @app.route('/api/<bot>/start', methods=['POST'])
 @login_required
 def api_bot_start(bot):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     data = request.get_json(silent=True) or {}
     canal = data.get('canal', 'busca')
     if canal not in ('busca', 'linkedin', 'wa'):
@@ -2395,7 +2798,7 @@ def api_bot_start(bot):
 @app.route('/api/<bot>/stop', methods=['POST'])
 @login_required
 def api_bot_stop(bot):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     data = request.get_json(silent=True) or {}
     canal = data.get('canal', 'busca')
     proc = _procs.get(schema, {}).get(canal)
@@ -2433,7 +2836,7 @@ def api_bot_console(bot):
 @app.route('/api/<bot>/add-lead', methods=['POST'])
 @login_required
 def api_add_lead(bot):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     ok, msg = _check_lead_limit(schema)
     if not ok:
         return jsonify({'error': msg, 'limit_reached': True}), 403
@@ -2441,6 +2844,7 @@ def api_add_lead(bot):
     nome = (data.get('nome_fantasia') or '').strip()
     if not nome:
         return jsonify({'error': 'nome_fantasia obrigatorio'}), 400
+    conn = None
     try:
         conn = _conn(schema)
         c = conn.cursor()
@@ -2449,7 +2853,6 @@ def api_add_lead(bot):
             c.execute('SELECT id FROM empresas WHERE whatsapp = %s', (wa,))
             ex = c.fetchone()
             if ex:
-                conn.close()
                 return jsonify({'ok': True, 'id': ex['id'], 'msg': 'ja existe'})
         c.execute("""INSERT INTO empresas
             (nome_fantasia, whatsapp, email, telefone, segmento, fonte, score, status,
@@ -2462,16 +2865,21 @@ def api_add_lead(bot):
                    data.get('estado') or None))
         new_id = c.fetchone()['id']
         conn.commit()
-        conn.close()
         return jsonify({'ok': True, 'id': new_id})
     except Exception as e:
         print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.route('/api/<bot>/lead/<int:lead_id>', methods=['PUT'])
 @login_required
 def api_update_lead(bot, lead_id):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     data = request.get_json(silent=True) or {}
     allowed = {'nome_fantasia', 'whatsapp', 'telefone', 'email', 'segmento',
                'status', 'score', 'cidade', 'estado', 'website', 'linkedin',
@@ -2479,6 +2887,7 @@ def api_update_lead(bot, lead_id):
     fields = {k: v for k, v in data.items() if k in allowed}
     if not fields:
         return jsonify({'error': 'nenhum campo valido'}), 400
+    conn = None
     try:
         conn = _conn(schema)
         c = conn.cursor()
@@ -2525,16 +2934,21 @@ def api_update_lead(bot, lead_id):
         sets = ', '.join(f'{k} = %s' for k in fields)
         c.execute(f'UPDATE empresas SET {sets} WHERE id = %s', list(fields.values()) + [lead_id])
         conn.commit()
-        conn.close()
         return jsonify({'ok': True})
     except Exception as e:
         print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.route('/api/<bot>/lead/<int:lead_id>', methods=['DELETE'])
 @login_required
 def api_delete_lead(bot, lead_id):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     try:
         conn = _conn(schema)
         c = conn.cursor()
@@ -2552,7 +2966,7 @@ def api_delete_lead(bot, lead_id):
 @login_required
 def api_clear_all(bot):
     """Limpa todos os leads, contatos, interações, buscas, logs e contadores."""
-    schema = _get_schema() or bot
+    schema = _get_schema()
     try:
         conn = _conn(schema)
         c = conn.cursor()
@@ -2577,7 +2991,7 @@ def api_clear_all(bot):
 @app.route('/api/<bot>/lead/<int:lead_id>/atividades')
 @login_required
 def api_lead_atividades(bot, lead_id):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     try:
         conn = _conn(schema)
         c = conn.cursor()
@@ -2594,7 +3008,7 @@ def api_lead_atividades(bot, lead_id):
 @app.route('/api/<bot>/lead/<int:lead_id>/atividade', methods=['POST'])
 @login_required
 def api_add_atividade(bot, lead_id):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     data = request.get_json(silent=True) or {}
     tipo = data.get('tipo', 'nota')
     descricao = (data.get('descricao') or '').strip()
@@ -2619,7 +3033,7 @@ def api_add_atividade(bot, lead_id):
 @app.route('/api/<bot>/lead/<int:lead_id>/tarefas')
 @login_required
 def api_lead_tarefas(bot, lead_id):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     try:
         conn = _conn(schema)
         c = conn.cursor()
@@ -2636,7 +3050,7 @@ def api_lead_tarefas(bot, lead_id):
 @app.route('/api/<bot>/lead/<int:lead_id>/tarefa', methods=['POST'])
 @login_required
 def api_add_tarefa(bot, lead_id):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     data = request.get_json(silent=True) or {}
     descricao = (data.get('descricao') or '').strip()
     if not descricao:
@@ -2659,7 +3073,7 @@ def api_add_tarefa(bot, lead_id):
 @app.route('/api/<bot>/tarefa/<int:tarefa_id>', methods=['PUT'])
 @login_required
 def api_update_tarefa(bot, tarefa_id):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     data = request.get_json(silent=True) or {}
     try:
         conn = _conn(schema)
@@ -2682,7 +3096,7 @@ def api_update_tarefa(bot, tarefa_id):
 @app.route('/api/<bot>/tarefa/<int:tarefa_id>', methods=['DELETE'])
 @login_required
 def api_delete_tarefa(bot, tarefa_id):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     try:
         conn = _conn(schema)
         c = conn.cursor()
@@ -2697,7 +3111,7 @@ def api_delete_tarefa(bot, tarefa_id):
 @app.route('/api/<bot>/tarefas/pendentes')
 @login_required
 def api_tarefas_pendentes(bot):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     try:
         conn = _conn(schema)
         c = conn.cursor()
@@ -2718,7 +3132,7 @@ def api_tarefas_pendentes(bot):
 @app.route('/api/<bot>/lead/<int:lead_id>/enriquecer', methods=['POST'])
 @login_required
 def api_enriquecer_lead(bot, lead_id):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     result = _enriquecer_cnpj(schema, lead_id)
     if result.get('ok'):
         return jsonify(result)
@@ -2782,7 +3196,7 @@ def api_requalificar_lead(bot, lead_id):
     """Requalifica fazendo o máximo de graça: com CNPJ -> enriquece
     (estado/situação/sócio via Receita); sem CNPJ -> ao menos preenche o
     estado pelo DDD do telefone."""
-    schema = _get_schema() or bot
+    schema = _get_schema()
     passos = {}
     cn = _descobrir_cnpj(schema, lead_id)
     passos['cnpj'] = cn
@@ -2838,7 +3252,7 @@ def _buscar_redes_decisor(schema, lead_id):
 @app.route('/api/<bot>/lead/<int:lead_id>/redes-decisor', methods=['POST'])
 @login_required
 def api_redes_decisor(bot, lead_id):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     return jsonify(_buscar_redes_decisor(schema, lead_id))
 
 
@@ -2847,7 +3261,7 @@ def api_redes_decisor(bot, lead_id):
 @app.route('/api/<bot>/relatorios')
 @login_required
 def api_relatorios(bot):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     try:
         conn = _conn(schema)
         c = conn.cursor()
@@ -2970,7 +3384,7 @@ def api_relatorios(bot):
 @app.route('/api/<bot>/sequencias')
 @login_required
 def api_list_sequencias(bot):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     try:
         conn = _conn(schema)
         c = conn.cursor()
@@ -2994,7 +3408,7 @@ def api_create_sequencia(bot):
     ok, msg = _check_feature('sequencias')
     if not ok:
         return jsonify({'error': msg}), 403
-    schema = _get_schema() or bot
+    schema = _get_schema()
     data = request.get_json(silent=True) or {}
     nome = data.get('nome', '').strip()
     passos = data.get('passos', [])
@@ -3017,7 +3431,7 @@ def api_create_sequencia(bot):
 @app.route('/api/<bot>/sequencia/<int:seq_id>', methods=['PUT'])
 @login_required
 def api_update_sequencia(bot, seq_id):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     data = request.get_json(silent=True) or {}
     try:
         conn = _conn(schema)
@@ -3046,7 +3460,7 @@ def api_update_sequencia(bot, seq_id):
 @app.route('/api/<bot>/sequencia/<int:seq_id>', methods=['DELETE'])
 @login_required
 def api_delete_sequencia(bot, seq_id):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     try:
         conn = _conn(schema)
         c = conn.cursor()
@@ -3062,7 +3476,7 @@ def api_delete_sequencia(bot, seq_id):
            methods=['POST'])
 @login_required
 def api_enroll_leads(bot, seq_id):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     data = request.get_json(silent=True) or {}
     lead_ids = data.get('lead_ids', [])
     if not lead_ids:
@@ -3104,7 +3518,7 @@ def api_enroll_leads(bot, seq_id):
 @app.route('/api/<bot>/sequencia/<int:seq_id>/leads')
 @login_required
 def api_sequencia_leads(bot, seq_id):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     try:
         conn = _conn(schema)
         c = conn.cursor()
@@ -3126,7 +3540,7 @@ def api_processar_sequencias(bot):
     ok, msg = _check_feature('sequencias')
     if not ok:
         return jsonify({'error': msg}), 403
-    schema = _get_schema() or bot
+    schema = _get_schema()
     return _processar_sequencias_schema(schema)
 
 
@@ -3244,7 +3658,7 @@ def _processar_sequencias_schema(schema):
 def api_export_leads(bot):
     import io
     import csv
-    schema = _get_schema() or bot
+    schema = _get_schema()
     try:
         conn = _conn(schema)
         c = conn.cursor()
@@ -3294,7 +3708,7 @@ def api_export_leads(bot):
 @app.route('/api/<bot>/leads/bulk', methods=['POST'])
 @login_required
 def api_bulk_action(bot):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     data = request.get_json(silent=True) or {}
     ids = data.get('ids', [])
     action = data.get('action', '')
@@ -3433,7 +3847,7 @@ def _send_email(ecfg, to_email, to_name, subject, html):
 @app.route('/api/<bot>/send-emails', methods=['POST'])
 @login_required
 def api_send_emails(bot):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     data = request.get_json(silent=True) or {}
     lead_ids = data.get('ids', [])
     reenviar = data.get('reenviar', False)
@@ -3529,7 +3943,7 @@ def api_email_campanha(bot):
     ok, msg = _check_feature('email_massa')
     if not ok:
         return jsonify({'error': msg}), 403
-    schema = _get_schema() or bot
+    schema = _get_schema()
     data = request.get_json(silent=True) or {}
     assunto = data.get('assunto', '').strip()
     corpo = data.get('corpo', '').strip()
@@ -3644,7 +4058,7 @@ def api_email_campanha(bot):
 @app.route('/api/<bot>/config', methods=['GET'])
 @login_required
 def api_get_config(bot):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     cfg = get_bot_config(schema)
     # Não retorna senha do LinkedIn
     cfg.pop('linkedin_password', None)
@@ -3654,7 +4068,7 @@ def api_get_config(bot):
 @app.route('/api/<bot>/config', methods=['POST'])
 @login_required
 def api_save_config(bot):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     data = request.get_json(silent=True) or {}
     empresa_nome = data.get('empresa_nome', '')
     website = data.get('website', '')
@@ -4196,6 +4610,7 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
 @login_required
 def api_list_tokens(bot):
     uid = session.get('user_id')
+    conn = None
     try:
         conn = _conn()
         c = conn.cursor()
@@ -4203,10 +4618,15 @@ def api_list_tokens(bot):
                             '••••' || RIGHT(token, 6) AS token_preview
                      FROM api_tokens WHERE user_id = %s ORDER BY criado_em DESC""", (uid,))
         rows = [dict(r) for r in c.fetchall()]
-        conn.close()
         return jsonify(rows)
     except Exception as e:
         print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.route('/api/<bot>/tokens', methods=['POST'])
@@ -4219,6 +4639,7 @@ def api_create_token(bot):
     data = request.get_json(silent=True) or {}
     label = data.get('label', 'Token API')
     token = secrets.token_urlsafe(32)
+    conn = None
     try:
         conn = _conn()
         c = conn.cursor()
@@ -4226,26 +4647,37 @@ def api_create_token(bot):
                   (uid, token, label))
         tid = c.fetchone()['id']
         conn.commit()
-        conn.close()
         return jsonify({'ok': True, 'id': tid, 'token': token,
                         'aviso': 'Salve este token — não será exibido novamente'})
     except Exception as e:
         print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.route('/api/<bot>/tokens/<int:token_id>', methods=['DELETE'])
 @login_required
 def api_revoke_token(bot, token_id):
     uid = session.get('user_id')
+    conn = None
     try:
         conn = _conn()
         c = conn.cursor()
         c.execute('UPDATE api_tokens SET ativo=FALSE WHERE id=%s AND user_id=%s', (token_id, uid))
         conn.commit()
-        conn.close()
         return jsonify({'ok': True})
     except Exception as e:
         print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 # =============================================================================
@@ -4256,7 +4688,9 @@ def api_revoke_token(bot, token_id):
 @token_required
 def public_list_leads():
     schema = request.token_user['schema_name']
-    limite = request.args.get('limite', 100, type=int)
+    page = request.args.get('page', 1, type=int)
+    per_page = max(1, min(request.args.get('per_page', 50, type=int), 200))
+    offset = (max(1, page) - 1) * per_page
     status = request.args.get('status')
     try:
         conn = _conn(schema)
@@ -4268,12 +4702,13 @@ def public_list_leads():
         if status:
             sql += ' WHERE status = %s'
             params.append(status)
-        sql += ' ORDER BY encontrado_em DESC LIMIT %s'
-        params.append(limite)
+        sql += ' ORDER BY encontrado_em DESC LIMIT %s OFFSET %s'
+        params.extend([per_page, offset])
         c.execute(sql, params)
         rows = [dict(r) for r in c.fetchall()]
         conn.close()
-        return jsonify({'leads': rows, 'total': len(rows)})
+        return jsonify({'leads': rows, 'total': len(rows),
+                        'page': page, 'per_page': per_page})
     except Exception as e:
         print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
 
@@ -4334,7 +4769,7 @@ def public_update_lead(lead_id):
 @app.route('/api/<bot>/agenda')
 @login_required
 def api_agenda(bot):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     mes = request.args.get('mes')  # formato YYYY-MM
     try:
         conn = _conn(schema)
@@ -4359,7 +4794,7 @@ def api_agenda(bot):
 @app.route('/api/<bot>/agenda', methods=['POST'])
 @login_required
 def api_add_evento(bot):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     data = request.get_json(silent=True) or {}
     titulo = (data.get('titulo') or '').strip()
     data_inicio = data.get('data_inicio')
@@ -4391,7 +4826,7 @@ def api_add_evento(bot):
 @app.route('/api/<bot>/agenda/<int:evento_id>', methods=['PUT'])
 @login_required
 def api_update_evento(bot, evento_id):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     data = request.get_json(silent=True) or {}
     try:
         conn = _conn(schema)
@@ -4415,7 +4850,7 @@ def api_update_evento(bot, evento_id):
 @app.route('/api/<bot>/agenda/<int:evento_id>', methods=['DELETE'])
 @login_required
 def api_delete_evento(bot, evento_id):
-    schema = _get_schema() or bot
+    schema = _get_schema()
     try:
         conn = _conn(schema)
         c = conn.cursor()
@@ -4793,6 +5228,7 @@ def _find_lead_by_email_token(token):
     """Busca lead e schema pelo token de tracking de email."""
     if not DATABASE_URL or not token:
         return None, None
+    conn = None
     try:
         conn = psycopg2.connect(
             DATABASE_URL,
@@ -4801,10 +5237,12 @@ def _find_lead_by_email_token(token):
         c.execute('SELECT id, schema_name FROM users')
         users = c.fetchall()
         conn.close()
+        conn = None
         for u in users:
             sch = u.get('schema_name')
             if not sch:
                 continue
+            conn2 = None
             try:
                 conn2 = _conn(sch)
                 c2 = conn2.cursor()
@@ -4812,13 +5250,24 @@ def _find_lead_by_email_token(token):
                     'SELECT id FROM empresas WHERE email_track_token=%s',
                     (token,))
                 row = c2.fetchone()
-                conn2.close()
                 if row:
                     return sch, row['id']
             except Exception:
                 pass
+            finally:
+                if conn2:
+                    try:
+                        conn2.close()
+                    except Exception:
+                        pass
     except Exception:
         pass
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
     return None, None
 
 
@@ -4899,26 +5348,29 @@ def email_track_click(token):
 def webhook_email():
     """Webhook do Resend para eventos de email (bounce, complaint, etc)."""
     # Verificar assinatura do Resend (svix-signature)
+    # Fail-closed: se RESEND_WEBHOOK_SECRET nao estiver configurado, rejeita
     resend_wh_secret = os.environ.get('RESEND_WEBHOOK_SECRET', '')
-    if resend_wh_secret:
-        svix_sig = request.headers.get('svix-signature', '')
-        svix_ts = request.headers.get('svix-timestamp', '')
-        svix_id = request.headers.get('svix-id', '')
-        if not svix_sig or not svix_ts:
-            return jsonify({'error': 'missing signature'}), 401
-        body = request.get_data(as_text=True)
-        to_sign = f'{svix_id}.{svix_ts}.{body}'
-        import base64
-        secret_bytes = base64.b64decode(resend_wh_secret.split('_')[-1]
-                                        if '_' in resend_wh_secret
-                                        else resend_wh_secret)
-        sig = base64.b64encode(
-            _hmac.new(secret_bytes, to_sign.encode(), 'sha256').digest()
-        ).decode()
-        sigs = [s.split(',')[-1] for s in svix_sig.split(' ')]
-        if not any(_hmac.compare_digest(sig, s) for s in sigs):
-            print('[EMAIL] Webhook assinatura inválida', flush=True)
-            return jsonify({'error': 'invalid signature'}), 401
+    if not resend_wh_secret:
+        logger.warning("[EMAIL] RESEND_WEBHOOK_SECRET nao configurado — webhook rejeitado")
+        return jsonify({'error': 'webhook not configured'}), 403
+    svix_sig = request.headers.get('svix-signature', '')
+    svix_ts = request.headers.get('svix-timestamp', '')
+    svix_id = request.headers.get('svix-id', '')
+    if not svix_sig or not svix_ts:
+        return jsonify({'error': 'missing signature'}), 401
+    body = request.get_data(as_text=True)
+    to_sign = f'{svix_id}.{svix_ts}.{body}'
+    import base64
+    secret_bytes = base64.b64decode(resend_wh_secret.split('_')[-1]
+                                    if '_' in resend_wh_secret
+                                    else resend_wh_secret)
+    sig = base64.b64encode(
+        _hmac.new(secret_bytes, to_sign.encode(), 'sha256').digest()
+    ).decode()
+    sigs = [s.split(',')[-1] for s in svix_sig.split(' ')]
+    if not any(_hmac.compare_digest(sig, s) for s in sigs):
+        print('[EMAIL] Webhook assinatura inválida', flush=True)
+        return jsonify({'error': 'invalid signature'}), 401
 
     data = request.get_json(silent=True) or {}
     event_type = data.get('type', '')
@@ -4930,6 +5382,7 @@ def webhook_email():
         to_email = payload['to']
     print(f'[WEBHOOK] {event_type} to={to_email}', flush=True)
     if event_type in ('email.bounced', 'email.complained'):
+        conn = None
         try:
             conn = psycopg2.connect(
                 DATABASE_URL,
@@ -4938,10 +5391,12 @@ def webhook_email():
             c.execute('SELECT id, schema_name FROM users')
             users = c.fetchall()
             conn.close()
+            conn = None
             for u in users:
                 sch = u.get('schema_name')
                 if not sch:
                     continue
+                conn2 = None
                 try:
                     conn2 = _conn(sch)
                     c2 = conn2.cursor()
@@ -4952,13 +5407,23 @@ def webhook_email():
                         (bounce_status, to_email))
                     if c2.rowcount > 0:
                         conn2.commit()
-                        conn2.close()
                         break
-                    conn2.close()
                 except Exception:
                     pass
+                finally:
+                    if conn2:
+                        try:
+                            conn2.close()
+                        except Exception:
+                            pass
         except Exception as e:
             print(f'[WEBHOOK] erro: {e}', flush=True)
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
     return jsonify({'ok': True})
 
 
@@ -5356,6 +5821,7 @@ def _find_lead_by_token(token):
     """Busca lead e schema pelo token de agendamento."""
     if not DATABASE_URL or not token:
         return None, None
+    conn = None
     try:
         conn = psycopg2.connect(
             DATABASE_URL,
@@ -5364,10 +5830,12 @@ def _find_lead_by_token(token):
         c.execute('SELECT id, schema_name FROM users')
         users = c.fetchall()
         conn.close()
+        conn = None
         for u in users:
             sch = u.get('schema_name')
             if not sch:
                 continue
+            conn2 = None
             try:
                 conn2 = _conn(sch)
                 c2 = conn2.cursor()
@@ -5375,13 +5843,24 @@ def _find_lead_by_token(token):
                     'SELECT * FROM empresas WHERE agenda_token=%s',
                     (token,))
                 lead = c2.fetchone()
-                conn2.close()
                 if lead:
                     return dict(lead), sch
             except Exception:
                 continue
+            finally:
+                if conn2:
+                    try:
+                        conn2.close()
+                    except Exception:
+                        pass
     except Exception:
         pass
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
     return None, None
 
 
@@ -5516,7 +5995,7 @@ def api_agenda_confirmar(token):
 @login_required
 def api_lead_link_agenda(bot, lead_id):
     """Retorna link de agendamento para um lead específico."""
-    schema = _get_schema() or bot
+    schema = _get_schema()
     link = _get_link_agenda(schema, lead_id)
     return jsonify({'link': link})
 
@@ -5622,21 +6101,24 @@ def webhook_mercadopago():
     """Webhook do Mercado Pago — atualiza plano do user."""
     import requests as http
     # Verificar assinatura do webhook (x-signature header do MP)
+    # Fail-closed: se MP_WEBHOOK_SECRET nao estiver configurado, rejeita
     mp_webhook_secret = os.environ.get('MP_WEBHOOK_SECRET', '')
-    if mp_webhook_secret:
-        x_sig = request.headers.get('x-signature', '')
-        x_req_id = request.headers.get('x-request-id', '')
-        # MP envia ts=xxx,v1=hash no x-signature
-        sig_parts = dict(p.split('=', 1) for p in x_sig.split(',') if '=' in p)
-        ts = sig_parts.get('ts', '')
-        v1 = sig_parts.get('v1', '')
-        data_id = request.args.get('data.id', request.args.get('id', ''))
-        manifest = f'id:{data_id};request-id:{x_req_id};ts:{ts};'
-        expected = _hmac.new(mp_webhook_secret.encode(), manifest.encode(),
-                             'sha256').hexdigest()
-        if not _hmac.compare_digest(v1, expected):
-            print(f'[MP] Webhook assinatura inválida', flush=True)
-            return jsonify({'error': 'invalid signature'}), 401
+    if not mp_webhook_secret:
+        logger.warning("[MP] MP_WEBHOOK_SECRET nao configurado — webhook rejeitado")
+        return jsonify({'error': 'webhook not configured'}), 403
+    x_sig = request.headers.get('x-signature', '')
+    x_req_id = request.headers.get('x-request-id', '')
+    # MP envia ts=xxx,v1=hash no x-signature
+    sig_parts = dict(p.split('=', 1) for p in x_sig.split(',') if '=' in p)
+    ts = sig_parts.get('ts', '')
+    v1 = sig_parts.get('v1', '')
+    data_id = request.args.get('data.id', request.args.get('id', ''))
+    manifest = f'id:{data_id};request-id:{x_req_id};ts:{ts};'
+    expected = _hmac.new(mp_webhook_secret.encode(), manifest.encode(),
+                         'sha256').hexdigest()
+    if not _hmac.compare_digest(v1, expected):
+        print(f'[MP] Webhook assinatura inválida', flush=True)
+        return jsonify({'error': 'invalid signature'}), 401
 
     data = request.get_json(silent=True) or {}
     if data.get('type') != 'payment':
@@ -5673,30 +6155,32 @@ def webhook_mercadopago():
         conn = psycopg2.connect(
             DATABASE_URL,
             cursor_factory=psycopg2.extras.RealDictCursor)
-        c = conn.cursor()
+        try:
+            c = conn.cursor()
 
-        # Registra pagamento
-        c.execute("""INSERT INTO pagamentos
-            (user_id, mp_payment_id, status, valor, plano)
-            VALUES (%s, %s, %s, %s, %s)""",
-            (user_id, str(payment_id), status, valor, plano))
+            # Registra pagamento
+            c.execute("""INSERT INTO pagamentos
+                (user_id, mp_payment_id, status, valor, plano)
+                VALUES (%s, %s, %s, %s, %s)""",
+                (user_id, str(payment_id), status, valor, plano))
 
-        # Ativa plano se aprovado
-        if status == 'approved':
-            from datetime import timedelta
-            c.execute("""UPDATE users SET
-                plano = %s,
-                plano_expira = NOW() + INTERVAL '30 days',
-                mp_subscription_id = %s
-                WHERE id = %s""",
-                (plano, str(payment_id), user_id))
-            print(f'[MP] User {user_id} -> plano {plano}'
-                  f' (payment {payment_id})', flush=True)
+            # Ativa plano se aprovado
+            if status == 'approved':
+                from datetime import timedelta
+                c.execute("""UPDATE users SET
+                    plano = %s,
+                    plano_expira = NOW() + INTERVAL '30 days',
+                    mp_subscription_id = %s
+                    WHERE id = %s""",
+                    (plano, str(payment_id), user_id))
+                print(f'[MP] User {user_id} -> plano {plano}'
+                      f' (payment {payment_id})', flush=True)
 
-        conn.commit()
-        conn.close()
+            conn.commit()
+        finally:
+            conn.close()
     except Exception as e:
-        print(f'[MP] Webhook error: {e}', flush=True)
+        logger.exception("Erro no webhook Mercado Pago")
 
     return jsonify({'ok': True})
 
@@ -5738,6 +6222,7 @@ def api_pagamento_pix():
                 'point_of_interaction', {}).get(
                 'transaction_data', {})
             # Registra pagamento
+            conn = None
             try:
                 conn = psycopg2.connect(
                     DATABASE_URL,
@@ -5751,9 +6236,14 @@ def api_pagamento_pix():
                      pay.get('status'), plano['valor'],
                      plano_id))
                 conn.commit()
-                conn.close()
             except Exception:
-                pass
+                logger.exception("Erro ao registrar pagamento PIX")
+            finally:
+                if conn:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
             return jsonify({
                 'ok': True,
                 'qr_code': pix_data.get('qr_code'),
@@ -5862,6 +6352,7 @@ def api_pagamento_cartao():
         pay = r.json()
         status = pay.get('status')
         # Registra
+        conn = None
         try:
             conn = psycopg2.connect(
                 DATABASE_URL,
@@ -5880,9 +6371,14 @@ def api_pagamento_cartao():
                     WHERE id = %s""",
                     (plano_id, user['id']))
             conn.commit()
-            conn.close()
         except Exception:
-            pass
+            logger.exception("Erro ao registrar pagamento cartao")
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
         if status == 'approved':
             return jsonify({'ok': True, 'status': 'approved'})
         elif status == 'in_process':
@@ -5951,6 +6447,7 @@ def api_pagamento_boleto():
             boleto_url = pay.get(
                 'transaction_details', {}).get(
                 'external_resource_url', '')
+            conn = None
             try:
                 conn = psycopg2.connect(
                     DATABASE_URL,
@@ -5964,9 +6461,14 @@ def api_pagamento_boleto():
                      pay.get('status'), plano['valor'],
                      plano_id))
                 conn.commit()
-                conn.close()
             except Exception:
-                pass
+                logger.exception("Erro ao registrar pagamento boleto")
+            finally:
+                if conn:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
             return jsonify({
                 'ok': True,
                 'boleto_url': boleto_url,
@@ -6099,6 +6601,7 @@ def admin_logout():
 @app.route('/admin/api/stats')
 @admin_required
 def admin_api_stats():
+    conn = None
     try:
         conn = _conn()
         c = conn.cursor()
@@ -6132,7 +6635,6 @@ def admin_api_stats():
                 total_emails += c.fetchone()['cnt']
             except Exception:
                 conn.rollback()
-        conn.close()
         return jsonify({
             'total_users': total_users,
             'active_users': active_users,
@@ -6142,6 +6644,12 @@ def admin_api_stats():
         })
     except Exception as e:
         print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.route('/admin/api/users')
