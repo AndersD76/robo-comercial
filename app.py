@@ -435,6 +435,7 @@ def _init_user_schema(schema: str):
             smtp_host TEXT, smtp_port INTEGER DEFAULT 587,
             smtp_user TEXT, smtp_password TEXT,
             serper_api_key TEXT,
+            estados_atuacao JSONB DEFAULT '[]',
             horario_inicio INTEGER DEFAULT 9,
             horario_fim INTEGER DEFAULT 18,
             duracao_reuniao INTEGER DEFAULT 30,
@@ -903,6 +904,7 @@ def get_bot_config(schema: str) -> dict:
             smtp_host TEXT, smtp_port INTEGER DEFAULT 587,
             smtp_user TEXT, smtp_password TEXT,
             serper_api_key TEXT,
+            estados_atuacao JSONB DEFAULT '[]',
             horario_inicio INTEGER DEFAULT 9,
             horario_fim INTEGER DEFAULT 18,
             duracao_reuniao INTEGER DEFAULT 30,
@@ -3802,11 +3804,13 @@ def api_bulk_action(bot):
 # --- Email em massa ---
 
 def _get_email_config(schema: str) -> dict:
-    """Lê config de email do user (bot_config)."""
+    """Lê config de email do user (bot_config). Prioriza config do cliente."""
     cfg = get_bot_config(schema) if schema else {}
     user = get_current_user() or {}
+    client_resend = cfg.get('resend_api_key') or ''
+    client_email = cfg.get('email_remetente') or ''
     return {
-        'sender_email': os.environ.get('EMAIL_FROM',
+        'sender_email': client_email or os.environ.get('EMAIL_FROM',
                                        'contato@turbovenda.com.br'),
         'sender_name': (cfg.get('email_remetente_nome') or
                         cfg.get('empresa_nome') or ''),
@@ -3815,7 +3819,7 @@ def _get_email_config(schema: str) -> dict:
         'smtp_port': cfg.get('smtp_port') or 587,
         'smtp_user': cfg.get('smtp_user') or '',
         'smtp_password': cfg.get('smtp_password') or '',
-        'resend_api_key': os.environ.get('RESEND_API_KEY', '') or '',
+        'resend_api_key': client_resend or os.environ.get('RESEND_API_KEY', '') or '',
     }
 
 
@@ -4124,6 +4128,7 @@ def api_save_config(bot):
     website = data.get('website', '')
     descricao = data.get('descricao', '')
     termos = data.get('termos_busca') or None  # None = não alterar
+    estados_atuacao = data.get('estados_atuacao') or []
     li_email = data.get('linkedin_email', '')
     li_password = data.get('linkedin_password', '')
     li_cargos = data.get('linkedin_cargos') or []
@@ -4172,6 +4177,7 @@ def api_save_config(bot):
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS brave_api_key TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS google_cse_key TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS google_cse_cx TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS estados_atuacao JSONB DEFAULT '[]'",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_cor_header TEXT DEFAULT '#1a2332'",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_cor_botao TEXT DEFAULT '#2563eb'",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_cor_texto TEXT DEFAULT '#ffffff'",
@@ -4198,7 +4204,8 @@ def api_save_config(bot):
 
         if exists:
             sql = """UPDATE bot_config SET empresa_nome=%s, website=%s,
-                         descricao=%s, termos_busca=%s, linkedin_email=%s,
+                         descricao=%s, termos_busca=%s, estados_atuacao=%s,
+                         linkedin_email=%s,
                          linkedin_cargos=%s, msg_inicial=%s,
                          email_assunto_padrao=%s, email_html_template=%s,
                          email_remetente=%s, email_remetente_nome=%s,
@@ -4210,6 +4217,7 @@ def api_save_config(bot):
                          google_cse_key=%s, google_cse_cx=%s,
                          atualizado_em=NOW()"""
             params = [empresa_nome, website, descricao, psycopg2.extras.Json(termos),
+                      psycopg2.extras.Json(estados_atuacao),
                       li_email or None, psycopg2.extras.Json(li_cargos),
                       msg_inicial or None, email_assunto or None,
                       email_html or None,
@@ -4292,12 +4300,13 @@ def api_generate_terms(bot):
     result = _gerar_termos(
         data.get('empresa_nome', ''),
         data.get('descricao', ''),
-        data.get('website', '')
+        data.get('website', ''),
+        data.get('estados') or []
     )
     return jsonify({'ok': True, 'termos': result['termos'], 'cargos': result['cargos']})
 
 
-def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
+def _gerar_termos(empresa_nome: str, descricao: str, website: str, estados_selecionados: list = None) -> dict:
     """Gera termos de busca dinamicamente a partir da descricao do usuario."""
     desc_lower = descricao.lower()
 
@@ -4537,13 +4546,6 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
         'norte': ['AM', 'PA', 'TO', 'RO', 'AC', 'RR', 'AP'],
     }
 
-    regioes_match = []
-    # Regioes explicitas (com word boundary para evitar falsos positivos)
-    for regiao in TODAS_CIDADES:
-        if re.search(r'\b' + re.escape(regiao) + r'\b', desc_lower):
-            regioes_match.append(regiao)
-
-    # Estados por sigla (2 letras maiusculas no texto original)
     _UF_REGIAO = {
         'PR': 'sul', 'SC': 'sul', 'RS': 'sul',
         'GO': 'centro-oeste', 'MT': 'centro-oeste', 'MS': 'centro-oeste', 'DF': 'centro-oeste',
@@ -4553,47 +4555,30 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str) -> dict:
         'AM': 'norte', 'PA': 'norte', 'TO': 'norte', 'RO': 'norte',
         'AC': 'norte', 'RR': 'norte', 'AP': 'norte',
     }
-    for uf, reg in _UF_REGIAO.items():
-        if re.search(r'\b' + uf + r'\b', descricao):
-            if reg not in regioes_match:
-                regioes_match.append(reg)
 
-    # Estados por nome completo (word boundary)
-    uf_map = {
-        'paraná': 'sul', 'parana': 'sul',
-        'santa catarina': 'sul',
-        'rio grande do sul': 'sul',
-        'goiás': 'centro-oeste', 'goias': 'centro-oeste',
-        'mato grosso': 'centro-oeste',
-        'mato grosso do sul': 'centro-oeste',
-        'são paulo': 'sudeste', 'sao paulo': 'sudeste',
-        'minas gerais': 'sudeste',
-        'rio de janeiro': 'sudeste',
-        'espírito santo': 'sudeste', 'espirito santo': 'sudeste',
-        'bahia': 'nordeste', 'pernambuco': 'nordeste',
-        'ceará': 'nordeste', 'ceara': 'nordeste',
-        'maranhão': 'nordeste', 'maranhao': 'nordeste',
-        'tocantins': 'norte',
-    }
-    for uf_nome, reg in uf_map.items():
-        if re.search(r'\b' + re.escape(uf_nome) + r'\b', desc_lower):
-            if reg not in regioes_match:
-                regioes_match.append(reg)
-
-    if any(x in desc_lower for x in ['todo o brasil', 'brasil inteiro', 'nacional',
-                                       'todo brasil']):
-        regioes_match = list(TODAS_CIDADES.keys())
-
-    if not regioes_match:
-        regioes_match = list(TODAS_CIDADES.keys())
+    if estados_selecionados:
+        regioes_match = list({_UF_REGIAO[uf] for uf in estados_selecionados if uf in _UF_REGIAO})
+        estados = list(estados_selecionados)
+    else:
+        regioes_match = []
+        for regiao in TODAS_CIDADES:
+            if re.search(r'\b' + re.escape(regiao) + r'\b', desc_lower):
+                regioes_match.append(regiao)
+        for uf, reg in _UF_REGIAO.items():
+            if re.search(r'\b' + uf + r'\b', descricao):
+                if reg not in regioes_match:
+                    regioes_match.append(reg)
+        if not regioes_match:
+            regioes_match = list(TODAS_CIDADES.keys())
+        estados = []
+        for reg in regioes_match:
+            estados.extend(ESTADOS_POR_REGIAO.get(reg, []))
+        estados = list(dict.fromkeys(estados))
 
     cidades = []
-    estados = []
     for reg in regioes_match:
         cidades.extend(TODAS_CIDADES.get(reg, []))
-        estados.extend(ESTADOS_POR_REGIAO.get(reg, []))
     cidades = list(dict.fromkeys(cidades))
-    estados = list(dict.fromkeys(estados))
 
     # ── 3. Extrair CARGOS ──
     cargos = []

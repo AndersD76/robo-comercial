@@ -104,6 +104,21 @@
         border-radius:10px;padding:14px;font-size:13px;color:var(--muted2);line-height:1.6;margin-top:8px}
     .info-box code{background:rgba(255,255,255,.06);padding:2px 7px;border-radius:5px;
         font-size:12px;color:#818cf8}
+
+    /* Estados grid */
+    .estados-grid{display:flex;flex-direction:column;gap:12px}
+    .regiao-group{background:var(--surface2);border:1px solid rgba(255,255,255,.06);
+        border-radius:10px;padding:12px 14px}
+    .regiao-label{font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;
+        letter-spacing:.5px;margin-bottom:8px;cursor:pointer;user-select:none}
+    .regiao-label:hover{color:#a5b4fc}
+    .uf-list{display:flex;flex-wrap:wrap;gap:6px}
+    .uf-check{display:flex;align-items:center;gap:4px;background:var(--surface);
+        border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:6px 10px;
+        cursor:pointer;transition:.2s;font-size:12px;font-weight:600;user-select:none}
+    .uf-check:hover{border-color:var(--accent)}
+    .uf-check input{display:none}
+    .uf-check:has(input:checked){background:rgba(99,102,241,.2);border-color:var(--accent);color:#a5b4fc}
   </style>
   <script>
   (function(){
@@ -156,6 +171,72 @@
     </div>
   </div>
 
+  <!-- ESTADOS DE ATUAÇÃO -->
+  <div class="card">
+    <div class="card-title"><i class="fa fa-map-location-dot"></i> Estados de atuação</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
+      Selecione os estados onde você quer prospectar. Os termos de busca serão gerados para essas regiões.
+    </p>
+    <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="btn-gen" style="font-size:11px;padding:5px 10px" onclick="toggleAllEstados(true)">Selecionar todos</button>
+      <button class="btn-gen" style="font-size:11px;padding:5px 10px" onclick="toggleAllEstados(false)">Limpar</button>
+    </div>
+    <div class="estados-grid" id="estados-grid">
+      <div class="regiao-group">
+        <div class="regiao-label" onclick="toggleRegiao('sul')">Sul</div>
+        <div class="uf-list">
+          <label class="uf-check"><input type="checkbox" value="PR" class="uf-cb" data-regiao="sul"><span>PR</span></label>
+          <label class="uf-check"><input type="checkbox" value="SC" class="uf-cb" data-regiao="sul"><span>SC</span></label>
+          <label class="uf-check"><input type="checkbox" value="RS" class="uf-cb" data-regiao="sul"><span>RS</span></label>
+        </div>
+      </div>
+      <div class="regiao-group">
+        <div class="regiao-label" onclick="toggleRegiao('sudeste')">Sudeste</div>
+        <div class="uf-list">
+          <label class="uf-check"><input type="checkbox" value="SP" class="uf-cb" data-regiao="sudeste"><span>SP</span></label>
+          <label class="uf-check"><input type="checkbox" value="RJ" class="uf-cb" data-regiao="sudeste"><span>RJ</span></label>
+          <label class="uf-check"><input type="checkbox" value="MG" class="uf-cb" data-regiao="sudeste"><span>MG</span></label>
+          <label class="uf-check"><input type="checkbox" value="ES" class="uf-cb" data-regiao="sudeste"><span>ES</span></label>
+        </div>
+      </div>
+      <div class="regiao-group">
+        <div class="regiao-label" onclick="toggleRegiao('centro-oeste')">Centro-Oeste</div>
+        <div class="uf-list">
+          <label class="uf-check"><input type="checkbox" value="GO" class="uf-cb" data-regiao="centro-oeste"><span>GO</span></label>
+          <label class="uf-check"><input type="checkbox" value="MT" class="uf-cb" data-regiao="centro-oeste"><span>MT</span></label>
+          <label class="uf-check"><input type="checkbox" value="MS" class="uf-cb" data-regiao="centro-oeste"><span>MS</span></label>
+          <label class="uf-check"><input type="checkbox" value="DF" class="uf-cb" data-regiao="centro-oeste"><span>DF</span></label>
+        </div>
+      </div>
+      <div class="regiao-group">
+        <div class="regiao-label" onclick="toggleRegiao('nordeste')">Nordeste</div>
+        <div class="uf-list">
+          <label class="uf-check"><input type="checkbox" value="BA" class="uf-cb" data-regiao="nordeste"><span>BA</span></label>
+          <label class="uf-check"><input type="checkbox" value="PE" class="uf-cb" data-regiao="nordeste"><span>PE</span></label>
+          <label class="uf-check"><input type="checkbox" value="CE" class="uf-cb" data-regiao="nordeste"><span>CE</span></label>
+          <label class="uf-check"><input type="checkbox" value="MA" class="uf-cb" data-regiao="nordeste"><span>MA</span></label>
+          <label class="uf-check"><input type="checkbox" value="RN" class="uf-cb" data-regiao="nordeste"><span>RN</span></label>
+          <label class="uf-check"><input type="checkbox" value="PB" class="uf-cb" data-regiao="nordeste"><span>PB</span></label>
+          <label class="uf-check"><input type="checkbox" value="AL" class="uf-cb" data-regiao="nordeste"><span>AL</span></label>
+          <label class="uf-check"><input type="checkbox" value="SE" class="uf-cb" data-regiao="nordeste"><span>SE</span></label>
+          <label class="uf-check"><input type="checkbox" value="PI" class="uf-cb" data-regiao="nordeste"><span>PI</span></label>
+        </div>
+      </div>
+      <div class="regiao-group">
+        <div class="regiao-label" onclick="toggleRegiao('norte')">Norte</div>
+        <div class="uf-list">
+          <label class="uf-check"><input type="checkbox" value="AM" class="uf-cb" data-regiao="norte"><span>AM</span></label>
+          <label class="uf-check"><input type="checkbox" value="PA" class="uf-cb" data-regiao="norte"><span>PA</span></label>
+          <label class="uf-check"><input type="checkbox" value="TO" class="uf-cb" data-regiao="norte"><span>TO</span></label>
+          <label class="uf-check"><input type="checkbox" value="RO" class="uf-cb" data-regiao="norte"><span>RO</span></label>
+          <label class="uf-check"><input type="checkbox" value="AC" class="uf-cb" data-regiao="norte"><span>AC</span></label>
+          <label class="uf-check"><input type="checkbox" value="RR" class="uf-cb" data-regiao="norte"><span>RR</span></label>
+          <label class="uf-check"><input type="checkbox" value="AP" class="uf-cb" data-regiao="norte"><span>AP</span></label>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- TERMOS DE BUSCA -->
   <div class="card">
     <div class="card-title"><i class="fa fa-magnifying-glass"></i> Termos de Busca</div>
@@ -189,14 +270,27 @@
   <!-- CONFIG EMAIL -->
   <div class="card">
     <div class="card-title"><i class="fa fa-at"></i> Configuração de Email</div>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
-      Emails são enviados como <b style="color:var(--text)">contato@turbovenda.com.br</b>. Respostas dos leads vão para o email da sua conta.
-    </p>
     <div class="field">
       <label>Nome do remetente <small>(aparece no "De:" do email)</small></label>
       <input type="text" id="email_remetente_nome" value="{{ cfg.email_remetente_nome or '' }}" placeholder="Ex: João da Empresa XYZ">
     </div>
-    <input type="hidden" id="email_remetente" value="contato@turbovenda.com.br">
+    <div class="field">
+      <label>Email de envio <small>(de onde os emails saem)</small></label>
+      <input type="email" id="email_remetente" value="{{ cfg.email_remetente or '' }}" placeholder="contato@suaempresa.com.br">
+      <small style="color:var(--muted);display:block;margin-top:4px">Se deixar vazio, envia como contato@turbovenda.com.br</small>
+    </div>
+    <div class="field">
+      <label>Chave Resend <small>(para enviar do seu próprio email)</small></label>
+      <input type="password" id="resend_api_key" value="{{ cfg.resend_api_key or '' }}" placeholder="re_..." autocomplete="off">
+      <div class="info-box" style="margin-top:8px">
+        <strong>Como configurar (5 min, grátis):</strong><br>
+        1. Crie conta em <a href="https://resend.com/signup" target="_blank" rel="noopener" style="color:#818cf8">resend.com</a> (gratuito, 100 emails/dia)<br>
+        2. Vá em <strong>Domains</strong> → adicione seu domínio → copie os registros DNS pro seu provedor<br>
+        3. Vá em <strong>API Keys</strong> → crie uma chave → cole acima<br>
+        4. No campo "Email de envio", coloque um email do domínio verificado<br><br>
+        <span style="color:#fbbf24"><i class="fa fa-triangle-exclamation"></i></span> Sem essa configuração, emails saem como <code>contato@turbovenda.com.br</code>.
+      </div>
+    </div>
   </div>
 
   <!-- TEMPLATE EMAIL -->
@@ -253,27 +347,6 @@
     </div>
   </div>
 
-  <!-- BUSCA AUTOMÁTICA (REQUALIFICAÇÃO) -->
-  <div class="card">
-    <div class="card-title"><i class="fa fa-magnifying-glass"></i> Busca automática (requalificação de leads)</div>
-    <div class="info-box">
-      Usada pelo botão <strong>Requalificar</strong> para descobrir o <strong>CNPJ</strong> dos leads que estão sem ele (estado da sede, situação e sócio já vêm de graça da Receita). Preencha <strong>UMA</strong> das opções abaixo:
-    </div>
-    <div class="field">
-      <label>Opção 1 — Google (grátis, sem cartão, 100 buscas/dia) — recomendado</label>
-      <input type="password" id="google_cse_key" value="{{ cfg.google_cse_key or '' }}" placeholder="Chave da API do Google (AIza...)" autocomplete="off" style="margin-bottom:8px">
-      <input type="text" id="google_cse_cx" value="{{ cfg.google_cse_cx or '' }}" placeholder="ID do mecanismo de busca (cx)" autocomplete="off">
-      <small style="color:var(--muted);display:block;margin-top:6px">
-        1) Crie um mecanismo em <a href="https://programmablesearchengine.google.com/" target="_blank" rel="noopener" style="color:#818cf8">programmablesearchengine.google.com</a> com a opção "Pesquisar em toda a web" → copie o <strong>ID (cx)</strong>.<br>
-        2) Gere a chave em <a href="https://developers.google.com/custom-search/v1/introduction" target="_blank" rel="noopener" style="color:#818cf8">developers.google.com/custom-search</a> ("Get a Key") → copie a <strong>chave (AIza...)</strong>.
-      </small>
-    </div>
-    <div class="field" style="margin-top:14px">
-      <label>Opção 2 — Brave Search <small>(2.000/mês, pode pedir cartão)</small></label>
-      <input type="password" id="brave_api_key" value="{{ cfg.brave_api_key or '' }}" placeholder="BSA..." autocomplete="off">
-    </div>
-  </div>
-
   <!-- SALVAR -->
   <button class="btn-save" id="btn-save" onclick="saveConfig(true)">
     <i class="fa fa-floppy-disk"></i> Salvar configurações
@@ -306,6 +379,7 @@
 <script id="terms-data" type="application/json">{{ (cfg.termos_busca or []) | tojson }}</script>
 <script id="cfg-msg-inicial" type="application/json">{{ (cfg.msg_inicial or '') | tojson }}</script>
 <script id="cfg-email-tpl" type="application/json">{{ (cfg.email_html_template or '') | tojson }}</script>
+<script id="cfg-estados" type="application/json">{{ (cfg.estados_atuacao or []) | tojson }}</script>
 
 <script>
 const BOT = '{{ user.schema_name if user and user.schema_name else "" }}';
@@ -377,13 +451,16 @@ async function generateTerms() {
   btn.disabled = true
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Gerando...'
   try {
+    const estados = getEstadosSelecionados()
+    if(!estados.length){ showToast('Selecione pelo menos um estado de atuação', false); btn.disabled=false; btn.innerHTML='<i class="fa fa-wand-magic-sparkles"></i> Gerar Automático'; return }
     const r = await fetch(`/api/${BOT}/config/generate-terms`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         empresa_nome: document.getElementById('empresa_nome').value,
         descricao: desc,
-        website: document.getElementById('website').value
+        website: document.getElementById('website').value,
+        estados: estados
       })
     })
     const d = await r.json()
@@ -521,6 +598,7 @@ async function saveConfig(redirect) {
       website: document.getElementById('website').value,
       descricao: document.getElementById('descricao').value,
       termos_busca: Array.isArray(terms) ? terms.filter(Boolean) : [],
+      estados_atuacao: getEstadosSelecionados(),
       msg_inicial: document.getElementById('msg_inicial').value,
       email_assunto_padrao: document.getElementById('email_assunto_padrao').value,
       email_html_template: document.getElementById('email_html_template').value,
@@ -529,9 +607,7 @@ async function saveConfig(redirect) {
       email_cor_header: document.getElementById('email_cor_header').value,
       email_cor_botao: document.getElementById('email_cor_botao').value,
       email_cor_texto: document.getElementById('email_cor_texto').value,
-      brave_api_key: document.getElementById('brave_api_key').value,
-      google_cse_key: document.getElementById('google_cse_key').value,
-      google_cse_cx: document.getElementById('google_cse_cx').value
+      resend_api_key: document.getElementById('resend_api_key').value
     }
     var r = await fetch('/api/' + BOT + '/config', {
       method: 'POST',
@@ -622,6 +698,33 @@ function showToast(msg, ok) {
   t.className = 'toast show ' + (ok ? 'ok' : 'err')
   setTimeout(() => t.classList.remove('show'), 3500)
 }
+
+// Estados de atuação
+function getEstadosSelecionados(){
+  return Array.from(document.querySelectorAll('.uf-cb:checked')).map(cb=>cb.value)
+}
+function toggleAllEstados(on){
+  document.querySelectorAll('.uf-cb').forEach(cb=>{cb.checked=on})
+}
+function toggleRegiao(reg){
+  const cbs=document.querySelectorAll(`.uf-cb[data-regiao="${reg}"]`)
+  const allOn=Array.from(cbs).every(cb=>cb.checked)
+  cbs.forEach(cb=>{cb.checked=!allOn})
+}
+// Restaurar estados salvos
+try{
+  const _estEl=document.getElementById('cfg-estados');
+  if(_estEl){
+    let _est=JSON.parse(_estEl.textContent);
+    if(typeof _est==='string'){try{_est=JSON.parse(_est)}catch(e){}}
+    if(Array.isArray(_est)){
+      _est.forEach(uf=>{
+        const cb=document.querySelector(`.uf-cb[value="${uf}"]`);
+        if(cb) cb.checked=true;
+      })
+    }
+  }
+}catch(e){}
 
 renderTerms()
 loadTokens()
