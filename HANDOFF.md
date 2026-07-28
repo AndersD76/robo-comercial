@@ -1,122 +1,135 @@
-# HANDOFF — /exposicao (2026-07-11)
+# HANDOFF — TurboVenda Auditoria Completa (2026-07-28)
 
-## O que foi implementado (in-code) — Sessão anterior
-
-- [x] robots.txt com diretivas AI bots (GPTBot, ClaudeBot, PerplexityBot, Google-Extended)
-- [x] sitemap.xml com `<lastmod>` + novas paginas (precos, termos, privacidade)
-- [x] /llms.txt completo (descricao, funcionalidades, planos, links)
-- [x] IndexNow key route (/b4f7e2a1c9d84f6e8a3b5c7d9e1f0a2b.txt)
-- [x] /manifest.json (PWA ready)
-- [x] /.well-known/security.txt
-- [x] Pagina /termos com conteudo LGPD-compliant
-- [x] Pagina /privacidade com tabela de dados, direitos LGPD Art.18
-- [x] Pagina /precos com 3 planos + FAQ + schema BreadcrumbList
-- [x] Favicon SVG em TODOS os templates
-- [x] og-image.png (1200x630) gerada e salva em /static/
-- [x] OG tags com imagem em todas paginas publicas
-- [x] BreadcrumbList JSON-LD nos blog posts
-- [x] Article schema enriquecido (dateModified, publisher.logo, image)
-- [x] WebSite + SearchAction schema na landing
-- [x] Canonical URLs em todas as rotas publicas
-- [x] noindex em admin, config, dashboard, trial_expirado
-
-## O que foi implementado (in-code) — Sessão atual
-
-- [x] **UTM persistence**: captura utm_source/medium/campaign em localStorage (landing, blog, segmento) → popula hidden fields no cadastro → salvo na tabela `users`
-- [x] **Colunas UTM**: ALTER TABLE automático no boot (utm_source, utm_medium, utm_campaign)
-- [x] **IndexNow POST**: função `_ping_indexnow()` + rota `POST /admin/indexnow` submete todas URLs ao IndexNow + ping Google sitemap
-- [x] **Conteúdo /para/***: expandido de ~50 para ~400+ palavras por segmento (dores do nicho, exemplo de mensagem de prospecção, FAQ única)
-- [x] **FAQPage schema**: JSON-LD FAQPage em cada página /para/* (3 perguntas por segmento)
-- [x] **Cross-links segmentos**: seção "Outros segmentos atendidos" com links entre as 6 páginas /para/*
-- [x] **Blog → /para/***: seção "Prospecção por segmento" em todo blog post com links para as 6 páginas
-- [x] **Blog → /precos**: link "Veja planos a partir de R$0" no CTA de cada post
-- [x] **Footer landing**: links para as 6 páginas /para/* + links ecossistema (prismabiz, pcmonitor, anderstech, andersdev)
-- [x] **twitter:card**: adicionado em precos.html, blog.html, segmento.html (faltava)
-- [x] **og:locale + og:site_name**: adicionado em segmento.html (faltava)
+> Tudo que **voce (humano)** precisa configurar manualmente apos este deploy.
+> Itens marcados N/A nao se aplicam a este app.
 
 ---
 
-## HANDOFF — o que VOCÊ precisa fazer
+## Railway / Render / Fly (hosting)
 
-### GA4 (Google Analytics 4) — G-NGSNSF3SPM
+| Variavel | Valor / Acao | Status |
+|---|---|---|
+| `SECRET_KEY` | Gerar com `python -c "import secrets;print(secrets.token_hex(32))"` e colar como variavel de ambiente. **OBRIGATORIO** — app agora faz `sys.exit(1)` se nao estiver definido em producao. | **ACAO NECESSARIA** |
+| `MP_PUBLIC_KEY` | Chave publica do Mercado Pago (comeca com `APP_USR-` ou `TEST-`). Necessaria para tokenizacao de cartao no frontend via MercadoPago.js. Pegar em: Mercado Pago > Suas integracoes > Credenciais. | **ACAO NECESSARIA** |
+| `MP_WEBHOOK_SECRET` | Ja configurado (webhook rejeita sem ele). Confirmar que esta definido. | Verificar |
+| `MP_ACCESS_TOKEN` | Ja configurado. Sem mudanca. | OK |
+| `DATABASE_URL` | Ja configurado. Sem mudanca. | OK |
+| `FERNET_KEY` | Ja configurado. Sem mudanca. | OK |
 
-| Ação | Onde | Valor |
-|------|------|-------|
-| Marcar conversões | Admin → Events → Mark as conversion | `sign_up`, `checkout_started`, `click_plan_starter`, `trial_expired` |
-| Criar funil | Explore → Funnel | `view_home` → `click_start_free` → `sign_up` → `onboarding_started` → `first_leads_generated` → `checkout_started` |
-| Testar eventos | DebugView | Abrir site com `?debug_mode=true` |
-| Relatório UTM | Reports → Acquisition | Filtrar por `utm_source` para ver origem dos cadastros |
+### Pos-deploy: migracao de banco
 
-### Google Search Console
+O app roda as migracoes automaticamente no startup, mas estas mudancas precisam de atencao:
 
-| Ação | Onde | Valor |
-|------|------|-------|
-| Submeter sitemap | GSC → Sitemaps | `https://www.turbovenda.com.br/sitemap.xml` |
-| Solicitar indexação | Inspeção de URL | Inserir cada URL /para/* e clicar "Solicitar indexação" |
-| Verificar FAQPage | Rich Results Test | Colar `https://www.turbovenda.com.br/para/agronegocio` |
+1. **UNIQUE index em `pagamentos.mp_payment_id`** — criado automaticamente via `CREATE UNIQUE INDEX IF NOT EXISTS`. Se houver duplicatas pre-existentes, o index vai falhar silenciosamente e o log mostrara o erro. Nesse caso:
+   ```sql
+   -- Encontrar duplicatas
+   SELECT mp_payment_id, COUNT(*) FROM pagamentos GROUP BY mp_payment_id HAVING COUNT(*) > 1;
+   -- Remover duplicatas mantendo o mais recente
+   DELETE FROM pagamentos a USING pagamentos b
+   WHERE a.id < b.id AND a.mp_payment_id = b.mp_payment_id;
+   -- Recriar index
+   CREATE UNIQUE INDEX idx_pagamentos_mp_id ON pagamentos (mp_payment_id);
+   ```
 
-### IndexNow (pós-deploy)
-
-| Ação | Como |
-|------|------|
-| Ping automático | `POST /admin/indexnow` (precisa session admin_auth) |
-| Alternativa curl | Logar como admin → chamar rota. Ou adaptar auth para API key |
-
-### Bing Webmaster
-
-| Ação | Onde |
-|------|------|
-| Importar do GSC | https://www.bing.com/webmasters |
-| Submeter sitemap | Mesmo URL do GSC |
-
-### DNS — SPF/DKIM/DMARC
-
-| Registro | Valor |
-|----------|-------|
-| SPF (TXT) | `v=spf1 include:resend.com ~all` |
-| DKIM | Configurar via painel Resend |
-| DMARC (TXT) | `v=DMARC1; p=quarantine; rua=mailto:suporte@turbovenda.com.br` |
-
-### Mercado Pago (Pagamentos)
-
-| Ação | Onde | Valor |
-|------|------|-------|
-| Credenciais | Railway env vars | `MP_ACCESS_TOKEN`, `MP_PUBLIC_KEY` |
-| Criar planos | Painel MP → Assinaturas | Starter R$97/mês, Pro R$297/mês |
-
-### OG Images (opcional, melhora social sharing)
-
-| Ação | Detalhe |
-|------|---------|
-| Imagem genérica | `/static/og-image.png` — já existente, verificar se 1200×630 |
-| Imagens por segmento (opcional) | Criar `og-agronegocio.png`, `og-industria.png` etc. e atualizar `segmento.html` |
-| Testar previews | https://developers.facebook.com/tools/debug/ + https://cards-dev.twitter.com/validator |
-
-### Railway (Deploy)
-
-| Ação | Detalhe |
-|------|---------|
-| N/A | Nenhuma variável de ambiente nova obrigatória. Colunas UTM adicionadas automaticamente no boot |
+2. **Indexes nos schemas de usuario** (`empresas.email_track_token`, `empresas.agenda_token`, `empresas.status`, `contatos(empresa_id, decisor)`, `sequencia_leads(proximo_envio)`) — criados automaticamente na proxima vez que cada user schema for inicializado.
 
 ---
 
-## Checklist pós-deploy
+## DNS
 
-- [ ] Deploy no Railway
-- [ ] Abrir `/para/agronegocio` — conteúdo expandido visível
-- [ ] Cadastrar com `?utm_source=teste` — verificar no banco `SELECT utm_source FROM users`
-- [ ] GA4 DebugView: evento `sign_up` aparece ao cadastrar
-- [ ] GSC: submeter sitemap, solicitar indexação manual das /para/*
-- [ ] Rich Results Test: FAQPage válido em `/para/agronegocio`
-- [ ] Social: colar URL no validator do Facebook/Twitter
-- [ ] POST `/admin/indexnow` — esperar resposta 200/202
+N/A — sem mudancas de DNS neste release.
 
 ---
 
-## Próximos passos (T3 Amplificação)
+## Google Search Console
 
-1. Listar TurboVenda em diretórios SaaS: ProductHunt, AppSumo, Capterra BR, B2B Stack
-2. Google Ads: keywords "prospecção b2b", "crm para vendas", "encontrar clientes empresas"
-3. LinkedIn Company Page + posts semanais
-4. Digital PR: pesquisa original "Estado da Prospecção B2B no Brasil 2026"
-5. Programa de indicação (PLG loop) com k-factor tracking
+| Item | Acao | Status |
+|---|---|---|
+| Verificacao GSC | Ja presente em todos os templates. Sem mudanca. | OK |
+| Resubmeter sitemap | Apos deploy, submeter `https://www.turbovenda.com.br/sitemap.xml` novamente — foram adicionados `/empresas` e `/empresas/sobre-os-dados`. | **ACAO RECOMENDADA** |
+
+---
+
+## Google Analytics (GA4)
+
+| Item | Acao | Status |
+|---|---|---|
+| Measurement ID | Todos os templates agora usam `{{ ga_id }}` via variavel do servidor. Nenhum mais tem ID hardcoded. | OK |
+| Consent mode | GA4 so carrega com `cookie_consent === 'accepted'` no `localStorage`. Banner na landing.html. | OK |
+
+---
+
+## Mercado Pago
+
+| Item | Acao | Status |
+|---|---|---|
+| `MP_PUBLIC_KEY` | **CONFIGURAR** como variavel de ambiente. Sem ela, pagamento por cartao mostra "indisponivel". PIX e boleto continuam funcionando. | **ACAO NECESSARIA** |
+| Frontend cartao | Agora usa MercadoPago.js SDK para tokenizar no browser. Dados de cartao nunca mais transitam pelo servidor. | Mudanca PCI-DSS |
+| Webhook | Usa `INSERT ON CONFLICT` — pagamentos duplicados nao sao mais inseridos. Retorna 500 em caso de excecao (antes retornava 200). | OK |
+| PIX/Boleto | Ativam o plano imediatamente quando status == 'approved'. | OK |
+
+---
+
+## Email / Resend
+
+N/A — sem mudancas. API keys preservadas no save_config (nao mais sobrescritas com vazio).
+
+---
+
+## Segredos / LGPD
+
+| Item | Acao | Status |
+|---|---|---|
+| Cookie consent banner | Adicionado na landing.html. Respeita localStorage. | OK |
+| GA4 consent-gated | Todos os 20 templates condicionam GA4 ao consent. | OK |
+| Politica de Privacidade | Acentuacao corrigida, tabela de bases legais presente. | OK |
+
+---
+
+## Mudancas aplicadas automaticamente (sem configuracao manual)
+
+### Seguranca (Fase 2A)
+- [x] `SECRET_KEY` obrigatorio em producao (sys.exit se ausente)
+- [x] PCI-DSS: cartao tokenizado no browser via MercadoPago.js
+- [x] Connection pooling (ThreadedConnectionPool, 2-10 conexoes)
+- [x] Config merge: API keys preservadas quando frontend envia vazio
+- [x] DB indexes: 5 indexes adicionados nos schemas de usuario
+- [x] UNIQUE constraint em `pagamentos.mp_payment_id`
+- [x] `TEMPLATES_AUTO_RELOAD = False` e `SEND_FILE_MAX_AGE_DEFAULT = 300` em producao
+
+### Integridade funcional (Fase 2B)
+- [x] Expiracao de plano verificada para TODOS os planos (nao so trial)
+- [x] PIX e boleto ativam plano quando status == 'approved'
+- [x] Webhook retorna 500 em excecao (antes retornava 200)
+- [x] Webhook usa `_conn()` ao inves de `psycopg2.connect()` direto
+- [x] Idempotency keys sem timestamp
+- [x] Funcao `_init_public_schema` unificada (removida duplicata)
+- [x] Error handler 500 agora renderiza `500.html` (antes usava 404.html)
+
+### Templates e UX (Fase 2C)
+- [x] Acentuacao corrigida em 8 templates
+- [x] OG tags adicionadas: login, register, termos, privacidade, empresas_sobre
+- [x] GA4 consent-gated em todos os 20 templates
+- [x] GA IDs hardcoded removidos (config, register, dashboard, trial_expirado)
+- [x] Skip-links adicionados em 5 templates
+- [x] Preconnect fonts.gstatic.com adicionado a 12 templates
+- [x] `rel="noopener"` adicionado a target="_blank" em config, dashboard
+- [x] Duplicate Font Awesome removido de agendar.html
+- [x] aggregateRating removido da landing (sem dados reais)
+- [x] `robots.txt` — Disallow para /trial-expirado, /pagamento/, /t/
+- [x] Sitemap — /empresas e /empresas/sobre-os-dados
+- [x] Health check — verifica DB (retorna 503 se down)
+- [x] Template `500.html` criado
+
+---
+
+## Itens pendentes (requerem mudancas maiores)
+
+1. **CI/CD pipeline** — Configurar GitHub Actions com lint + testes
+2. **Testes automatizados** — Cobertura < 1%; priorizar pagamento e auth
+3. **LGPD completa** — Endpoints de exclusao e exportacao de dados pessoais
+4. **Cookie consent global** — Extrair banner para `{% include 'cookie_banner.html' %}` compartilhado
+5. **Rate limiting completo** — Decorar todas as rotas sensiveis
+6. **Logging estruturado** — Substituir `print()` por logger com formato JSON
+7. **Monitoramento** — Sentry ou similar para excecoes em producao
+8. **Backup automatico** — Verificar politica de retencao do Neon

@@ -6,8 +6,20 @@
   <title>Teste expirado — TurboVenda</title>
   <meta name="robots" content="noindex, nofollow">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect rx='20' width='100' height='100' fill='%236366f1'/><text x='50' y='72' font-size='60' text-anchor='middle' fill='white'>⚡</text></svg>">
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-NGSNSF3SPM"></script>
-  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-NGSNSF3SPM');</script>
+  <script>
+  (function(){
+    if(localStorage.getItem('cookie_consent')==='accepted'){
+      var s=document.createElement('script');
+      s.async=true;
+      s.src='https://www.googletagmanager.com/gtag/js?id={{ ga_id }}';
+      document.head.appendChild(s);
+      window.dataLayer=window.dataLayer||[];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js',new Date());
+      gtag('config','{{ ga_id }}');
+    }
+  })();
+  </script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/tokens.css">
   <link rel="stylesheet" href="/static/components.css">
@@ -41,9 +53,12 @@
     .stat-l{font-size:11px;color:#64748b;margin-top:2px}
     .footer{margin-top:24px;font-size:13px;color:#475569}
     .footer a{color:#818cf8;text-decoration:none}
+    .skip-link{position:absolute;top:-40px;left:0;background:#6366f1;color:#fff;padding:8px 16px;z-index:10000;transition:top .2s}.skip-link:focus{top:0}
   </style>
 </head>
 <body>
+<a href="#main" class="skip-link">Pular para conteúdo</a>
+<main id="main">
 <div class="bg-glow"></div>
 <div class="card">
   <div class="icon"><i class="fa fa-clock"></i></div>
@@ -86,6 +101,7 @@
     <a href="/logout">Sair</a> · <a href="/precos">Ver todos os planos</a>
   </div>
 </div>
+</main>
 
 <script>if(typeof gtag==='function')gtag('event','trial_expired');</script>
 </body>

@@ -19,6 +19,7 @@ import bcrypt
 from cryptography.fernet import Fernet, InvalidToken
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 from psycopg2 import sql as psql
 from functools import wraps
 import logging
@@ -35,12 +36,16 @@ logger = logging.getLogger(__name__)
 
 _secret = os.environ.get('SECRET_KEY', '')
 if not _secret or _secret == 'mv-saas-2025-change-in-prod':
+    if os.environ.get('RAILWAY_ENVIRONMENT') or os.environ.get('RENDER') or os.environ.get('FLY_APP_NAME'):
+        print('[FATAL] SECRET_KEY não definido em produção — defina a variável de ambiente', flush=True)
+        sys.exit(1)
     _secret = secrets.token_hex(32)
     print('[WARN] SECRET_KEY não definido — gerado temporário (sessões perdidas ao reiniciar)', flush=True)
 app.secret_key = _secret
 
-app.config['TEMPLATES_AUTO_RELOAD'] = True
-app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+_is_production = bool(os.environ.get('RAILWAY_ENVIRONMENT') or os.environ.get('RENDER') or os.environ.get('FLY_APP_NAME'))
+app.config['TEMPLATES_AUTO_RELOAD'] = not _is_production
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 300 if _is_production else 0
 app.config['PREFERRED_URL_SCHEME'] = 'https'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SECURE'] = True
@@ -144,7 +149,7 @@ def _rate_limit_handler(e):
 def _internal_error(e):
     if request.path.startswith('/api/'):
         return jsonify({'error': 'Erro interno'}), 500
-    return render_template('404.html'), 500
+    return render_template('500.html'), 500
 
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 if not DATABASE_URL:
@@ -154,6 +159,14 @@ if DATABASE_URL.startswith('psql://'):
     DATABASE_URL = 'postgresql://' + DATABASE_URL[7:]
 elif DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = 'postgresql://' + DATABASE_URL[11:]
+
+_db_pool = None
+try:
+    _db_pool = psycopg2.pool.ThreadedConnectionPool(
+        minconn=2, maxconn=10, dsn=DATABASE_URL,
+        cursor_factory=psycopg2.extras.RealDictCursor)
+except Exception as _pool_err:
+    print(f'[WARN] Pool de conexões falhou, usando fallback: {_pool_err}', flush=True)
 
 # Processos em background: {schema: {'busca': Popen, 'linkedin': Popen}}
 _procs: dict = {}
@@ -231,6 +244,8 @@ def _init_public_schema_safe():
             "trial_email_3d_sent BOOLEAN DEFAULT FALSE",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
             "trial_email_expired_sent BOOLEAN DEFAULT FALSE",
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_pagamentos_mp_id "
+            "ON pagamentos (mp_payment_id)",
         ]:
             try:
                 c.execute(stmt)
@@ -268,9 +283,43 @@ def _safe_sql_name(name: str) -> bool:
     return bool(name) and bool(re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', name))
 
 
+class _PooledConn:
+    """Wrapper que devolve a conexão ao pool quando .close() é chamado."""
+    __slots__ = ('_conn', '_pool')
+
+    def __init__(self, conn, pool):
+        self._conn = conn
+        self._pool = pool
+
+    def close(self):
+        if self._conn is not None:
+            try:
+                self._conn.reset()
+                self._pool.putconn(self._conn)
+            except Exception:
+                try:
+                    self._pool.putconn(self._conn, close=True)
+                except Exception:
+                    pass
+            self._conn = None
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
+
 def _conn(schema=None):
-    conn = psycopg2.connect(DATABASE_URL,
-                            cursor_factory=psycopg2.extras.RealDictCursor)
+    if _db_pool:
+        raw = _db_pool.getconn()
+        conn = _PooledConn(raw, _db_pool)
+    else:
+        conn = psycopg2.connect(DATABASE_URL,
+                                cursor_factory=psycopg2.extras.RealDictCursor)
     if schema:
         if not _safe_sql_name(schema):
             conn.close()
@@ -283,41 +332,7 @@ def _conn(schema=None):
 
 
 def _init_public_schema():
-    if not DATABASE_URL:
-        return
-    conn = None
-    try:
-        conn = _conn()
-        c = conn.cursor()
-        c.execute("""CREATE TABLE IF NOT EXISTS users (
-            id            BIGSERIAL PRIMARY KEY,
-            email         TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            empresa_nome  TEXT,
-            website       TEXT,
-            descricao     TEXT,
-            schema_name   TEXT UNIQUE,
-            plano         TEXT DEFAULT 'trial',
-            ativo         BOOLEAN DEFAULT TRUE,
-            criado_em     TIMESTAMP DEFAULT NOW()
-        )""")
-        c.execute("""CREATE TABLE IF NOT EXISTS api_tokens (
-            id        BIGSERIAL PRIMARY KEY,
-            user_id   BIGINT REFERENCES users(id) ON DELETE CASCADE,
-            token     TEXT UNIQUE NOT NULL,
-            label     TEXT,
-            ativo     BOOLEAN DEFAULT TRUE,
-            criado_em TIMESTAMP DEFAULT NOW()
-        )""")
-        conn.commit()
-    except Exception as e:
-        print(f'[init_public] erro: {e}')
-    finally:
-        if conn:
-            try:
-                conn.close()
-            except Exception:
-                pass
+    _init_public_schema_safe()
 
 
 def _init_user_schema(schema: str):
@@ -481,6 +496,17 @@ def _init_user_schema(schema: str):
                 c.execute(stmt)
             except Exception:
                 conn.rollback()
+        for idx in [
+            "CREATE INDEX IF NOT EXISTS idx_empresas_email_track ON empresas (email_track_token) WHERE email_track_token IS NOT NULL",
+            "CREATE INDEX IF NOT EXISTS idx_empresas_agenda_token ON empresas (agenda_token) WHERE agenda_token IS NOT NULL",
+            "CREATE INDEX IF NOT EXISTS idx_empresas_status ON empresas (status)",
+            "CREATE INDEX IF NOT EXISTS idx_contatos_empresa_decisor ON contatos (empresa_id, decisor)",
+            "CREATE INDEX IF NOT EXISTS idx_sequencia_leads_proximo ON sequencia_leads (proximo_envio) WHERE status = 'ativo'",
+        ]:
+            try:
+                c.execute(idx)
+            except Exception:
+                conn.rollback()
         conn.commit()
     finally:
         conn.close()
@@ -604,13 +630,16 @@ def _check_lead_limit(schema, uid=None):
                 conn.close()
             except Exception:
                 pass
-    if plano == 'trial' and row and row.get('plano_expira'):
+    if row and row.get('plano_expira'):
         from datetime import datetime
         expira = row['plano_expira']
         if isinstance(expira, str):
             expira = datetime.fromisoformat(expira)
         if expira < datetime.now():
-            return False, f'Seu trial de {TRIAL_DAYS} dias expirou. Faça upgrade para continuar prospectando.'
+            if plano == 'trial':
+                return False, f'Seu trial de {TRIAL_DAYS} dias expirou. Faça upgrade para continuar prospectando.'
+            else:
+                return False, f'Seu plano {plano} expirou. Renove para continuar prospectando.'
     limite = PLAN_LEAD_LIMITS.get(plano)
     if limite is None:
         return True, ''
@@ -1069,7 +1098,7 @@ def cadastro():
                         conn2.close()
                     except Exception:
                         pass
-    return render_template('register.html', error=error)
+    return render_template('register.html', error=error, ga_id=GA_MEASUREMENT_ID)
 
 
 @app.route('/admin/users')
@@ -1824,7 +1853,10 @@ def robots_txt():
         "Disallow: /admin/\n"
         "Disallow: /dashboard\n"
         "Disallow: /configurar\n"
-        "Disallow: /logout\n\n"
+        "Disallow: /logout\n"
+        "Disallow: /trial-expirado\n"
+        "Disallow: /pagamento/\n"
+        "Disallow: /t/\n\n"
         "User-agent: GPTBot\n"
         "Allow: /\n\n"
         "User-agent: ClaudeBot\n"
@@ -1962,6 +1994,8 @@ def _static_sitemap_urls():
         ('https://www.turbovenda.com.br/precos', hoje, 'monthly', '0.8'),
         ('https://www.turbovenda.com.br/termos', hoje, 'yearly', '0.3'),
         ('https://www.turbovenda.com.br/privacidade', hoje, 'yearly', '0.3'),
+        ('https://www.turbovenda.com.br/empresas', hoje, 'weekly', '0.8'),
+        ('https://www.turbovenda.com.br/empresas/sobre-os-dados', hoje, 'yearly', '0.5'),
     ]
     for p in BLOG_POSTS:
         urls.append((
@@ -2584,7 +2618,8 @@ def trial_expirado():
             return redirect(url_for('dashboard'))
     schema = user.get('schema_name') or f'emp_{user["id"]}'
     stats = get_stats(schema)
-    return render_template('trial_expirado.html', user=user, stats=stats)
+    return render_template('trial_expirado.html', user=user, stats=stats,
+                           ga_id=GA_MEASUREMENT_ID)
 
 
 @app.route('/dashboard')
@@ -2624,7 +2659,9 @@ def dashboard():
                            label='Leads',
                            color='#6366f1',
                            color_dim='rgba(99,102,241,.08)',
-                           color_bd='rgba(99,102,241,.18)')
+                           color_bd='rgba(99,102,241,.18)',
+                           ga_id=GA_MEASUREMENT_ID,
+                           mp_public_key=MP_PUBLIC_KEY)
 
 
 @app.route('/configurar')
@@ -2637,7 +2674,8 @@ def config_page():
     cfg = get_bot_config(schema) if schema else {}
     just_registered = session.pop('just_registered', False)
     return render_template('config.html', user=user, cfg=cfg,
-                           just_registered=just_registered)
+                           just_registered=just_registered,
+                           ga_id=GA_MEASUREMENT_ID)
 
 
 # =============================================================================
@@ -4168,13 +4206,15 @@ def api_save_config(bot):
                       email_cor_header or '#1a2332',
                       email_cor_botao or '#2563eb',
                       email_cor_texto or '#ffffff',
-                      _encrypt_field(resend_api_key) or None,
-                      smtp_host or None, smtp_port or 587,
-                      smtp_user or None, _encrypt_field(smtp_password) or None,
-                      _encrypt_field(serper_api_key) or None,
-                      _encrypt_field(brave_api_key) or None,
-                      _encrypt_field(google_cse_key) or None,
-                      google_cse_cx or None]
+                      _encrypt_field(resend_api_key) if resend_api_key else exists.get('resend_api_key'),
+                      smtp_host or exists.get('smtp_host'),
+                      smtp_port or exists.get('smtp_port') or 587,
+                      smtp_user or exists.get('smtp_user'),
+                      _encrypt_field(smtp_password) if smtp_password else exists.get('smtp_password'),
+                      _encrypt_field(serper_api_key) if serper_api_key else exists.get('serper_api_key'),
+                      _encrypt_field(brave_api_key) if brave_api_key else exists.get('brave_api_key'),
+                      _encrypt_field(google_cse_key) if google_cse_key else exists.get('google_cse_key'),
+                      google_cse_cx or exists.get('google_cse_cx')]
             if li_password:
                 sql += ", linkedin_password=%s"
                 params.append(_encrypt_field(li_password))
@@ -5172,7 +5212,16 @@ def _extrair_cores_site(website):
 
 @app.route('/health')
 def health():
-    return jsonify({'status': 'ok', 'version': '2.1'})
+    try:
+        conn = _conn()
+        try:
+            c = conn.cursor()
+            c.execute('SELECT 1')
+        finally:
+            conn.close()
+        return jsonify({'status': 'ok', 'version': '2.1', 'db': 'ok'})
+    except Exception as e:
+        return jsonify({'status': 'degraded', 'version': '2.1', 'db': str(e)}), 503
 
 
 # =============================================================================
@@ -6152,21 +6201,17 @@ def webhook_mercadopago():
         if not user_id:
             return jsonify({'ok': True})
 
-        conn = psycopg2.connect(
-            DATABASE_URL,
-            cursor_factory=psycopg2.extras.RealDictCursor)
+        conn = _conn()
         try:
             c = conn.cursor()
 
-            # Registra pagamento
             c.execute("""INSERT INTO pagamentos
                 (user_id, mp_payment_id, status, valor, plano)
-                VALUES (%s, %s, %s, %s, %s)""",
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (mp_payment_id) DO UPDATE SET status = EXCLUDED.status""",
                 (user_id, str(payment_id), status, valor, plano))
 
-            # Ativa plano se aprovado
             if status == 'approved':
-                from datetime import timedelta
                 c.execute("""UPDATE users SET
                     plano = %s,
                     plano_expira = NOW() + INTERVAL '30 days',
@@ -6181,6 +6226,7 @@ def webhook_mercadopago():
             conn.close()
     except Exception as e:
         logger.exception("Erro no webhook Mercado Pago")
+        return jsonify({'error': 'internal'}), 500
 
     return jsonify({'ok': True})
 
@@ -6204,7 +6250,7 @@ def api_pagamento_pix():
             headers={
                 'Authorization': f'Bearer {MP_ACCESS_TOKEN}',
                 'Content-Type': 'application/json',
-                'X-Idempotency-Key': f"pix_{user['id']}_{plano_id}_{int(__import__('time').time())}",
+                'X-Idempotency-Key': f"pix_{user['id']}_{plano_id}",
             },
             json={
                 'transaction_amount': plano['valor'],
@@ -6221,20 +6267,24 @@ def api_pagamento_pix():
             pix_data = pay.get(
                 'point_of_interaction', {}).get(
                 'transaction_data', {})
-            # Registra pagamento
             conn = None
             try:
-                conn = psycopg2.connect(
-                    DATABASE_URL,
-                    cursor_factory=psycopg2.extras.RealDictCursor)
+                conn = _conn()
                 c = conn.cursor()
                 c.execute("""INSERT INTO pagamentos
                     (user_id, mp_payment_id, status,
                      valor, plano)
-                    VALUES (%s,%s,%s,%s,%s)""",
+                    VALUES (%s,%s,%s,%s,%s)
+                    ON CONFLICT (mp_payment_id) DO UPDATE SET status = EXCLUDED.status""",
                     (user['id'], str(pay.get('id')),
                      pay.get('status'), plano['valor'],
                      plano_id))
+                if pay.get('status') == 'approved':
+                    c.execute("""UPDATE users SET
+                        plano = %s,
+                        plano_expira = NOW() + INTERVAL '30 days'
+                        WHERE id = %s""",
+                        (plano_id, user['id']))
                 conn.commit()
             except Exception:
                 logger.exception("Erro ao registrar pagamento PIX")
@@ -6261,7 +6311,7 @@ def api_pagamento_pix():
 @app.route('/api/pagamento/cartao', methods=['POST'])
 @login_required
 def api_pagamento_cartao():
-    """Processa pagamento com cartão via MP."""
+    """Processa pagamento com cartão via MP — recebe token gerado no frontend pelo MercadoPago.js."""
     import requests as http
     if not MP_ACCESS_TOKEN:
         return jsonify({'error': 'MP não configurado'}), 500
@@ -6271,71 +6321,27 @@ def api_pagamento_cartao():
     if not plano:
         return jsonify({'error': 'Plano inválido'}), 400
     user = get_current_user()
-    card_num = data.get('card_number', '').replace(' ', '')
-    exp = data.get('expiration', '')
-    cvv = data.get('cvv', '')
-    holder = data.get('holder_name', '')
+    card_token = data.get('token', '').strip()
+    payment_method = data.get('payment_method_id', 'visa')
     cpf = data.get('cpf', '').replace('.', '').replace('-', '')
-    if not all([card_num, exp, cvv, holder, cpf]):
-        return jsonify({'error': 'Preencha todos os campos'}), 400
-    exp_parts = exp.split('/')
-    if len(exp_parts) != 2:
-        return jsonify({'error': 'Validade inválida'}), 400
-    exp_month = int(exp_parts[0])
-    exp_year = int('20' + exp_parts[1]) if len(
-        exp_parts[1]) == 2 else int(exp_parts[1])
-    # Detectar bandeira
-    bin6 = card_num[:6]
-    if card_num.startswith('4'):
-        payment_method = 'visa'
-    elif card_num.startswith(('51', '52', '53', '54', '55')):
-        payment_method = 'master'
-    elif card_num.startswith(('34', '37')):
-        payment_method = 'amex'
-    elif card_num.startswith('636368'):
-        payment_method = 'elo'
-    else:
-        payment_method = 'visa'
+    installments = data.get('installments', 1)
+    if not card_token:
+        return jsonify({'error': 'Token do cartão é obrigatório. Use MercadoPago.js para tokenizar no navegador.'}), 400
+    if not cpf:
+        return jsonify({'error': 'CPF é obrigatório'}), 400
     try:
-        # Criar token do cartão
-        token_r = http.post(
-            'https://api.mercadopago.com/v1/card_tokens',
-            headers={
-                'Authorization': f'Bearer {MP_ACCESS_TOKEN}',
-                'Content-Type': 'application/json',
-            },
-            json={
-                'card_number': card_num,
-                'expiration_month': exp_month,
-                'expiration_year': exp_year,
-                'security_code': cvv,
-                'cardholder': {
-                    'name': holder,
-                    'identification': {
-                        'type': 'CPF',
-                        'number': cpf,
-                    },
-                },
-            }, timeout=15)
-        token_data = token_r.json()
-        if token_r.status_code not in (200, 201):
-            return jsonify({
-                'error': token_data.get('message',
-                    'Erro ao tokenizar cartão')}), 400
-        card_token = token_data.get('id')
-        # Criar pagamento
         r = http.post(
             'https://api.mercadopago.com/v1/payments',
             headers={
                 'Authorization': f'Bearer {MP_ACCESS_TOKEN}',
                 'Content-Type': 'application/json',
-                'X-Idempotency-Key': f"card_{user['id']}_{int(__import__('time').time())}",
+                'X-Idempotency-Key': f"card_{user['id']}_{plano_id}",
             },
             json={
                 'transaction_amount': plano['valor'],
                 'token': card_token,
                 'description': plano['nome'],
-                'installments': 1,
+                'installments': installments,
                 'payment_method_id': payment_method,
                 'payer': {
                     'email': user['email'],
@@ -6351,17 +6357,15 @@ def api_pagamento_cartao():
             }, timeout=15)
         pay = r.json()
         status = pay.get('status')
-        # Registra
         conn = None
         try:
-            conn = psycopg2.connect(
-                DATABASE_URL,
-                cursor_factory=psycopg2.extras.RealDictCursor)
+            conn = _conn()
             c = conn.cursor()
             c.execute("""INSERT INTO pagamentos
                 (user_id, mp_payment_id, status,
                  valor, plano)
-                VALUES (%s,%s,%s,%s,%s)""",
+                VALUES (%s,%s,%s,%s,%s)
+                ON CONFLICT (mp_payment_id) DO UPDATE SET status = EXCLUDED.status""",
                 (user['id'], str(pay.get('id')),
                  status, plano['valor'], plano_id))
             if status == 'approved':
@@ -6426,7 +6430,7 @@ def api_pagamento_boleto():
             headers={
                 'Authorization': f'Bearer {MP_ACCESS_TOKEN}',
                 'Content-Type': 'application/json',
-                'X-Idempotency-Key': f"boleto_{user['id']}_{int(__import__('time').time())}",
+                'X-Idempotency-Key': f"boleto_{user['id']}_{plano_id}",
             },
             json={
                 'transaction_amount': plano['valor'],
@@ -6449,17 +6453,22 @@ def api_pagamento_boleto():
                 'external_resource_url', '')
             conn = None
             try:
-                conn = psycopg2.connect(
-                    DATABASE_URL,
-                    cursor_factory=psycopg2.extras.RealDictCursor)
+                conn = _conn()
                 c = conn.cursor()
                 c.execute("""INSERT INTO pagamentos
                     (user_id, mp_payment_id, status,
                      valor, plano)
-                    VALUES (%s,%s,%s,%s,%s)""",
+                    VALUES (%s,%s,%s,%s,%s)
+                    ON CONFLICT (mp_payment_id) DO UPDATE SET status = EXCLUDED.status""",
                     (user['id'], str(pay.get('id')),
                      pay.get('status'), plano['valor'],
                      plano_id))
+                if pay.get('status') == 'approved':
+                    c.execute("""UPDATE users SET
+                        plano = %s,
+                        plano_expira = NOW() + INTERVAL '30 days'
+                        WHERE id = %s""",
+                        (plano_id, user['id']))
                 conn.commit()
             except Exception:
                 logger.exception("Erro ao registrar pagamento boleto")

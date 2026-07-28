@@ -223,9 +223,9 @@
 
 <main id="main">
   <!-- KPIs -->
-  <div class="sec-title">Metricas Gerais</div>
+  <div class="sec-title">Métricas Gerais</div>
   <div class="kpi-row" id="kpi-row">
-    <div class="kpi"><div class="kpi-label">Usuarios</div><div class="kpi-value" id="kpi-users">--</div></div>
+    <div class="kpi"><div class="kpi-label">Usuários</div><div class="kpi-value" id="kpi-users">--</div></div>
     <div class="kpi"><div class="kpi-label">Ativos</div><div class="kpi-value" id="kpi-active">--</div></div>
     <div class="kpi"><div class="kpi-label">Total Leads</div><div class="kpi-value" id="kpi-leads">--</div></div>
     <div class="kpi"><div class="kpi-label">Emails Enviados</div><div class="kpi-value" id="kpi-emails">--</div></div>
@@ -234,7 +234,7 @@
 
   <!-- Tabs -->
   <div class="tabs">
-    <div class="tab active" onclick="switchTab('users')"><i class="fas fa-users"></i>&nbsp; Usuarios</div>
+    <div class="tab active" onclick="switchTab('users')"><i class="fas fa-users"></i>&nbsp; Usuários</div>
     <div class="tab" onclick="switchTab('payments')"><i class="fas fa-credit-card"></i>&nbsp; Pagamentos</div>
   </div>
 
@@ -260,7 +260,7 @@
         <thead>
           <tr>
             <th>ID</th><th>Email</th><th>Empresa</th><th>Plano</th><th>Expira</th>
-            <th>Ativo</th><th>Criado em</th><th>Leads</th><th>Acoes</th>
+            <th>Ativo</th><th>Criado em</th><th>Leads</th><th>Ações</th>
           </tr>
         </thead>
         <tbody id="users-tbody"></tbody>
@@ -337,7 +337,7 @@ function planBadge(p) {
   return '<span class="badge ' + (colors[p] || 'badge-blue') + '">' + (p || 'trial') + '</span>';
 }
 function ativoBadge(a) {
-  return a ? '<span class="badge badge-green">Sim</span>' : '<span class="badge badge-red">Nao</span>';
+  return a ? '<span class="badge badge-green">Sim</span>' : '<span class="badge badge-red">Não</span>';
 }
 
 // ── Load Stats ──
@@ -365,7 +365,7 @@ async function loadUsers() {
 function renderUsers(users) {
   const tbody = document.getElementById('users-tbody');
   if (!users.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted)">Nenhum usuario encontrado</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted)">Nenhum usuário encontrado</td></tr>';
     return;
   }
   tbody.innerHTML = users.map(u => `
@@ -415,13 +415,13 @@ function filterUsers() {
 // ── Toggle Ativo ──
 async function toggleAtivo(id, current) {
   const action = current ? 'desativar' : 'ativar';
-  if (!confirm(`Deseja ${action} o usuario #${id}?`)) return;
+  if (!confirm(`Deseja ${action} o usuário #${id}?`)) return;
   try {
     const r = await fetch(`/admin/api/users/${id}/toggle`, {method:'POST'});
     const d = await r.json();
-    if (d.ok) { toast(`Usuario ${action}do com sucesso`); loadUsers(); loadStats(); }
+    if (d.ok) { toast(`Usuário ${action}do com sucesso`); loadUsers(); loadStats(); }
     else toast(d.error || 'Erro', 'error');
-  } catch(e) { toast('Erro de conexao', 'error'); }
+  } catch(e) { toast('Erro de conexão', 'error'); }
 }
 
 // ── Change Plan ──
@@ -429,7 +429,7 @@ function showChangePlan(id, current) {
   openModal(`
     <h3><i class="fas fa-exchange-alt" style="color:var(--accent)"></i> Trocar Plano</h3>
     <div class="modal-field">
-      <label>Usuario</label>
+      <label>Usuário</label>
       <span>#${id}</span>
     </div>
     <div class="modal-field">
@@ -457,7 +457,7 @@ async function changePlan(id) {
     const d = await r.json();
     if (d.ok) { toast('Plano atualizado'); closeModal(); loadUsers(); loadStats(); }
     else toast(d.error || 'Erro', 'error');
-  } catch(e) { toast('Erro de conexao', 'error'); }
+  } catch(e) { toast('Erro de conexão', 'error'); }
 }
 
 // ── User Details ──
@@ -465,7 +465,7 @@ function showUserDetails(id) {
   const u = allUsers.find(x => x.id === id);
   if (!u) return;
   openModal(`
-    <h3><i class="fas fa-user" style="color:var(--accent)"></i> Detalhes do Usuario</h3>
+    <h3><i class="fas fa-user" style="color:var(--accent)"></i> Detalhes do Usuário</h3>
     <div class="modal-field"><label>ID</label><span>#${u.id}</span></div>
     <div class="modal-field"><label>Email</label><span>${u.email}</span></div>
     <div class="modal-field"><label>Empresa</label><span>${u.empresa_nome || '--'}</span></div>
@@ -485,13 +485,13 @@ function showUserDetails(id) {
 
 // ── Impersonate ──
 async function impersonate(id) {
-  if (!confirm(`Logar como usuario #${id}? Voce sera redirecionado ao dashboard dele.`)) return;
+  if (!confirm(`Logar como usuário #${id}? Você será redirecionado ao dashboard dele.`)) return;
   try {
     const r = await fetch(`/admin/api/users/${id}/impersonate`, {method:'POST'});
     const d = await r.json();
     if (d.ok) window.location.href = '/dashboard';
     else toast(d.error || 'Erro', 'error');
-  } catch(e) { toast('Erro de conexao', 'error'); }
+  } catch(e) { toast('Erro de conexão', 'error'); }
 }
 
 // ── Load Payments ──

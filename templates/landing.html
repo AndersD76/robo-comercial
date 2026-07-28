@@ -28,13 +28,20 @@
   <meta name="twitter:description" content="Encontre leads qualificados, envie mensagens personalizadas com IA e feche mais negócios.">
   <meta name="twitter:image" content="https://www.turbovenda.com.br/static/og-image.png">
 
-  <!-- Google Analytics -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id={{ ga_id }}"></script>
+  <!-- Google Analytics — carregado apenas apos consentimento de cookies -->
   <script>
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', '{{ ga_id }}');
+    function loadGA4() {
+      if (window._ga4Loaded) return;
+      window._ga4Loaded = true;
+      var s = document.createElement('script');
+      s.async = true;
+      s.src = 'https://www.googletagmanager.com/gtag/js?id={{ ga_id }}';
+      document.head.appendChild(s);
+      gtag('js', new Date());
+      gtag('config', '{{ ga_id }}');
+    }
   </script>
 
   <!-- Dados Estruturados JSON-LD -->
@@ -69,12 +76,7 @@
         "priceCurrency": "BRL",
         "description": "Leads ilimitados"
       }
-    ],
-    "aggregateRating": {
-      "@type": "AggregateRating",
-      "ratingValue": "4.8",
-      "reviewCount": "127"
-    }
+    ]
   }
   </script>
   <script type="application/ld+json">
@@ -149,6 +151,7 @@
   </script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/tokens.css">
   <link rel="stylesheet" href="/static/components.css">
@@ -381,7 +384,7 @@
   </style>
 </head>
 <body>
-<a href="#main" class="skip-link">Pular para conte��do</a>
+<a href="#main" class="skip-link">Pular para conteúdo</a>
 
 <!-- NAVBAR -->
 <nav>
@@ -628,7 +631,7 @@
       <div class="how-step fade-in">
         <div class="how-num">1</div>
         <div class="how-title">Descreva sua empresa</div>
-        <div class="how-desc">Coloque o nome, site e o que vende. A IA entende quem s seus compradores ideais.</div>
+        <div class="how-desc">Coloque o nome, site e o que vende. A IA entende quem são seus compradores ideais.</div>
       </div>
       <div class="how-step fade-in">
         <div class="how-num">2</div>
@@ -881,6 +884,79 @@
 
   // Esconder WhatsApp no mobile (sticky CTA já ocupa o espaço)
   if (window.innerWidth < 769) document.getElementById('wpp-btn').style.bottom = '80px';
+</script>
+
+<!-- Cookie Consent Banner -->
+<div id="cookie-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:10000;
+    background:#0f172a;border-top:1px solid rgba(99,102,241,.3);padding:16px 24px;
+    align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+  <p style="color:#e2e8f0;font-size:14px;margin:0;flex:1;min-width:240px;line-height:1.5">
+    Usamos cookies para análise de tráfego (Google Analytics). Nenhum dado pessoal é vendido.
+    <a href="/privacidade" style="color:#6366f1;text-decoration:underline">Política de Privacidade</a>
+  </p>
+  <div style="display:flex;gap:8px;flex-shrink:0">
+    <button id="cookie-accept" style="background:#6366f1;color:#fff;border:none;padding:10px 20px;
+        border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:.2s">
+      Aceitar cookies
+    </button>
+    <button id="cookie-reject" style="background:transparent;color:#94a3b8;border:1px solid rgba(255,255,255,.15);
+        padding:10px 20px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;transition:.2s">
+      Recusar
+    </button>
+  </div>
+</div>
+
+<!-- Botao para reabrir configuracao de cookies -->
+<button id="cookie-settings-btn" style="display:none;position:fixed;bottom:24px;left:24px;z-index:89;
+    background:#0f172a;color:#94a3b8;border:1px solid rgba(255,255,255,.1);padding:6px 12px;
+    border-radius:8px;font-size:11px;cursor:pointer;opacity:.7;transition:.2s"
+    onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.7'">
+  Cookies
+</button>
+
+<script>
+(function(){
+  var banner = document.getElementById('cookie-banner');
+  var settingsBtn = document.getElementById('cookie-settings-btn');
+  var consent = localStorage.getItem('cookie_consent');
+
+  function showBanner() {
+    banner.style.display = 'flex';
+    settingsBtn.style.display = 'none';
+  }
+  function hideBanner() {
+    banner.style.display = 'none';
+    settingsBtn.style.display = 'block';
+  }
+
+  document.getElementById('cookie-accept').addEventListener('click', function() {
+    localStorage.setItem('cookie_consent', 'accepted');
+    hideBanner();
+    loadGA4();
+  });
+
+  document.getElementById('cookie-reject').addEventListener('click', function() {
+    localStorage.setItem('cookie_consent', 'rejected');
+    hideBanner();
+  });
+
+  settingsBtn.addEventListener('click', function() {
+    localStorage.removeItem('cookie_consent');
+    showBanner();
+  });
+
+  // Ajustar posicao do botao Cookies no mobile (acima do sticky CTA)
+  if (window.innerWidth < 769) settingsBtn.style.bottom = '80px';
+
+  if (consent === 'accepted') {
+    loadGA4();
+    settingsBtn.style.display = 'block';
+  } else if (consent === 'rejected') {
+    settingsBtn.style.display = 'block';
+  } else {
+    showBanner();
+  }
+})();
 </script>
 </body>
 </html>

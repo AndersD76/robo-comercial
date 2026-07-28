@@ -18,14 +18,22 @@
   <meta property="og:locale" content="pt_BR">
   <meta property="og:site_name" content="TurboVenda">
   <meta name="twitter:card" content="summary_large_image">
-  <script async src="https://www.googletagmanager.com/gtag/js?id={{ ga_id }}"></script>
   <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', '{{ ga_id }}');
+  (function(){
+    if(localStorage.getItem('cookie_consent')==='accepted'){
+      var s=document.createElement('script');
+      s.async=true;
+      s.src='https://www.googletagmanager.com/gtag/js?id={{ ga_id }}';
+      document.head.appendChild(s);
+      window.dataLayer=window.dataLayer||[];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js',new Date());
+      gtag('config','{{ ga_id }}');
+    }
+  })();
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/tokens.css">
   <link rel="stylesheet" href="/static/components.css">
@@ -98,14 +106,14 @@
   <div class="nav-links">
     <a href="/">Home</a>
     <a href="/blog" style="color:#fff">Blog</a>
-    <a href="/cadastro" class="btn-nav">Criar conta gratis</a>
+    <a href="/cadastro" class="btn-nav">Criar conta grátis</a>
   </div>
 </nav>
 
 <main id="main">
 <section class="blog-hero">
   <h1>Blog <span>TurboVenda</span></h1>
-  <p>Estrategias de prospecao B2B, vendas e automacao comercial para sua empresa crescer.</p>
+  <p>Estratégias de prospecção B2B, vendas e automação comercial para sua empresa crescer.</p>
 </section>
 
 <div class="blog-grid">
@@ -122,9 +130,9 @@
 </div>
 
 <section class="blog-cta">
-  <h2>Pronto para automatizar sua prospecao?</h2>
-  <p>CRM + prospecao B2B com IA. Comece gratis em 5 minutos.</p>
-  <a href="/cadastro" class="btn-primary"><i class="fa fa-rocket"></i> Criar conta gratis</a>
+  <h2>Pronto para automatizar sua prospecção?</h2>
+  <p>CRM + prospecção B2B com IA. Comece grátis em 5 minutos.</p>
+  <a href="/cadastro" class="btn-primary"><i class="fa fa-rocket"></i> Criar conta grátis</a>
 </section>
 
 </main>

@@ -17,8 +17,22 @@
   <meta property="og:site_name" content="TurboVenda">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect rx='20' width='100' height='100' fill='%236366f1'/><text x='50' y='72' font-size='60' text-anchor='middle' fill='white'>⚡</text></svg>">
-  <script async src="https://www.googletagmanager.com/gtag/js?id={{ ga_id }}"></script>
-  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','{{ ga_id }}');</script>
+  <script>
+  (function(){
+    if(localStorage.getItem('cookie_consent')==='accepted'){
+      var s=document.createElement('script');
+      s.async=true;
+      s.src='https://www.googletagmanager.com/gtag/js?id={{ ga_id }}';
+      document.head.appendChild(s);
+      window.dataLayer=window.dataLayer||[];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js',new Date());
+      gtag('config','{{ ga_id }}');
+    }
+  })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
   <script type="application/ld+json">{{ ld_breadcrumb|safe }}</script>
   <script type="application/ld+json">{{ ld_itemlist|safe }}</script>
@@ -82,6 +96,7 @@
     footer p{color:#64748b;font-size:13px}
     footer a{color:#64748b;text-decoration:none;font-size:13px;margin:0 8px}
     footer a:hover{color:#f1f5f9}
+    .skip-link{position:absolute;top:-40px;left:0;background:#6366f1;color:#fff;padding:8px 16px;z-index:10000;transition:top .2s}.skip-link:focus{top:0}
     @media(max-width:768px){
       nav{padding:0 16px}
       .nav-links a:not(.btn-nav){display:none}
@@ -91,6 +106,7 @@
   </style>
 </head>
 <body>
+<a href="#main" class="skip-link">Pular para conteúdo</a>
 <nav>
   <a class="nav-logo" href="/">
     <div class="nav-logo-mark">⚡</div>
@@ -104,6 +120,7 @@
   </div>
 </nav>
 
+<main id="main">
 <div class="wrap">
   <div class="crumbs">
     <a href="/">Home</a> › <a href="/empresas">Empresas</a> ›
@@ -208,6 +225,7 @@
     <a href="/empresas/sobre-os-dados">Sobre os dados e pedidos de remoção</a>.
   </p>
 </div>
+</main>
 
 <footer>
   <p>&copy; 2026 TurboVenda. Todos os direitos reservados.</p>

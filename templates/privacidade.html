@@ -3,14 +3,32 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Politica de Privacidade — TurboVenda</title>
-  <meta name="description" content="Politica de Privacidade do TurboVenda. Saiba como coletamos, usamos e protegemos seus dados pessoais conforme a LGPD.">
+  <title>Política de Privacidade — TurboVenda</title>
+  <meta name="description" content="Política de Privacidade do TurboVenda. Saiba como coletamos, usamos e protegemos seus dados pessoais conforme a LGPD.">
   <meta name="robots" content="index, follow">
   <meta name="google-site-verification" content="VMyveSsuwuHW6VKMlQUXLacN3llx6ELz38VRdprEVxA">
+  <meta property="og:title" content="Política de Privacidade — TurboVenda">
+  <meta property="og:description" content="Política de Privacidade do TurboVenda conforme a LGPD.">
+  <meta property="og:url" content="https://www.turbovenda.com.br/privacidade">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="pt_BR">
+  <meta property="og:site_name" content="TurboVenda">
   <link rel="canonical" href="https://www.turbovenda.com.br/privacidade">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect rx='20' width='100' height='100' fill='%236366f1'/><text x='50' y='72' font-size='60' text-anchor='middle' fill='white'>⚡</text></svg>">
-  <script async src="https://www.googletagmanager.com/gtag/js?id={{ ga_id }}"></script>
-  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','{{ ga_id }}');</script>
+  <script>
+  (function(){
+    if(localStorage.getItem('cookie_consent')==='accepted'){
+      var s=document.createElement('script');
+      s.async=true;
+      s.src='https://www.googletagmanager.com/gtag/js?id={{ ga_id }}';
+      document.head.appendChild(s);
+      window.dataLayer=window.dataLayer||[];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js',new Date());
+      gtag('config','{{ ga_id }}');
+    }
+  })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/tokens.css">
@@ -43,7 +61,7 @@
   </style>
 </head>
 <body>
-<a href="#main" class="skip-link">Pular para conteudo</a>
+<a href="#main" class="skip-link">Pular para conteúdo</a>
 <nav>
   <a class="nav-logo" href="/">
     <div class="nav-logo-mark">⚡</div>
@@ -57,56 +75,56 @@
 
 <main id="main">
 <div class="content">
-  <h1>Politica de Privacidade</h1>
-  <p class="updated">Ultima atualizacao: 1 de junho de 2026</p>
+  <h1>Política de Privacidade</h1>
+  <p class="updated">Última atualização: 1 de junho de 2026</p>
 
   <h2>1. Dados que Coletamos</h2>
   <table>
     <tr><th>Dado</th><th>Finalidade</th><th>Base Legal (LGPD)</th></tr>
-    <tr><td>Nome e e-mail</td><td>Criacao de conta e comunicacao</td><td>Execucao de contrato</td></tr>
-    <tr><td>Nome da empresa e site</td><td>Personalizacao do servico</td><td>Execucao de contrato</td></tr>
-    <tr><td>Dados de uso (logs, cliques)</td><td>Melhoria do produto</td><td>Interesse legitimo</td></tr>
-    <tr><td>IP e dados de sessao</td><td>Seguranca e prevencao de fraude</td><td>Interesse legitimo</td></tr>
-    <tr><td>Dados de pagamento</td><td>Cobranca via Mercado Pago</td><td>Execucao de contrato</td></tr>
+    <tr><td>Nome e e-mail</td><td>Criação de conta e comunicação</td><td>Execução de contrato</td></tr>
+    <tr><td>Nome da empresa e site</td><td>Personalização do serviço</td><td>Execução de contrato</td></tr>
+    <tr><td>Dados de uso (logs, cliques)</td><td>Melhoria do produto</td><td>Interesse legítimo</td></tr>
+    <tr><td>IP e dados de sessão</td><td>Segurança e prevenção de fraude</td><td>Interesse legítimo</td></tr>
+    <tr><td>Dados de pagamento</td><td>Cobrança via Mercado Pago</td><td>Execução de contrato</td></tr>
   </table>
 
   <h2>2. Como Usamos os Dados</h2>
   <ul>
-    <li>Fornecer e manter o servico contratado</li>
-    <li>Enviar comunicacoes sobre a conta (transacionais)</li>
+    <li>Fornecer e manter o serviço contratado</li>
+    <li>Enviar comunicações sobre a conta (transacionais)</li>
     <li>Melhorar a plataforma com base em dados anonimizados de uso</li>
-    <li>Prevenir fraudes e garantir seguranca</li>
+    <li>Prevenir fraudes e garantir segurança</li>
   </ul>
 
   <h2>3. Compartilhamento</h2>
-  <p>Nao vendemos seus dados. Compartilhamos apenas com:</p>
+  <p>Não vendemos seus dados. Compartilhamos apenas com:</p>
   <ul>
     <li><strong>Mercado Pago</strong> — processamento de pagamento</li>
-    <li><strong>Google Analytics</strong> — metricas de uso (anonimizadas)</li>
+    <li><strong>Google Analytics</strong> — métricas de uso (anonimizadas)</li>
     <li><strong>Resend</strong> — envio de e-mails transacionais</li>
   </ul>
 
-  <h2>4. Seguranca</h2>
-  <p>Utilizamos criptografia em transito (TLS) e em repouso (AES-256/Fernet). Senhas sao armazenadas com hash bcrypt. Acesso restrito por funcao (RBAC).</p>
+  <h2>4. Segurança</h2>
+  <p>Utilizamos criptografia em trânsito (TLS) e em repouso (AES-256/Fernet). Senhas são armazenadas com hash bcrypt. Acesso restrito por função (RBAC).</p>
 
   <h2>5. Seus Direitos (LGPD Art. 18)</h2>
   <ul>
     <li>Acessar seus dados pessoais</li>
     <li>Corrigir dados incompletos ou inexatos</li>
-    <li>Solicitar exclusao (direito ao esquecimento)</li>
+    <li>Solicitar exclusão (direito ao esquecimento)</li>
     <li>Revogar consentimento</li>
     <li>Portabilidade dos dados</li>
   </ul>
   <p>Para exercer seus direitos: <strong>suporte@turbovenda.com.br</strong></p>
 
-  <h2>6. Retencao</h2>
-  <p>Dados da conta sao mantidos enquanto a conta estiver ativa. Apos exclusao, dados sao removidos em ate 30 dias, exceto quando exigido por lei (ex: registros fiscais por 5 anos).</p>
+  <h2>6. Retenção</h2>
+  <p>Dados da conta são mantidos enquanto a conta estiver ativa. Após exclusão, dados são removidos em até 30 dias, exceto quando exigido por lei (ex: registros fiscais por 5 anos).</p>
 
   <h2>7. Cookies</h2>
-  <p>Utilizamos cookies essenciais (sessao) e de analytics (Google Analytics). Voce pode desabilitar cookies de analytics nas configuracoes do navegador.</p>
+  <p>Utilizamos cookies essenciais (sessão) e de analytics (Google Analytics). Você pode desabilitar cookies de analytics nas configurações do navegador.</p>
 
-  <h2>8. Alteracoes</h2>
-  <p>Notificaremos sobre mudancas nesta politica via e-mail cadastrado. O uso continuado constitui aceitacao.</p>
+  <h2>8. Alterações</h2>
+  <p>Notificaremos sobre mudanças nesta política via e-mail cadastrado. O uso continuado constitui aceitação.</p>
 
   <h2>9. Contato do Encarregado (DPO)</h2>
   <p>E-mail: <strong>suporte@turbovenda.com.br</strong></p>
