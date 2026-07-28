@@ -27,20 +27,32 @@ from flask import (Flask, abort, jsonify, make_response, redirect,
                    render_template, request, send_file, session, url_for)
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+try:
+    import sentry_sdk
+    _sentry_dsn = os.environ.get('SENTRY_DSN', '')
+    if _sentry_dsn:
+        sentry_sdk.init(dsn=_sentry_dsn, traces_sample_rate=0.1,
+                        profiles_sample_rate=0.1)
+except ImportError:
+    pass
 
 from pseo_data import (CNAE_B2B, CNAE_POR_CODIGO, CNAE_POR_SLUG,
                        PORTE_LABELS, UF_NOMES, cnae_formatado, slugify)
 
 app = Flask(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='{"ts":"%(asctime)s","level":"%(levelname)s","logger":"%(name)s","msg":"%(message)s"}',
+    datefmt='%Y-%m-%dT%H:%M:%S')
 logger = logging.getLogger(__name__)
 
 _secret = os.environ.get('SECRET_KEY', '')
 if not _secret or _secret == 'mv-saas-2025-change-in-prod':
     if os.environ.get('RAILWAY_ENVIRONMENT') or os.environ.get('RENDER') or os.environ.get('FLY_APP_NAME'):
-        print('[FATAL] SECRET_KEY não definido em produção — defina a variável de ambiente', flush=True)
+        logger.critical('SECRET_KEY nao definido em producao — defina a variavel de ambiente')
         sys.exit(1)
     _secret = secrets.token_hex(32)
-    print('[WARN] SECRET_KEY não definido — gerado temporário (sessões perdidas ao reiniciar)', flush=True)
+    logger.warning('SECRET_KEY não definido — gerado temporário')
 app.secret_key = _secret
 
 _is_production = bool(os.environ.get('RAILWAY_ENVIRONMENT') or os.environ.get('RENDER') or os.environ.get('FLY_APP_NAME'))
@@ -68,7 +80,7 @@ if _ENCRYPTION_KEY:
         _fernet = Fernet(_ENCRYPTION_KEY.encode() if len(_ENCRYPTION_KEY) == 44
                          else Fernet.generate_key())
         if len(_ENCRYPTION_KEY) != 44:
-            print('[WARN] ENCRYPTION_KEY inválida (deve ser 44 chars base64 Fernet)', flush=True)
+            logger.warning('ENCRYPTION_KEY invalida (deve ser 44 chars base64 Fernet)')
             _fernet = None
     except Exception:
         _fernet = None
@@ -153,7 +165,7 @@ def _internal_error(e):
 
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 if not DATABASE_URL:
-    print('[FATAL] DATABASE_URL não configurado — defina a variável de ambiente', flush=True)
+    logger.critical('DATABASE_URL nao configurado — defina a variavel de ambiente')
     sys.exit(1)
 if DATABASE_URL.startswith('psql://'):
     DATABASE_URL = 'postgresql://' + DATABASE_URL[7:]
@@ -166,7 +178,7 @@ try:
         minconn=2, maxconn=10, dsn=DATABASE_URL,
         cursor_factory=psycopg2.extras.RealDictCursor)
 except Exception as _pool_err:
-    print(f'[WARN] Pool de conexões falhou, usando fallback: {_pool_err}', flush=True)
+    logger.warning(f'Pool de conexões falhou, usando fallback: {_pool_err}')
 
 # Processos em background: {schema: {'busca': Popen, 'linkedin': Popen}}
 _procs: dict = {}
@@ -255,7 +267,7 @@ def _init_public_schema_safe():
         c.execute("UPDATE users SET plano = 'pro' WHERE email IN ('suporte@pcmonitor.com.br', 'comercial1@pili.ind.br') AND plano != 'pro'")
         conn.commit()
     except Exception as e:
-        print(f'[startup] init_public_schema: {e}')
+        logger.error(f'init_public_schema: {e}')
     finally:
         if conn:
             try:
@@ -682,7 +694,7 @@ def token_required(f):
                 return jsonify({'error': 'token inválido'}), 401
             request.token_user = dict(row)
         except Exception as e:
-            print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+            logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
         finally:
             if conn:
                 try:
@@ -748,9 +760,9 @@ def get_stats(schema: str) -> dict:
             c.execute('SELECT COUNT(*) AS n FROM leads_linkedin')
             z['linkedin_total'] = c.fetchone()['n']
         except Exception as e:
-            print(f'[stats/{schema}] linkedin_total: {e}')
+            logger.error(f'stats/{schema} linkedin_total: {e}')
     except Exception as e:
-        print(f'[stats/{schema}] {e}')
+        logger.error(f'stats/{schema}: {e}')
     finally:
         if conn:
             try:
@@ -838,7 +850,7 @@ def get_leads(schema: str, limite: int = 50, page: int = 1, per_page: int = 50) 
         rows = [_serialize_row(dict(r)) for r in c.fetchall()]
         return rows
     except Exception as e:
-        print(f'[leads/{schema}] {e}')
+        logger.error(f'leads/{schema}: {e}')
         return []
     finally:
         if conn:
@@ -859,7 +871,7 @@ def get_logs(schema: str, limite: int = 60) -> list:
         rows = [_serialize_row(dict(r)) for r in c.fetchall()]
         return rows
     except Exception as e:
-        print(f'[logs/{schema}] {e}')
+        logger.error(f'logs/{schema}: {e}')
         return []
     finally:
         if conn:
@@ -911,7 +923,7 @@ def get_bot_config(schema: str) -> dict:
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f'[bot_config/{schema}] ERRO: {e}', flush=True)
+        logger.error(f'bot_config/{schema}: {e}')
         if conn:
             try:
                 conn.close()
@@ -1085,7 +1097,7 @@ def cadastro():
                     session['just_registered'] = True
                     return redirect(url_for('config_page'))
             except Exception as e:
-                print(f'[cadastro] erro: {e}', flush=True)
+                logger.error(f'cadastro: {e}')
                 error = 'Erro interno. Tente novamente.'
             finally:
                 if conn:
@@ -1119,7 +1131,7 @@ def admin_users():
                 u['criado_em'] = str(u['criado_em'])
         return jsonify(users)
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
     finally:
         if conn:
             try:
@@ -2188,7 +2200,7 @@ def _pseo_query(sql, params=()):
         finally:
             conn.close()
     except Exception as e:
-        print(f'[pseo] query error: {e}', flush=True)
+        logger.error(f'pseo query error: {e}')
         return []
 
 
@@ -2725,8 +2737,8 @@ def api_pipeline():
             }
         return jsonify(result)
     except Exception as e:
-        print(f'[pipeline/{schema}] {e}')
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.error(f'pipeline/{schema}: {e}')
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
     finally:
         if conn:
             try:
@@ -2827,7 +2839,7 @@ def api_bot_start(bot):
         )
     except Exception as e:
         log_file.close()
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
     _procs.setdefault(schema, {})
     _procs[schema][canal] = proc
     return jsonify({'status': 'started', 'pid': proc.pid, 'canal': canal})
@@ -2866,7 +2878,7 @@ def api_bot_console(bot):
     except FileNotFoundError:
         return jsonify({'lines': []})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'lines': [], 'error': 'Erro interno'})
+        logger.exception(f'{request.path}'); return jsonify({'lines': [], 'error': 'Erro interno'})
 
 
 # --- Lead CRUD ---
@@ -2905,7 +2917,7 @@ def api_add_lead(bot):
         conn.commit()
         return jsonify({'ok': True, 'id': new_id})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
     finally:
         if conn:
             try:
@@ -2974,7 +2986,7 @@ def api_update_lead(bot, lead_id):
         conn.commit()
         return jsonify({'ok': True})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
     finally:
         if conn:
             try:
@@ -2997,7 +3009,7 @@ def api_delete_lead(bot, lead_id):
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/clear-all', methods=['POST'])
@@ -3021,7 +3033,7 @@ def api_clear_all(bot):
         conn.close()
         return jsonify({'ok': True, 'msg': 'Tudo limpo'})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 # --- Atividades (Timeline) ---
@@ -3040,7 +3052,7 @@ def api_lead_atividades(bot, lead_id):
         conn.close()
         return jsonify(rows)
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/lead/<int:lead_id>/atividade', methods=['POST'])
@@ -3063,7 +3075,7 @@ def api_add_atividade(bot, lead_id):
         conn.close()
         return jsonify({'ok': True, 'id': aid})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 # --- Tarefas ---
@@ -3082,7 +3094,7 @@ def api_lead_tarefas(bot, lead_id):
         conn.close()
         return jsonify(rows)
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/lead/<int:lead_id>/tarefa', methods=['POST'])
@@ -3105,7 +3117,7 @@ def api_add_tarefa(bot, lead_id):
         conn.close()
         return jsonify({'ok': True, 'id': tid})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/tarefa/<int:tarefa_id>', methods=['PUT'])
@@ -3128,7 +3140,7 @@ def api_update_tarefa(bot, tarefa_id):
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/tarefa/<int:tarefa_id>', methods=['DELETE'])
@@ -3143,7 +3155,7 @@ def api_delete_tarefa(bot, tarefa_id):
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/tarefas/pendentes')
@@ -3162,7 +3174,7 @@ def api_tarefas_pendentes(bot):
         conn.close()
         return jsonify(rows)
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 # --- Enriquecimento CNPJ ---
@@ -3414,7 +3426,7 @@ def api_relatorios(bot):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 # --- Sequências de Email ---
@@ -3437,7 +3449,7 @@ def api_list_sequencias(bot):
         conn.close()
         return jsonify(rows)
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/sequencias', methods=['POST'])
@@ -3463,7 +3475,7 @@ def api_create_sequencia(bot):
         conn.close()
         return jsonify({'ok': True, 'id': seq_id})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/sequencia/<int:seq_id>', methods=['PUT'])
@@ -3492,7 +3504,7 @@ def api_update_sequencia(bot, seq_id):
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/sequencia/<int:seq_id>', methods=['DELETE'])
@@ -3507,7 +3519,7 @@ def api_delete_sequencia(bot, seq_id):
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/sequencia/<int:seq_id>/enroll',
@@ -3550,7 +3562,7 @@ def api_enroll_leads(bot, seq_id):
         conn.close()
         return jsonify({'ok': True, 'enrolled': enrolled})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/sequencia/<int:seq_id>/leads')
@@ -3569,7 +3581,7 @@ def api_sequencia_leads(bot, seq_id):
         conn.close()
         return jsonify(rows)
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/sequencias/processar', methods=['POST'])
@@ -3677,7 +3689,7 @@ def _processar_sequencias_schema(schema):
                 else:
                     erros += 1
             except Exception as e:
-                print(f'[seq] erro: {e}', flush=True)
+                logger.error(f'seq: {e}')
                 erros += 1
         conn.commit()
         conn.close()
@@ -3686,7 +3698,7 @@ def _processar_sequencias_schema(schema):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 # --- CSV Export ---
@@ -3738,7 +3750,7 @@ def api_export_leads(bot):
                         mimetype='text/csv',
                         headers={'Content-Disposition': 'attachment;filename=leads.csv'})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 # --- Bulk Actions ---
@@ -3784,7 +3796,7 @@ def api_bulk_action(bot):
             conn.close()
             return jsonify({'error': 'action inválida'}), 400
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 # --- Email em massa ---
@@ -3811,7 +3823,7 @@ def _send_email(ecfg, to_email, to_name, subject, html):
     """Envia email via Resend API (prioridade) ou SMTP direto."""
     sender_email = ecfg.get('sender_email', '')
     sender_name = ecfg.get('sender_name', '')
-    print(f'[EMAIL] to={to_email} from={sender_email}', flush=True)
+    logger.info(f'to={to_email} from={sender_email}')
     if not sender_email:
         return False
 
@@ -3833,12 +3845,12 @@ def _send_email(ecfg, to_email, to_name, subject, html):
                           json=payload,
                           timeout=15)
             if r.status_code in (200, 201):
-                print(f'[RESEND] OK enviado para {to_email}', flush=True)
+                logger.info(f'Resend OK enviado para {to_email}')
                 return True
             else:
-                print(f'[RESEND] erro {r.status_code}: {r.text}', flush=True)
+                logger.error(f'Resend erro {r.status_code}: {r.text}')
         except Exception as e:
-            print(f'[RESEND] erro: {e}', flush=True)
+            logger.error(f'Resend erro: {e}')
 
     # Opção 2: SMTP direto (fallback — funciona fora do Railway)
     smtp_host = ecfg.get('smtp_host', '')
@@ -3870,15 +3882,15 @@ def _send_email(ecfg, to_email, to_name, subject, html):
                             s.starttls()
                             s.login(smtp_user, smtp_pass)
                             s.sendmail(sender_email, to_email, msg.as_string())
-                    print(f'[SMTP] OK porta {p}', flush=True)
+                    logger.info(f'SMTP OK porta {p}')
                     return True
                 except Exception as e:
-                    print(f'[SMTP] porta {p} erro: {e}', flush=True)
+                    logger.error(f'SMTP porta {p} erro: {e}')
                     continue
         except Exception as e:
-            print(f'[SMTP] erro geral: {e}', flush=True)
+            logger.error(f'SMTP erro geral: {e}')
 
-    print('[EMAIL] nenhum método de envio disponível', flush=True)
+    logger.error('nenhum metodo de envio disponivel')
     return False
 
 
@@ -3970,7 +3982,7 @@ def api_send_emails(bot):
             else:
                 erros += 1
         except Exception as e:
-            print(f'[send-emails] erro lead {lead["id"]}: {e}')
+            logger.error(f'send-emails erro lead {lead["id"]}: {e}')
             erros += 1
     return jsonify({'ok': True, 'enviados': enviados, 'erros': erros})
 
@@ -4024,7 +4036,7 @@ def api_email_campanha(bot):
         leads = c.fetchall()
         conn.close()
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
     if not leads:
         return jsonify({'error': 'nenhum lead com email cadastrado'}), 400
@@ -4086,7 +4098,7 @@ def api_email_campanha(bot):
             else:
                 erros += 1
         except Exception as e:
-            print(f'[campanha] erro lead {lead["id"]}: {e}')
+            logger.error(f'campanha erro lead {lead["id"]}: {e}')
             erros += 1
     return jsonify({'ok': True, 'enviados': enviados, 'erros': erros})
 
@@ -4144,7 +4156,7 @@ def api_save_config(bot):
 
     conn = None
     try:
-        print(f'[save_config/{schema}] Iniciando save...', flush=True)
+        logger.info(f'save_config/{schema}: Iniciando save...')
         conn = _conn(schema)
         c = conn.cursor()
         # Garantir colunas existem (schemas antigos)
@@ -4258,13 +4270,13 @@ def api_save_config(bot):
             except Exception:
                 pass
 
-        print(f'[save_config/{schema}] OK - salvou {len(termos)} termos', flush=True)
+        logger.info(f'save_config/{schema}: OK - salvou {len(termos)} termos')
         return jsonify({'ok': True, 'redirect': '/dashboard', 'termos': termos})
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f'[save_config/{schema}] ERRO: {e}', flush=True)
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.error(f'save_config/{schema}: {e}')
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
     finally:
         if conn:
             try:
@@ -4660,7 +4672,7 @@ def api_list_tokens(bot):
         rows = [dict(r) for r in c.fetchall()]
         return jsonify(rows)
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
     finally:
         if conn:
             try:
@@ -4690,7 +4702,7 @@ def api_create_token(bot):
         return jsonify({'ok': True, 'id': tid, 'token': token,
                         'aviso': 'Salve este token — não será exibido novamente'})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
     finally:
         if conn:
             try:
@@ -4711,7 +4723,7 @@ def api_revoke_token(bot, token_id):
         conn.commit()
         return jsonify({'ok': True})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
     finally:
         if conn:
             try:
@@ -4750,7 +4762,7 @@ def public_list_leads():
         return jsonify({'leads': rows, 'total': len(rows),
                         'page': page, 'per_page': per_page})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/v1/leads', methods=['POST'])
@@ -4778,7 +4790,7 @@ def public_create_lead():
         conn.close()
         return jsonify({'ok': True, 'id': new_id}), 201
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/v1/leads/<int:lead_id>', methods=['PUT'])
@@ -4799,7 +4811,7 @@ def public_update_lead(lead_id):
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 # =============================================================================
@@ -4828,7 +4840,7 @@ def api_agenda(bot):
         conn.close()
         return jsonify(rows)
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/agenda', methods=['POST'])
@@ -4860,7 +4872,7 @@ def api_add_evento(bot):
         conn.close()
         return jsonify({'ok': True, 'id': eid})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/agenda/<int:evento_id>', methods=['PUT'])
@@ -4884,7 +4896,7 @@ def api_update_evento(bot, evento_id):
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/agenda/<int:evento_id>', methods=['DELETE'])
@@ -4899,7 +4911,7 @@ def api_delete_evento(bot, evento_id):
         conn.close()
         return jsonify({'ok': True})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 # =============================================================================
@@ -5207,6 +5219,84 @@ def _extrair_cores_site(website):
 
 
 # =============================================================================
+# LGPD — DIREITOS DO TITULAR (Art. 18)
+# =============================================================================
+
+@app.route('/api/meus-dados/exportar', methods=['GET'])
+@login_required
+def api_exportar_dados():
+    """Exporta todos os dados pessoais do usuario (LGPD Art. 18)."""
+    uid = session.get('user_id')
+    schema = _get_schema()
+    dados = {'usuario': {}, 'leads': [], 'contatos': [], 'config': {}, 'pagamentos': []}
+    conn = None
+    try:
+        conn = _conn()
+        c = conn.cursor()
+        c.execute('SELECT id, email, empresa_nome, website, plano, plano_expira, criado_em FROM users WHERE id = %s', (uid,))
+        user = c.fetchone()
+        if user:
+            dados['usuario'] = _serialize_row(dict(user))
+        c.execute('SELECT * FROM pagamentos WHERE user_id = %s ORDER BY criado_em DESC', (uid,))
+        dados['pagamentos'] = [_serialize_row(dict(r)) for r in c.fetchall()]
+    except Exception:
+        logger.exception('Erro ao exportar dados publicos')
+    finally:
+        if conn:
+            conn.close()
+    conn2 = None
+    try:
+        conn2 = _conn(schema)
+        c2 = conn2.cursor()
+        c2.execute('SELECT * FROM empresas ORDER BY id')
+        dados['leads'] = [_serialize_row(dict(r)) for r in c2.fetchall()]
+        c2.execute('SELECT * FROM contatos ORDER BY id')
+        dados['contatos'] = [_serialize_row(dict(r)) for r in c2.fetchall()]
+        c2.execute('SELECT empresa_nome, website, descricao, termos_busca, email_remetente, email_remetente_nome FROM bot_config LIMIT 1')
+        cfg = c2.fetchone()
+        if cfg:
+            dados['config'] = _serialize_row(dict(cfg))
+    except Exception:
+        logger.exception('Erro ao exportar dados do schema')
+    finally:
+        if conn2:
+            conn2.close()
+    resp = make_response(json.dumps(dados, ensure_ascii=False, indent=2, default=str))
+    resp.headers['Content-Type'] = 'application/json; charset=utf-8'
+    resp.headers['Content-Disposition'] = f'attachment; filename=turbovenda_dados_{uid}.json'
+    return resp
+
+
+@app.route('/api/meus-dados/excluir', methods=['POST'])
+@limiter.limit("3 per hour")
+@login_required
+def api_excluir_dados():
+    """Exclui conta e todos os dados pessoais (LGPD Art. 18 - direito ao esquecimento)."""
+    uid = session.get('user_id')
+    schema = _get_schema()
+    conn = None
+    try:
+        conn = _conn()
+        c = conn.cursor()
+        c.execute(psql.SQL('DROP SCHEMA IF EXISTS {} CASCADE').format(psql.Identifier(schema)))
+        c.execute('DELETE FROM pagamentos WHERE user_id = %s', (uid,))
+        c.execute('DELETE FROM api_tokens WHERE user_id = %s', (uid,))
+        c.execute('DELETE FROM users WHERE id = %s', (uid,))
+        conn.commit()
+        logger.info(f'LGPD: usuario {uid} excluido com sucesso')
+    except Exception:
+        logger.exception(f'Erro ao excluir dados do usuario {uid}')
+        if conn:
+            conn.rollback()
+        return jsonify({'error': 'Erro ao excluir dados. Contate suporte@turbovenda.com.br'}), 500
+    finally:
+        if conn:
+            conn.close()
+    session.clear()
+    return jsonify({'ok': True, 'msg': 'Conta e dados excluidos com sucesso.'})
+
+
+# =============================================================================
 # HEALTH
 # =============================================================================
 
@@ -5358,7 +5448,7 @@ def email_track_open(token):
             conn.commit()
             conn.close()
         except Exception as e:
-            print(f'[track/open] {e}', flush=True)
+            logger.error(f'track/open: {e}')
     import base64
     pixel = base64.b64decode(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQAB'
@@ -5389,7 +5479,7 @@ def email_track_click(token):
             conn.commit()
             conn.close()
         except Exception as e:
-            print(f'[track/click] {e}', flush=True)
+            logger.error(f'track/click: {e}')
     return redirect(redirect_url)
 
 
@@ -5418,7 +5508,7 @@ def webhook_email():
     ).decode()
     sigs = [s.split(',')[-1] for s in svix_sig.split(' ')]
     if not any(_hmac.compare_digest(sig, s) for s in sigs):
-        print('[EMAIL] Webhook assinatura inválida', flush=True)
+        logger.error('Webhook assinatura invalida')
         return jsonify({'error': 'invalid signature'}), 401
 
     data = request.get_json(silent=True) or {}
@@ -5429,7 +5519,7 @@ def webhook_email():
         to_email = payload['to'][0]
     elif isinstance(payload.get('to'), str):
         to_email = payload['to']
-    print(f'[WEBHOOK] {event_type} to={to_email}', flush=True)
+    logger.info(f'webhook {event_type} to={to_email}')
     if event_type in ('email.bounced', 'email.complained'):
         conn = None
         try:
@@ -5466,7 +5556,7 @@ def webhook_email():
                         except Exception:
                             pass
         except Exception as e:
-            print(f'[WEBHOOK] erro: {e}', flush=True)
+            logger.error(f'webhook erro: {e}')
         finally:
             if conn:
                 try:
@@ -5856,7 +5946,7 @@ def _enriquecer_cnpj(schema, lead_id):
                 'cidade': mun, 'estado': uf, 'situacao': situacao,
                 'socio': socio_nome}
     except Exception as e:
-        print(f'[ERR] agendar: {e}', flush=True); return {'ok': False, 'error': 'Erro interno'}
+        logger.exception('agendar'); return {'ok': False, 'error': 'Erro interno'}
 
 
 def _get_link_agenda(schema, lead_id):
@@ -6037,7 +6127,7 @@ def api_agenda_confirmar(token):
         return jsonify({'ok': True, 'id': evt_id,
                         'data': data_str, 'hora': hora_str})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/<bot>/lead/<int:lead_id>/link-agenda')
@@ -6142,10 +6232,11 @@ def api_checkout():
         return jsonify({
             'error': resp.get('message', 'Erro MP')}), 400
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/webhook/mercadopago', methods=['POST'])
+@limiter.limit("30 per minute")
 def webhook_mercadopago():
     """Webhook do Mercado Pago — atualiza plano do user."""
     import requests as http
@@ -6166,7 +6257,7 @@ def webhook_mercadopago():
     expected = _hmac.new(mp_webhook_secret.encode(), manifest.encode(),
                          'sha256').hexdigest()
     if not _hmac.compare_digest(v1, expected):
-        print(f'[MP] Webhook assinatura inválida', flush=True)
+        logger.warning('MP webhook assinatura invalida')
         return jsonify({'error': 'invalid signature'}), 401
 
     data = request.get_json(silent=True) or {}
@@ -6218,8 +6309,7 @@ def webhook_mercadopago():
                     mp_subscription_id = %s
                     WHERE id = %s""",
                     (plano, str(payment_id), user_id))
-                print(f'[MP] User {user_id} -> plano {plano}'
-                      f' (payment {payment_id})', flush=True)
+                logger.info(f'MP: user {user_id} -> plano {plano} (payment {payment_id})')
 
             conn.commit()
         finally:
@@ -6232,6 +6322,7 @@ def webhook_mercadopago():
 
 
 @app.route('/api/pagamento/pix', methods=['POST'])
+@limiter.limit("5 per minute")
 @login_required
 def api_pagamento_pix():
     """Gera pagamento PIX via Mercado Pago."""
@@ -6305,10 +6396,11 @@ def api_pagamento_pix():
             'error': pay.get('message',
                 str(pay.get('cause', 'Erro')))}), 400
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/pagamento/cartao', methods=['POST'])
+@limiter.limit("5 per minute")
 @login_required
 def api_pagamento_cartao():
     """Processa pagamento com cartão via MP — recebe token gerado no frontend pelo MercadoPago.js."""
@@ -6408,10 +6500,11 @@ def api_pagamento_cartao():
                 'error': msgs.get(detail,
                     f'Pagamento recusado ({detail})')}), 400
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/api/pagamento/boleto', methods=['POST'])
+@limiter.limit("5 per minute")
 @login_required
 def api_pagamento_boleto():
     """Gera boleto via Mercado Pago."""
@@ -6487,7 +6580,7 @@ def api_pagamento_boleto():
             'error': pay.get('message',
                 str(pay.get('cause', 'Erro')))}), 400
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/pagamento/<resultado>')
@@ -6652,7 +6745,7 @@ def admin_api_stats():
             'total_payments': total_payments,
         })
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
     finally:
         if conn:
             try:
@@ -6691,7 +6784,7 @@ def admin_api_users_list():
         conn.close()
         return jsonify(result)
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/admin/api/users/<int:uid>/toggle', methods=['POST'])
@@ -6710,7 +6803,7 @@ def admin_api_toggle_user(uid):
         conn.close()
         return jsonify({'ok': True, 'ativo': row['ativo']})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/admin/api/users/<int:uid>/plano', methods=['POST'])
@@ -6733,7 +6826,7 @@ def admin_api_change_plan(uid):
         conn.close()
         return jsonify({'ok': True, 'plano': plano})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/admin/api/users/<int:uid>/impersonate', methods=['POST'])
@@ -6755,7 +6848,7 @@ def admin_api_impersonate(uid):
             pass
         return jsonify({'ok': True})
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 @app.route('/admin/api/payments')
@@ -6779,7 +6872,7 @@ def admin_api_payments():
             result.append(row)
         return jsonify(result)
     except Exception as e:
-        print(f'[ERR] {request.path}: {e}', flush=True); return jsonify({'error': 'Erro interno'}), 500
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
 # =============================================================================
@@ -6796,7 +6889,7 @@ def _send_system_email(to_email, subject, html):
     resend_key = os.environ.get('RESEND_API_KEY', '')
     sender_email = os.environ.get('EMAIL_FROM', 'contato@turbovenda.com.br')
     if not resend_key:
-        print('[CRON] RESEND_API_KEY não configurada — email não enviado', flush=True)
+        logger.warning('RESEND_API_KEY nao configurada — email nao enviado')
         return False
     try:
         import requests as http
@@ -6812,13 +6905,13 @@ def _send_system_email(to_email, subject, html):
                       json=payload,
                       timeout=15)
         if r.status_code in (200, 201):
-            print(f'[CRON] Email enviado para {to_email}: {subject}', flush=True)
+            logger.info(f'Email enviado para {to_email}: {subject}')
             return True
         else:
-            print(f'[CRON] Resend erro {r.status_code}: {r.text}', flush=True)
+            logger.error(f'Resend erro {r.status_code}: {r.text}')
             return False
     except Exception as e:
-        print(f'[CRON] Erro ao enviar email: {e}', flush=True)
+        logger.error(f'Erro ao enviar email: {e}')
         return False
 
 
@@ -6995,7 +7088,7 @@ def cron_trial_emails():
 
         conn.close()
     except Exception as e:
-        print(f'[CRON] Erro geral: {e}', flush=True)
+        logger.error(f'Erro geral cron: {e}')
         return jsonify({'error': 'Erro interno'}), 500
 
     result = {
@@ -7004,7 +7097,7 @@ def cron_trial_emails():
         'sent_expired': sent_expired,
         'errors': errors,
     }
-    print(f'[CRON] trial-emails concluído: {result}', flush=True)
+    logger.info(f'trial-emails concluido: {result}')
     return jsonify(result)
 
 

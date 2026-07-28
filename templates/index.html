@@ -691,7 +691,7 @@ function loadLI(bot){
       return;
     }
     tb.innerHTML=d.map(l=>`<tr>
-      <td><a href="${l.url_perfil||'#'}" target="_blank" style="color:var(--text);font-weight:500;text-decoration:none">${l.nome||'—'}</a></td>
+      <td><a href="${l.url_perfil||'#'}" target="_blank" rel="noopener" style="color:var(--text);font-weight:500;text-decoration:none">${l.nome||'—'}</a></td>
       <td style="color:var(--muted);font-size:11px">${l.cargo||'—'}</td>
       <td style="color:var(--muted);font-size:11px">${l.empresa||'—'}</td>
       <td>${liChip(l.status)}</td>

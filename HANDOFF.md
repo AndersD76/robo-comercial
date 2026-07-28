@@ -123,13 +123,19 @@ N/A — sem mudancas. API keys preservadas no save_config (nao mais sobrescritas
 
 ---
 
-## Itens pendentes (requerem mudancas maiores)
+## Itens agora resolvidos (Fase 3)
 
-1. **CI/CD pipeline** — Configurar GitHub Actions com lint + testes
-2. **Testes automatizados** — Cobertura < 1%; priorizar pagamento e auth
-3. **LGPD completa** — Endpoints de exclusao e exportacao de dados pessoais
-4. **Cookie consent global** — Extrair banner para `{% include 'cookie_banner.html' %}` compartilhado
-5. **Rate limiting completo** — Decorar todas as rotas sensiveis
-6. **Logging estruturado** — Substituir `print()` por logger com formato JSON
-7. **Monitoramento** — Sentry ou similar para excecoes em producao
-8. **Backup automatico** — Verificar politica de retencao do Neon
+- [x] CI/CD: `.github/workflows/ci.yml` com syntax check + pytest + template validation
+- [x] Testes: 14 testes de seguranca + 31 testes de rotas (45 total)
+- [x] LGPD: `/api/meus-dados/exportar` (GET) e `/api/meus-dados/excluir` (POST)
+- [x] Cookie consent global: `cookie_banner.html` incluido em todos os 20 templates
+- [x] Rate limiting: PIX, cartao, boleto (5/min), webhook (30/min), exclusao (3/hora)
+- [x] Logging estruturado: JSON format, `print()` convertido para `logger.*`
+- [x] Monitoramento: Sentry SDK integrado (definir `SENTRY_DSN` para ativar)
+
+## Unico item pendente
+
+| Item | Acao | Quem |
+|---|---|---|
+| `SENTRY_DSN` | Criar projeto em sentry.io > copiar DSN > adicionar como variavel no Railway | Voce |
+| Backup Neon | Verificar politica de retencao em neon.tech > Settings > Backups | Voce |
