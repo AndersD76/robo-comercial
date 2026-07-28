@@ -119,6 +119,34 @@
     .uf-check:hover{border-color:var(--accent)}
     .uf-check input{display:none}
     .uf-check:has(input:checked){background:rgba(99,102,241,.2);border-color:var(--accent);color:#a5b4fc}
+
+    /* Onboarding */
+    .onboarding-banner{background:linear-gradient(135deg,rgba(99,102,241,.12),rgba(139,92,246,.08));
+        border:1px solid rgba(99,102,241,.25);border-radius:16px;padding:32px;
+        text-align:center;margin-bottom:28px}
+    .ob-icon{font-size:48px;margin-bottom:12px}
+    .onboarding-banner h2{font-size:22px;font-weight:800;margin-bottom:6px}
+    .onboarding-banner p{color:var(--muted2);font-size:14px;margin-bottom:20px}
+    .ob-steps{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+    .ob-step{background:var(--surface2);border:1px solid rgba(255,255,255,.06);
+        border-radius:10px;padding:10px 16px;font-size:13px;font-weight:600;
+        color:var(--muted);display:flex;align-items:center;gap:8px;transition:.3s}
+    .ob-step.active{border-color:var(--accent);color:var(--text);background:rgba(99,102,241,.1)}
+    .ob-step.done{border-color:#22c55e;color:#22c55e;background:rgba(16,185,129,.08)}
+    .ob-num{width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;
+        display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800}
+    .ob-step.done .ob-num{background:#22c55e}
+    .btn-setup-all{background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;
+        border:none;border-radius:12px;padding:16px 32px;font-size:16px;font-weight:800;
+        cursor:pointer;font-family:'Inter',sans-serif;transition:.2s;width:100%;margin:20px 0 8px;
+        display:flex;align-items:center;justify-content:center;gap:10px}
+    .btn-setup-all:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(34,197,94,.35)}
+    .btn-setup-all:disabled{opacity:.6;cursor:not-allowed;transform:none}
+    .setup-progress{font-size:13px;color:var(--muted2);text-align:center;min-height:20px}
+    .collapsible-header{cursor:pointer;display:flex;align-items:center;justify-content:space-between}
+    .collapsible-header .chevron{transition:.3s;color:var(--muted)}
+    .collapsible-body{overflow:hidden;transition:max-height .3s ease}
+    .collapsible-body.collapsed{max-height:0 !important;overflow:hidden}
   </style>
   <script>
   (function(){
@@ -151,8 +179,20 @@
 </header>
 
 <main id="main">
-  <div class="page-title">Configurar Robô</div>
-  <p class="page-sub">Configure sua empresa e deixe a IA gerar os termos de busca para encontrar seus clientes.</p>
+  {% if just_registered %}
+  <div class="onboarding-banner" id="onboarding-banner">
+    <div class="ob-icon">🚀</div>
+    <h2>Bem-vindo, {{ user.empresa_nome or 'empreendedor' }}!</h2>
+    <p>Configure seu robô em 2 passos e comece a receber leads.</p>
+    <div class="ob-steps">
+      <div class="ob-step active" id="ob-step-1"><span class="ob-num">1</span> Descreva seu negócio e escolha os estados</div>
+      <div class="ob-step" id="ob-step-2"><span class="ob-num">2</span> Clique "Configurar tudo" e pronto</div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="page-title">{% if just_registered %}Passo 1: Seu negócio{% else %}Configurar Robô{% endif %}</div>
+  <p class="page-sub">{% if just_registered %}Preencha a descrição e selecione onde quer prospectar.{% else %}Configure sua empresa e deixe a IA gerar os termos de busca para encontrar seus clientes.{% endif %}</p>
 
   <!-- EMPRESA -->
   <div class="card">
@@ -237,8 +277,25 @@
     </div>
   </div>
 
+  {% if just_registered %}
+  <!-- BOTÃO CONFIGURAR TUDO (onboarding) -->
+  <div class="card" id="card-setup-all" style="text-align:center">
+    <div class="card-title" style="justify-content:center"><i class="fa fa-wand-magic-sparkles"></i> Passo 2: Configurar automaticamente</div>
+    <p style="font-size:13px;color:var(--muted2);margin-bottom:4px">
+      Com base na sua descrição e estados, a IA vai gerar tudo de uma vez:
+    </p>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:16px">
+      Termos de busca · Mensagem WhatsApp · Template de email · Assunto do email
+    </p>
+    <button class="btn-setup-all" id="btn-setup-all" onclick="setupAll()">
+      <i class="fa fa-rocket"></i> Configurar tudo automaticamente
+    </button>
+    <div class="setup-progress" id="setup-progress"></div>
+  </div>
+  {% endif %}
+
   <!-- TERMOS DE BUSCA -->
-  <div class="card">
+  <div class="card" {% if just_registered %}id="card-termos" style="display:none"{% endif %}>
     <div class="card-title"><i class="fa fa-magnifying-glass"></i> Termos de Busca</div>
     <div class="terms-header">
       <span id="terms-count">0 termos configurados</span>
@@ -253,7 +310,7 @@
   </div>
 
   <!-- MENSAGEM INICIAL WHATSAPP -->
-  <div class="card">
+  <div class="card" {% if just_registered %}id="card-whatsapp" style="display:none"{% endif %}>
     <div class="card-title"><i class="fab fa-whatsapp"></i> Mensagem Inicial (WhatsApp)</div>
     <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
       Esta mensagem será enviada no primeiro contato com cada lead. O sistema gera uma sugestão baseada no seu negócio — edite antes de salvar.
@@ -268,33 +325,38 @@
   </div>
 
   <!-- CONFIG EMAIL -->
-  <div class="card">
+  <div class="card" {% if just_registered %}id="card-email-cfg" style="display:none"{% endif %}>
     <div class="card-title"><i class="fa fa-at"></i> Configuração de Email</div>
     <div class="field">
       <label>Nome do remetente <small>(aparece no "De:" do email)</small></label>
       <input type="text" id="email_remetente_nome" value="{{ cfg.email_remetente_nome or '' }}" placeholder="Ex: João da Empresa XYZ">
     </div>
     <div class="field">
-      <label>Email de envio <small>(de onde os emails saem)</small></label>
-      <input type="email" id="email_remetente" value="{{ cfg.email_remetente or '' }}" placeholder="contato@suaempresa.com.br">
-      <small style="color:var(--muted);display:block;margin-top:4px">Se deixar vazio, envia como contato@turbovenda.com.br</small>
+      <label>Seu email <small>(respostas dos leads vão para cá)</small></label>
+      <input type="email" id="email_remetente" value="{{ cfg.email_remetente or user.email or '' }}" placeholder="voce@suaempresa.com.br">
     </div>
-    <div class="field">
-      <label>Chave Resend <small>(para enviar do seu próprio email)</small></label>
-      <input type="password" id="resend_api_key" value="{{ cfg.resend_api_key or '' }}" placeholder="re_..." autocomplete="off">
-      <div class="info-box" style="margin-top:8px">
-        <strong>Como configurar (5 min, grátis):</strong><br>
-        1. Crie conta em <a href="https://resend.com/signup" target="_blank" rel="noopener" style="color:#818cf8">resend.com</a> (gratuito, 100 emails/dia)<br>
-        2. Vá em <strong>Domains</strong> → adicione seu domínio → copie os registros DNS pro seu provedor<br>
-        3. Vá em <strong>API Keys</strong> → crie uma chave → cole acima<br>
-        4. No campo "Email de envio", coloque um email do domínio verificado<br><br>
-        <span style="color:#fbbf24"><i class="fa fa-triangle-exclamation"></i></span> Sem essa configuração, emails saem como <code>contato@turbovenda.com.br</code>.
+    <details style="margin-top:12px">
+      <summary style="font-size:12px;color:var(--muted);cursor:pointer;user-select:none">
+        <i class="fa fa-gear"></i> Avançado: enviar do seu próprio domínio
+      </summary>
+      <div style="margin-top:12px">
+        <div class="field">
+          <label>Chave Resend <small>(opcional — para enviar do seu domínio)</small></label>
+          <input type="password" id="resend_api_key" value="{{ cfg.resend_api_key or '' }}" placeholder="re_..." autocomplete="off">
+          <div class="info-box" style="margin-top:8px">
+            <strong>Como configurar (5 min, grátis):</strong><br>
+            1. Crie conta em <a href="https://resend.com/signup" target="_blank" rel="noopener" style="color:#818cf8">resend.com</a> (gratuito, 100 emails/dia)<br>
+            2. Vá em <strong>Domains</strong> → adicione seu domínio → copie os registros DNS<br>
+            3. Vá em <strong>API Keys</strong> → crie uma chave → cole acima<br><br>
+            Sem isso, emails saem como <code>Seu Nome &lt;contato@turbovenda.com.br&gt;</code> com reply-to para o seu email.
+          </div>
+        </div>
       </div>
-    </div>
+    </details>
   </div>
 
   <!-- TEMPLATE EMAIL -->
-  <div class="card">
+  <div class="card" {% if just_registered %}id="card-email-tpl" style="display:none"{% endif %}>
     <div class="card-title"><i class="fa fa-envelope"></i> Template de Email (Mala Direta)</div>
     <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
       Configure o assunto e corpo HTML padrão para campanhas de email. Use variáveis para personalizar.
@@ -348,13 +410,13 @@
   </div>
 
   <!-- SALVAR -->
-  <button class="btn-save" id="btn-save" onclick="saveConfig(true)">
-    <i class="fa fa-floppy-disk"></i> Salvar configurações
+  <button class="btn-save" id="btn-save" onclick="saveConfig(true)" {% if just_registered %}style="display:none"{% endif %}>
+    <i class="fa fa-floppy-disk"></i> {% if just_registered %}Salvar e ir para o Dashboard{% else %}Salvar configurações{% endif %}
   </button>
   <div id="save-debug" style="color:#f87171;font-size:11px;margin-top:8px;display:none"></div>
 
   <!-- API TOKENS -->
-  <div class="card" style="margin-top:32px">
+  <div class="card" style="margin-top:32px" {% if just_registered %}id="card-tokens" style="display:none"{% endif %}>
     <div class="card-title"><i class="fa fa-key"></i> Tokens de API</div>
     <div class="info-box">
       Use tokens para integrar com outros sistemas via REST API.<br>
@@ -607,7 +669,7 @@ async function saveConfig(redirect) {
       email_cor_header: document.getElementById('email_cor_header').value,
       email_cor_botao: document.getElementById('email_cor_botao').value,
       email_cor_texto: document.getElementById('email_cor_texto').value,
-      resend_api_key: document.getElementById('resend_api_key').value
+      resend_api_key: (document.getElementById('resend_api_key')||{}).value||''
     }
     var r = await fetch('/api/' + BOT + '/config', {
       method: 'POST',
@@ -697,6 +759,89 @@ function showToast(msg, ok) {
   t.textContent = msg
   t.className = 'toast show ' + (ok ? 'ok' : 'err')
   setTimeout(() => t.classList.remove('show'), 3500)
+}
+
+// === SETUP ALL (onboarding) ===
+async function setupAll(){
+  const desc=document.getElementById('descricao').value.trim()
+  if(!desc){showToast('Preencha a descrição do seu negócio no Passo 1',false);document.getElementById('descricao').focus();return}
+  const estados=getEstadosSelecionados()
+  if(!estados.length){showToast('Selecione pelo menos um estado de atuação',false);return}
+
+  const btn=document.getElementById('btn-setup-all')
+  const prog=document.getElementById('setup-progress')
+  btn.disabled=true
+  btn.innerHTML='<i class="fa fa-spinner fa-spin"></i> Configurando...'
+  const empresa=document.getElementById('empresa_nome').value
+  const website=document.getElementById('website').value
+  const body=JSON.stringify({empresa_nome:empresa,descricao:desc,website:website,estados:estados})
+  const headers={'Content-Type':'application/json'}
+
+  let ok=true
+  try{
+    // 1. Gerar termos
+    prog.textContent='Gerando termos de busca...'
+    const r1=await fetch(`/api/${BOT}/config/generate-terms`,{method:'POST',headers,body})
+    const d1=await r1.json()
+    if(d1.ok&&d1.termos){terms=d1.termos;renderTerms()}else{ok=false}
+
+    // 2. Gerar mensagem WhatsApp
+    prog.textContent='Gerando mensagem WhatsApp...'
+    const r2=await fetch(`/api/${BOT}/config/generate-msg`,{method:'POST',headers,body})
+    const d2=await r2.json()
+    if(d2.ok&&d2.mensagem){document.getElementById('msg_inicial').value=d2.mensagem}
+
+    // 3. Gerar template email
+    prog.textContent='Gerando template de email...'
+    const emailBody=JSON.stringify({empresa_nome:empresa,descricao:desc,website:website,
+      cor_header:document.getElementById('email_cor_header').value,
+      cor_botao:document.getElementById('email_cor_botao').value,
+      cor_texto:document.getElementById('email_cor_texto').value})
+    const r3=await fetch(`/api/${BOT}/config/generate-email`,{method:'POST',headers,body:emailBody})
+    const d3=await r3.json()
+    if(d3.ok&&d3.html){
+      document.getElementById('email_html_template').value=d3.html
+      if(d3.assunto) document.getElementById('email_assunto_padrao').value=d3.assunto
+    }
+
+    // 4. Preencher nome remetente se vazio
+    if(!document.getElementById('email_remetente_nome').value.trim()){
+      document.getElementById('email_remetente_nome').value=empresa
+    }
+
+    // Marcar step 1 como done, step 2 como done
+    const s1=document.getElementById('ob-step-1')
+    const s2=document.getElementById('ob-step-2')
+    if(s1){s1.classList.remove('active');s1.classList.add('done');s1.querySelector('.ob-num').textContent='✓'}
+    if(s2){s2.classList.add('done');s2.querySelector('.ob-num').textContent='✓'}
+
+    // Revelar seções geradas
+    var reveal=['card-termos','card-whatsapp','card-email-cfg','card-email-tpl']
+    reveal.forEach(function(id){var el=document.getElementById(id);if(el)el.style.display=''})
+    document.getElementById('btn-save').style.display=''
+    document.getElementById('btn-save').innerHTML='<i class="fa fa-rocket"></i> Salvar e ir para o Dashboard'
+
+    prog.innerHTML=ok
+      ?'<span style="color:#22c55e"><i class="fa fa-check-circle"></i> Tudo configurado! Revise abaixo e clique Salvar.</span>'
+      :'<span style="color:#fbbf24"><i class="fa fa-triangle-exclamation"></i> Alguns itens não foram gerados. Revise abaixo.</span>'
+    btn.innerHTML='<i class="fa fa-check"></i> Configurado!'
+    btn.style.background='linear-gradient(135deg,#22c55e,#16a34a)'
+
+    // Scroll suave para os termos
+    setTimeout(function(){
+      var el=document.getElementById('card-termos')
+      if(el) el.scrollIntoView({behavior:'smooth',block:'start'})
+    },300)
+
+    // Auto-save
+    prog.textContent='Salvando automaticamente...'
+    await saveConfig(false)
+    prog.innerHTML='<span style="color:#22c55e"><i class="fa fa-check-circle"></i> Tudo pronto! Revise e clique "Salvar e ir para o Dashboard".</span>'
+  }catch(e){
+    prog.innerHTML='<span style="color:#f87171">Erro: '+e.message+'</span>'
+    btn.disabled=false
+    btn.innerHTML='<i class="fa fa-rocket"></i> Tentar novamente'
+  }
 }
 
 // Estados de atuação

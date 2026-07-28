@@ -118,8 +118,20 @@
       <input type="text" name="segmento" placeholder="Ex: consultoria, equipamentos industriais, software">
     </div>
     <div class="field">
-      <label>Cidade/estado que quer prospectar <small>(opcional)</small></label>
-      <input type="text" name="regiao" placeholder="Ex: São Paulo, Curitiba, Brasil todo">
+      <label>Região de atuação <small>(opcional)</small></label>
+      <select name="regiao" style="width:100%;background:#111d35;border:1px solid rgba(255,255,255,.08);
+          border-radius:10px;padding:12px 14px;color:#f1f5f9;font-size:15px;
+          font-family:'Inter',sans-serif;outline:none;cursor:pointer;appearance:none;
+          background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22><path d=%22M2 4l4 4 4-4%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%221.5%22/></svg>');
+          background-repeat:no-repeat;background-position:right 14px center">
+        <option value="">Selecione...</option>
+        <option value="brasil_todo">Brasil todo</option>
+        <option value="sul">Sul (PR, SC, RS)</option>
+        <option value="sudeste">Sudeste (SP, RJ, MG, ES)</option>
+        <option value="centro-oeste">Centro-Oeste (GO, MT, MS, DF)</option>
+        <option value="nordeste">Nordeste</option>
+        <option value="norte">Norte</option>
+      </select>
     </div>
     <div class="field">
       <label>Seu email <small>*</small></label>

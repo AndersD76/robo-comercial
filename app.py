@@ -1084,16 +1084,25 @@ def cadastro():
                     _init_user_schema(schema)
                     conn2 = _conn(schema)
                     c2 = conn2.cursor()
-                    termos = []
-                    if segmento:
-                        termos.append(segmento)
-                    if regiao:
-                        termos.append(regiao)
-                    c2.execute("""INSERT INTO bot_config (empresa_nome, website, descricao, termos_busca)
-                                  VALUES (%s,%s,%s,%s)""",
+                    _REGIAO_UFS = {
+                        'sul': ['PR', 'SC', 'RS'],
+                        'sudeste': ['SP', 'RJ', 'MG', 'ES'],
+                        'centro-oeste': ['GO', 'MT', 'MS', 'DF'],
+                        'nordeste': ['BA', 'PE', 'CE', 'MA', 'RN', 'PB', 'AL', 'SE', 'PI'],
+                        'norte': ['AM', 'PA', 'TO', 'RO', 'AC', 'RR', 'AP'],
+                    }
+                    estados_atuacao = []
+                    if regiao == 'brasil_todo':
+                        for ufs in _REGIAO_UFS.values():
+                            estados_atuacao.extend(ufs)
+                    elif regiao in _REGIAO_UFS:
+                        estados_atuacao = _REGIAO_UFS[regiao]
+                    c2.execute("""INSERT INTO bot_config (empresa_nome, website, descricao, termos_busca, estados_atuacao)
+                                  VALUES (%s,%s,%s,%s,%s)""",
                                (empresa, website or None,
                                 segmento or None,
-                                json.dumps(termos) if termos else '[]'))
+                                '[]',
+                                psycopg2.extras.Json(estados_atuacao)))
                     conn2.commit()
                     session['user_id'] = uid
                     session['just_registered'] = True
