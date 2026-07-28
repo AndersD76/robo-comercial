@@ -327,32 +327,35 @@
   <!-- CONFIG EMAIL -->
   <div class="card" {% if just_registered %}id="card-email-cfg" style="display:none"{% endif %}>
     <div class="card-title"><i class="fa fa-at"></i> Configuração de Email</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+      Configure o email que vai enviar as campanhas para seus leads. O servidor SMTP é detectado automaticamente.
+    </p>
     <div class="field">
       <label>Nome do remetente <small>(aparece no "De:" do email)</small></label>
       <input type="text" id="email_remetente_nome" value="{{ cfg.email_remetente_nome or '' }}" placeholder="Ex: João da Empresa XYZ">
     </div>
     <div class="field">
-      <label>Seu email <small>(respostas dos leads vão para cá)</small></label>
-      <input type="email" id="email_remetente" value="{{ cfg.email_remetente or user.email or '' }}" placeholder="voce@suaempresa.com.br">
+      <label>Seu email de envio</label>
+      <input type="email" id="email_remetente" value="{{ cfg.email_remetente or user.email or '' }}" placeholder="voce@gmail.com">
     </div>
-    <details style="margin-top:12px">
-      <summary style="font-size:12px;color:var(--muted);cursor:pointer;user-select:none">
-        <i class="fa fa-gear"></i> Avançado: enviar do seu próprio domínio
-      </summary>
-      <div style="margin-top:12px">
-        <div class="field">
-          <label>Chave Resend <small>(opcional — para enviar do seu domínio)</small></label>
-          <input type="password" id="resend_api_key" value="{{ cfg.resend_api_key or '' }}" placeholder="re_..." autocomplete="off">
-          <div class="info-box" style="margin-top:8px">
-            <strong>Como configurar (5 min, grátis):</strong><br>
-            1. Crie conta em <a href="https://resend.com/signup" target="_blank" rel="noopener" style="color:#818cf8">resend.com</a> (gratuito, 100 emails/dia)<br>
-            2. Vá em <strong>Domains</strong> → adicione seu domínio → copie os registros DNS<br>
-            3. Vá em <strong>API Keys</strong> → crie uma chave → cole acima<br><br>
-            Sem isso, emails saem como <code>Seu Nome &lt;contato@turbovenda.com.br&gt;</code> com reply-to para o seu email.
-          </div>
-        </div>
-      </div>
-    </details>
+    <div class="field">
+      <label>Senha do email <small>(ou Senha de App para Gmail)</small></label>
+      <input type="password" id="smtp_password" value="{{ cfg.smtp_password or '' }}" placeholder="••••••••" autocomplete="off">
+      <small style="color:var(--muted);display:block;margin-top:6px;line-height:1.6">
+        <strong>Gmail:</strong> Use uma <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener" style="color:#818cf8">Senha de App</a> (16 caracteres). Precisa ter verificação em 2 etapas ativa.<br>
+        <strong>Outlook/Hotmail:</strong> Use sua senha normal.
+      </small>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn-gen" id="btn-test-email" onclick="testEmail()" style="padding:10px 18px">
+        <i class="fa fa-paper-plane"></i> Testar envio
+      </button>
+      <span id="test-email-result" style="font-size:12px"></span>
+    </div>
+    <div class="info-box" style="margin-top:12px">
+      <span style="color:#22c55e"><i class="fa fa-check-circle"></i></span> Sem email configurado, campanhas saem como <code>Seu Nome &lt;contato@turbovenda.com.br&gt;</code> com respostas indo para o email da sua conta.
+    </div>
+    <input type="hidden" id="resend_api_key" value="{{ cfg.resend_api_key or '' }}">
   </div>
 
   <!-- TEMPLATE EMAIL -->
@@ -669,6 +672,7 @@ async function saveConfig(redirect) {
       email_cor_header: document.getElementById('email_cor_header').value,
       email_cor_botao: document.getElementById('email_cor_botao').value,
       email_cor_texto: document.getElementById('email_cor_texto').value,
+      smtp_password: (document.getElementById('smtp_password')||{}).value||'',
       resend_api_key: (document.getElementById('resend_api_key')||{}).value||''
     }
     var r = await fetch('/api/' + BOT + '/config', {
@@ -759,6 +763,32 @@ function showToast(msg, ok) {
   t.textContent = msg
   t.className = 'toast show ' + (ok ? 'ok' : 'err')
   setTimeout(() => t.classList.remove('show'), 3500)
+}
+
+// === TESTAR EMAIL ===
+async function testEmail(){
+  const email=document.getElementById('email_remetente').value.trim()
+  const pass=document.getElementById('smtp_password').value.trim()
+  if(!email||!pass){showToast('Preencha email e senha primeiro',false);return}
+  const btn=document.getElementById('btn-test-email')
+  const res=document.getElementById('test-email-result')
+  btn.disabled=true
+  btn.innerHTML='<i class="fa fa-spinner fa-spin"></i> Testando...'
+  res.textContent=''
+  try{
+    const r=await fetch(`/api/${BOT}/config/test-email`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email,password:pass})
+    })
+    const d=await r.json()
+    if(d.ok){
+      res.innerHTML='<span style="color:#22c55e"><i class="fa fa-check-circle"></i> '+d.msg+'</span>'
+    }else{
+      res.innerHTML='<span style="color:#f87171"><i class="fa fa-xmark-circle"></i> '+d.error+'</span>'
+    }
+  }catch(e){res.innerHTML='<span style="color:#f87171">Erro de conexão</span>'}
+  btn.disabled=false
+  btn.innerHTML='<i class="fa fa-paper-plane"></i> Testar envio'
 }
 
 // === SETUP ALL (onboarding) ===

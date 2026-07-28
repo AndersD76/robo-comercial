@@ -3812,23 +3812,65 @@ def api_bulk_action(bot):
 
 # --- Email em massa ---
 
+_SMTP_PROVIDERS = {
+    'gmail.com': ('smtp.gmail.com', 587),
+    'googlemail.com': ('smtp.gmail.com', 587),
+    'outlook.com': ('smtp-mail.outlook.com', 587),
+    'hotmail.com': ('smtp-mail.outlook.com', 587),
+    'live.com': ('smtp-mail.outlook.com', 587),
+    'yahoo.com': ('smtp.mail.yahoo.com', 587),
+    'yahoo.com.br': ('smtp.mail.yahoo.com', 587),
+    'uol.com.br': ('smtps.uol.com.br', 587),
+    'bol.com.br': ('smtps.bol.com.br', 587),
+    'terra.com.br': ('smtp.terra.com.br', 587),
+    'ig.com.br': ('smtp.ig.com.br', 587),
+    'zoho.com': ('smtp.zoho.com', 587),
+}
+
+def _detect_smtp(email: str) -> tuple:
+    domain = email.rsplit('@', 1)[-1].lower() if '@' in email else ''
+    if domain in _SMTP_PROVIDERS:
+        return _SMTP_PROVIDERS[domain]
+    return (f'smtp.{domain}', 587)
+
+
 def _get_email_config(schema: str) -> dict:
-    """Lê config de email do user (bot_config). Prioriza config do cliente."""
+    """Lê config de email do user (bot_config). Prioriza SMTP do cliente."""
     cfg = get_bot_config(schema) if schema else {}
     user = get_current_user() or {}
-    client_resend = cfg.get('resend_api_key') or ''
     client_email = cfg.get('email_remetente') or ''
+    client_password = cfg.get('smtp_password') or ''
+    client_resend = cfg.get('resend_api_key') or ''
+    has_client_smtp = bool(client_email and client_password)
+    if has_client_smtp:
+        smtp_host, smtp_port = _detect_smtp(client_email)
+        return {
+            'sender_email': client_email,
+            'sender_name': (cfg.get('email_remetente_nome') or
+                            cfg.get('empresa_nome') or ''),
+            'reply_to': '',
+            'smtp_host': cfg.get('smtp_host') or smtp_host,
+            'smtp_port': cfg.get('smtp_port') or smtp_port,
+            'smtp_user': client_email,
+            'smtp_password': client_password,
+            'resend_api_key': '',
+        }
+    if client_resend and client_email:
+        return {
+            'sender_email': client_email,
+            'sender_name': (cfg.get('email_remetente_nome') or
+                            cfg.get('empresa_nome') or ''),
+            'reply_to': '',
+            'smtp_host': '', 'smtp_port': 587, 'smtp_user': '', 'smtp_password': '',
+            'resend_api_key': client_resend,
+        }
     return {
-        'sender_email': client_email or os.environ.get('EMAIL_FROM',
-                                       'contato@turbovenda.com.br'),
+        'sender_email': os.environ.get('EMAIL_FROM', 'contato@turbovenda.com.br'),
         'sender_name': (cfg.get('email_remetente_nome') or
                         cfg.get('empresa_nome') or ''),
-        'reply_to': user.get('email') or '',
-        'smtp_host': cfg.get('smtp_host') or '',
-        'smtp_port': cfg.get('smtp_port') or 587,
-        'smtp_user': cfg.get('smtp_user') or '',
-        'smtp_password': cfg.get('smtp_password') or '',
-        'resend_api_key': client_resend or os.environ.get('RESEND_API_KEY', '') or '',
+        'reply_to': client_email or user.get('email') or '',
+        'smtp_host': '', 'smtp_port': 587, 'smtp_user': '', 'smtp_password': '',
+        'resend_api_key': os.environ.get('RESEND_API_KEY', '') or '',
     }
 
 
@@ -4126,6 +4168,37 @@ def api_get_config(bot):
     # Não retorna senha do LinkedIn
     cfg.pop('linkedin_password', None)
     return jsonify(cfg)
+
+
+@app.route('/api/<bot>/config/test-email', methods=['POST'])
+@login_required
+@limiter.limit("3 per minute")
+def api_test_email(bot):
+    """Testa envio de email com as configs do cliente."""
+    schema = _get_schema()
+    data = request.get_json(silent=True) or {}
+    email = data.get('email', '').strip()
+    password = data.get('password', '').strip()
+    if not email or not password:
+        return jsonify({'ok': False, 'error': 'Preencha email e senha'}), 400
+    smtp_host, smtp_port = _detect_smtp(email)
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        msg = MIMEText('Este é um email de teste do TurboVenda. Se você recebeu, a configuração está correta!', 'plain', 'utf-8')
+        msg['From'] = f'TurboVenda Teste <{email}>'
+        msg['To'] = email
+        msg['Subject'] = 'TurboVenda — Teste de email OK'
+        server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
+        server.starttls()
+        server.login(email, password)
+        server.sendmail(email, [email], msg.as_string())
+        server.quit()
+        return jsonify({'ok': True, 'msg': f'Email de teste enviado para {email}', 'smtp_host': smtp_host})
+    except smtplib.SMTPAuthenticationError:
+        return jsonify({'ok': False, 'error': 'Senha incorreta ou acesso não autorizado. Para Gmail, use uma Senha de App.'}), 400
+    except Exception as e:
+        return jsonify({'ok': False, 'error': f'Erro de conexão SMTP ({smtp_host}:{smtp_port}): {str(e)}'}), 400
 
 
 @app.route('/api/<bot>/config', methods=['POST'])
