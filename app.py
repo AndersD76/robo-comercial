@@ -3812,12 +3812,9 @@ def api_bulk_action(bot):
 
 # --- Email em massa ---
 
-_SMTP_PROVIDERS = {
+_SMTP_EXACT = {
     'gmail.com': ('smtp.gmail.com', 587),
     'googlemail.com': ('smtp.gmail.com', 587),
-    'outlook.com': ('smtp-mail.outlook.com', 587),
-    'hotmail.com': ('smtp-mail.outlook.com', 587),
-    'live.com': ('smtp-mail.outlook.com', 587),
     'yahoo.com': ('smtp.mail.yahoo.com', 587),
     'yahoo.com.br': ('smtp.mail.yahoo.com', 587),
     'uol.com.br': ('smtps.uol.com.br', 587),
@@ -3826,11 +3823,17 @@ _SMTP_PROVIDERS = {
     'ig.com.br': ('smtp.ig.com.br', 587),
     'zoho.com': ('smtp.zoho.com', 587),
 }
+_SMTP_MICROSOFT = ('outlook', 'hotmail', 'live', 'msn')
 
 def _detect_smtp(email: str) -> tuple:
     domain = email.rsplit('@', 1)[-1].lower() if '@' in email else ''
-    if domain in _SMTP_PROVIDERS:
-        return _SMTP_PROVIDERS[domain]
+    if domain in _SMTP_EXACT:
+        return _SMTP_EXACT[domain]
+    base = domain.split('.')[0]
+    if base in _SMTP_MICROSOFT:
+        return ('smtp-mail.outlook.com', 587)
+    if 'google' in domain:
+        return ('smtp.gmail.com', 587)
     return (f'smtp.{domain}', 587)
 
 
@@ -4996,7 +4999,6 @@ def api_generate_msg(bot):
         return jsonify({'error': 'Preencha a descrição da empresa'}), 400
 
     pitch = _extrair_pitch(descricao, empresa, max_chars=100)
-    pitch_lower = pitch[0].lower() + pitch[1:] if pitch else ''
     tipo = data.get('tipo', 'whatsapp')
 
     site_link = ''
@@ -5006,16 +5008,16 @@ def api_generate_msg(bot):
 
     if tipo == 'followup':
         mensagem = (
-            "{{nome}}, te mandei uma msg sobre a " + empresa + ".\n\n"
-            "Resumindo: ajudamos empresas a " + pitch_lower + ".\n\n"
-            "Vale 15 min? {{link_agenda}}" + site_link
+            "{{nome}}, tudo bem? Te mandei uma mensagem recentemente.\n\n"
+            "Sou da " + empresa + ". " + pitch + ".\n\n"
+            "Teria 15 min para uma conversa rápida?\n"
+            "{{link_agenda}}" + site_link
         )
     else:
         mensagem = (
-            "Oi {{nome}}! 👋\n\n"
-            "Aqui é da " + empresa
-            + " — ajudamos empresas a " + pitch_lower + ".\n\n"
-            "Posso te mostrar em 15 min como funciona?\n"
+            "Oi {{nome}}, tudo bem? 👋\n\n"
+            "Sou da " + empresa + ". " + pitch + ".\n\n"
+            "Posso te mostrar em 15 min como funciona na prática?\n"
             "{{cal_link}}" + site_link
         )
 
@@ -5033,7 +5035,6 @@ def api_generate_email(bot):
         return jsonify({'error': 'Preencha a descrição da empresa'}), 400
 
     pitch = _extrair_pitch(descricao, empresa, max_chars=150)
-    pitch_lower = pitch[0].lower() + pitch[1:] if pitch else ''
     cor_header = data.get('cor_header') or '#1a2332'
     cor_btn = data.get('cor_botao') or '#2563eb'
     cor_texto = data.get('cor_texto') or '#ffffff'
@@ -5062,7 +5063,7 @@ def api_generate_email(bot):
             + site_limpo + '</a>')
 
     html = _build_email_html(
-        empresa=empresa, pitch=pitch_lower, cor_header=cor_header,
+        empresa=empresa, pitch=pitch, cor_header=cor_header,
         cor_btn=cor_btn, cor_texto=cor_texto,
         site_link_inline=site_link_inline, site_footer=site_footer,
         site_url=site_url)
@@ -5144,7 +5145,7 @@ Olá <strong>{{{{nome}}}}</strong>,
 <!-- INTRO -->
 <tr><td style="background-color:#ffffff;padding:20px 48px 0;">
 <p style="margin:0;font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.75;color:#374151;">
-Sou da <strong>{empresa}</strong>{site_link_inline} e trabalho com empresas de
+Sou da <strong>{empresa}</strong>{site_link_inline} e notei que vocês atuam no segmento de
 <strong>{{{{segmento}}}}</strong> em <strong>{{{{cidade}}}}</strong>.
 </p>
 </td></tr>
@@ -5155,8 +5156,8 @@ Sou da <strong>{empresa}</strong>{site_link_inline} e trabalho com empresas de
        style="background-color:{btn_bg};border-left:4px solid {cor_btn};border-radius:0 8px 8px 0;">
 <tr><td style="padding:20px 24px;">
 <p style="margin:0;font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.7;color:#1e293b;">
-<strong style="font-size:15px;">O que fazemos:</strong><br>
-Ajudamos empresas a {pitch}.
+<strong style="font-size:15px;">Sobre a {empresa}:</strong><br>
+{pitch}.
 </p>
 </td></tr>
 </table>
@@ -5165,7 +5166,7 @@ Ajudamos empresas a {pitch}.
 <!-- CTA TEXT -->
 <tr><td style="background-color:#ffffff;padding:0 48px 28px;">
 <p style="margin:0;font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.75;color:#374151;">
-Posso te mostrar em <strong>15 minutos</strong> como funciona na prática?
+Teria <strong>15 minutos</strong> para uma conversa rápida? Posso te mostrar como funciona na prática.
 </p>
 </td></tr>
 
@@ -5208,51 +5209,65 @@ Posso te mostrar em <strong>15 minutos</strong> como funciona na prática?
 
 
 def _extrair_pitch(descricao, empresa_nome='', max_chars=150):
-    """Extrai a frase de BENEFÍCIO da descrição, não a frase descritiva."""
-    BENEFIT_WORDS = [
+    """Extrai a frase de PRODUTO/SERVIÇO da descrição para usar em mensagens."""
+    _REJEITAR = [
+        'nosso cliente', 'cliente ideal', 'público-alvo', 'publico-alvo',
+        'atendemos', 'atuamos', 'foco em', 'focamos',
+        'pequeno porte', 'médio porte', 'grande porte',
+        'centro-oeste', 'sul do brasil', 'norte do brasil',
+    ]
+    _PRODUTO = [
+        'vendemos', 'fabricamos', 'produzimos', 'oferecemos',
+        'desenvolvemos', 'fornecemos', 'trabalhamos com',
+        'somos', 'é uma', 'é um',
+    ]
+    _BENEFICIO = [
         'produtividade', 'economia', 'reduz', 'aumenta', 'controle',
         'proteg', 'seguran', 'resultado', 'otimiz', 'eficiên',
-        'visibilidade', 'automatiz', 'agilidade', 'evita', 'elimin',
+        'automatiz', 'agilidade', 'evita', 'elimin',
         'garante', 'melhora', 'simplifica', 'acelera', 'monitora',
-        'objetivo', 'permite', 'ajuda', 'facilita',
+        'permite', 'ajuda', 'facilita',
     ]
+
     frases = re.split(r'(?<=[.!?])\s+', descricao.strip())
+    frases = [f.rstrip('.').strip() for f in frases if len(f.strip()) > 10]
     if not frases:
         return descricao[:max_chars]
 
+    def _limpar(frase):
+        p = frase
+        if empresa_nome:
+            p = re.sub(rf'^(?:O|A)\s+{re.escape(empresa_nome)}\s+(?:é|permite|ajuda|oferece)\s+',
+                        '', p, flags=re.IGNORECASE)
+        p = re.sub(r'^(?:O objetivo [eé]|A meta [eé]|O foco [eé]|Nosso objetivo [eé]|Nós)\s+',
+                    '', p, flags=re.IGNORECASE)
+        p = re.sub(r'^O sistema\s+', '', p, flags=re.IGNORECASE)
+        p = re.sub(r'^(?:Vendemos|Fabricamos|Produzimos|Oferecemos|Desenvolvemos|Fornecemos)\s+',
+                    '', p, flags=re.IGNORECASE)
+        p = re.sub(r'^Somos\s+(?:uma?\s+)?', '', p, flags=re.IGNORECASE)
+        if p:
+            p = p[0].upper() + p[1:]
+        return p[:max_chars].rsplit(' ', 1)[0] if len(p) > max_chars else p
+
+    def _rejeitada(frase):
+        fl = frase.lower()
+        return any(r in fl for r in _REJEITAR)
+
     for frase in reversed(frases):
         fl = frase.lower()
-        if any(bw in fl for bw in BENEFIT_WORDS):
-            pitch = frase.rstrip('.')
-            pitch = re.sub(r'^O objetivo é\s+', '', pitch, flags=re.IGNORECASE)
-            pitch = re.sub(r'^A meta é\s+', '', pitch, flags=re.IGNORECASE)
-            pitch = re.sub(r'^O foco é\s+', '', pitch, flags=re.IGNORECASE)
-            if empresa_nome:
-                pitch = re.sub(
-                    rf'^O\s+{re.escape(empresa_nome)}\s+(é|permite|ajuda|oferece)\s+',
-                    '', pitch, flags=re.IGNORECASE)
-                pitch = re.sub(
-                    rf'^A\s+{re.escape(empresa_nome)}\s+(é|permite|ajuda|oferece)\s+',
-                    '', pitch, flags=re.IGNORECASE)
-            if pitch:
-                pitch = pitch[0].upper() + pitch[1:]
-            if len(pitch) > max_chars:
-                pitch = pitch[:max_chars].rsplit(' ', 1)[0]
-            return pitch
+        if not _rejeitada(frase) and any(b in fl for b in _BENEFICIO):
+            return _limpar(frase)
 
-    pitch = frases[0].rstrip('.')
-    if empresa_nome:
-        pitch = re.sub(
-            rf'^O\s+{re.escape(empresa_nome)}\s+é\s+(um[a]?\s+)?',
-            '', pitch, flags=re.IGNORECASE)
-        pitch = re.sub(
-            rf'^A\s+{re.escape(empresa_nome)}\s+é\s+(um[a]?\s+)?',
-            '', pitch, flags=re.IGNORECASE)
-    if pitch:
-        pitch = pitch[0].upper() + pitch[1:]
-    if len(pitch) > max_chars:
-        pitch = pitch[:max_chars].rsplit(' ', 1)[0]
-    return pitch
+    for frase in frases:
+        fl = frase.lower()
+        if not _rejeitada(frase) and any(p in fl for p in _PRODUTO):
+            return _limpar(frase)
+
+    for frase in frases:
+        if not _rejeitada(frase):
+            return _limpar(frase)
+
+    return _limpar(frases[0])
 
 
 def _extrair_cores_site(website):
