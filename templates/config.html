@@ -346,7 +346,12 @@
 
     <!-- ESTADO ATUAL -->
     <div class="info-box" style="margin-bottom:18px">
-      {% if cfg.oauth_email and cfg.oauth_provider %}
+      {% if cfg.unipile_account_id %}
+        <span style="color:#22c55e"><i class="fa fa-circle-check"></i></span>
+        Enviando pela sua caixa de email
+        {% if cfg.unipile_email %}<code>{{ cfg.unipile_email }}</code>{% endif %}.
+        <button onclick="desconectarEmail()" style="margin-left:8px;background:none;border:none;color:#f87171;cursor:pointer;font-size:12px;text-decoration:underline">desconectar</button>
+      {% elif cfg.oauth_email and cfg.oauth_provider %}
         <span style="color:#22c55e"><i class="fa fa-circle-check"></i></span>
         Enviando por <strong>{{ 'Gmail' if cfg.oauth_provider == 'google' else 'Outlook' }}</strong>
         como <code>{{ cfg.oauth_email }}</code>.
@@ -472,6 +477,7 @@
 
 <script>
 const BOT = '{{ user.schema_name if user and user.schema_name else "" }}';
+const UNIPILE = {{ 'true' if unipile_ativo else 'false' }};
 
 // Sync color pickers com hex inputs
 document.querySelectorAll('input[type=color]').forEach(picker => {
@@ -841,6 +847,20 @@ async function configurarEmail(){
       body:JSON.stringify({nome:nome,email:email})})
     const d=await r.json()
     if(!d.ok){showToast(d.error||'Erro ao configurar',false);return}
+
+    // Com a Unipile ativa, um caminho so resolve Gmail, Outlook e IMAP
+    // (Hostinger, Locaweb, servidor proprio) — sem DNS e sem senha aqui.
+    if(UNIPILE){
+      box.innerHTML='<div class="info-box"><i class="fa fa-spinner fa-spin"></i> Abrindo a conexão segura...</div>'
+      const rc=await fetch(`/api/${BOT}/config/email/conectar`,{method:'POST'})
+      const dc=await rc.json()
+      if(dc.ok&&dc.url){location.href=dc.url;return}
+      box.innerHTML='<div class="info-box"><span style="color:#fbbf24">'
+        +'<i class="fa fa-triangle-exclamation"></i> '+(dc.error||'Não consegui abrir a conexão agora')
+        +'</span><div style="margin-top:8px">Suas campanhas seguem saindo com o seu nome e '
+        +'as respostas chegam em <code>'+email+'</code>.</div></div>'
+      return
+    }
 
     if(d.tipo==='oauth'&&d.disponivel){
       const label=d.provider==='google'?'Gmail':'Outlook'

@@ -167,6 +167,33 @@ Restam OAuth (envia pela caixa do cliente, por HTTPS) e dominio proprio
 (SPF/DKIM). O codigo de SMTP continua no lugar e passa a funcionar sozinho
 se um dia o app mudar de hospedagem.
 
+## Unipile — o caminho principal (2 variaveis e acabou)
+
+Com a saida SMTP bloqueada, este e o caminho que faz o cliente enviar do
+proprio email SEM voce registrar app no Azure nem no Google Cloud: a Unipile
+ja tem os apps OAuth verificados e hospeda o assistente de conexao.
+Cobre Google, Microsoft **e IMAP** (Hostinger, Locaweb, servidor proprio).
+
+| Variavel | Onde pegar |
+|---|---|
+| `UNIPILE_API_KEY` | painel da Unipile > Access Tokens |
+| `UNIPILE_DSN` | o host da sua conta, ex: `https://api8.unipile.com:13843` — aparece junto da chave |
+
+Precisa tambem de `BASE_URL` (ja documentada abaixo), usada para montar o
+webhook e os redirects.
+
+**Nao ha nada para configurar no painel da Unipile:** o app envia
+`notify_url` e os redirects em cada pedido de link. Confira apenas que
+`https://SEU_DOMINIO/webhook/unipile` esta acessivel publicamente.
+
+Como funciona para o cliente: ele digita nome + email, clica em
+"Configurar envio" e cai no assistente da Unipile, que reconhece o provedor
+e pede a autorizacao certa. Ao voltar, o webhook grava o `account_id` e as
+campanhas passam a sair da caixa dele.
+
+Sem essas variaveis nada quebra — o app segue no remetente global e os
+caminhos de OAuth proprio e dominio continuam disponiveis.
+
 ## Envio pelo email do proprio cliente
 
 O Railway bloqueia saida SMTP, entao o cliente nao consegue usar email+senha.

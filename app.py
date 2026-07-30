@@ -493,6 +493,8 @@ def _init_user_schema(schema: str):
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_verificado BOOLEAN DEFAULT FALSE",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS segmentos_evitar JSONB DEFAULT '[]'",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS unipile_account_id TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS unipile_email TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_metodo TEXT DEFAULT 'global'",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS oauth_provider TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS oauth_refresh_token TEXT",
@@ -2711,6 +2713,7 @@ def config_page():
                            just_registered=just_registered,
                            oauth_google=_oauth_ativo('google'),
                            oauth_microsoft=_oauth_ativo('microsoft'),
+                           unipile_ativo=_unipile_ativo(),
                            dominio_ativo=bool(os.environ.get('RESEND_API_KEY')),
                            email_ok=request.args.get('email_ok', ''),
                            email_erro=request.args.get('email_erro', ''),
@@ -3864,7 +3867,20 @@ def _get_email_config(schema: str) -> dict:
     nome_remetente = (cfg.get('email_remetente_nome')
                       or cfg.get('empresa_nome') or '')
 
-    # 1. OAuth (Gmail/Outlook) — HTTPS, imune a bloqueio de porta SMTP
+    # 1. Unipile — caixa do próprio cliente, conectada pelo assistente
+    if cfg.get('unipile_account_id') and _unipile_ativo():
+        return {
+            'sender_email': cfg.get('unipile_email') or client_email,
+            'sender_name': nome_remetente,
+            'reply_to': '',
+            'smtp_host': '', 'smtp_port': 587, 'smtp_user': '',
+            'smtp_password': '', 'resend_api_key': '',
+            'oauth_provider': '', 'oauth_refresh_token': '',
+            'unipile_account_id': cfg.get('unipile_account_id'),
+            'compartilhado': False,
+        }
+
+    # 2. OAuth próprio (Gmail/Outlook), se as credenciais existirem
     provider = cfg.get('oauth_provider') or ''
     refresh = cfg.get('oauth_refresh_token') or ''
     oauth_email = cfg.get('oauth_email') or ''
@@ -4090,7 +4106,8 @@ def api_email_desconectar(bot):
             with conn.cursor() as c:
                 c.execute("""UPDATE bot_config SET email_metodo='global',
                              oauth_provider=NULL, oauth_refresh_token=NULL,
-                             oauth_email=NULL, atualizado_em=NOW()""")
+                             oauth_email=NULL, unipile_account_id=NULL,
+                             unipile_email=NULL, atualizado_em=NOW()""")
             conn.commit()
         return jsonify({'ok': True})
     except Exception:
@@ -4152,6 +4169,127 @@ def _send_oauth(provider, refresh_token, sender_email, sender_name,
 
 def _resend_admin():
     return os.environ.get('RESEND_API_KEY', '')
+
+
+# =============================================================================
+# UNIPILE — o cliente conecta a caixa dele por um assistente hospedado.
+# Cobre Google, Microsoft e IMAP (Hostinger, Locaweb, servidor proprio) sem
+# exigir app OAuth nosso e sem depender de porta SMTP, que o Railway bloqueia.
+# =============================================================================
+
+_UNIPILE_KEY = os.environ.get('UNIPILE_API_KEY', '')
+# a Unipile da um host proprio por conta, ex: https://api8.unipile.com:13843
+_UNIPILE_DSN = os.environ.get('UNIPILE_DSN', '').rstrip('/')
+
+
+def _unipile_ativo():
+    return bool(_UNIPILE_KEY and _UNIPILE_DSN)
+
+
+def _unipile(metodo, caminho, **kw):
+    """Chamada à API da Unipile. Devolve (json, erro)."""
+    if not _unipile_ativo():
+        return None, 'Envio pelo seu email ainda não está disponível'
+    try:
+        import requests as http
+        r = http.request(
+            metodo, f'{_UNIPILE_DSN}/api/v1{caminho}',
+            headers={'X-API-KEY': _UNIPILE_KEY,
+                     'accept': 'application/json'},
+            timeout=25, **kw)
+        corpo = r.json() if r.content else {}
+        if r.status_code in (200, 201, 202):
+            return corpo, None
+        logger.error('Unipile %s %s -> %s: %s', metodo, caminho,
+                     r.status_code, str(corpo)[:300])
+        return None, (corpo.get('message') if isinstance(corpo, dict)
+                      else None) or f'erro {r.status_code}'
+    except Exception:
+        logger.exception('Unipile %s %s falhou', metodo, caminho)
+        return None, 'Não consegui falar com o serviço de email'
+
+
+def _unipile_enviar(account_id, remetente_nome, to_email, to_nome,
+                    assunto, html, reply_to=''):
+    """Envia pela caixa do proprio cliente."""
+    payload = {
+        'account_id': account_id,
+        'to': [{'identifier': to_email,
+                'display_name': to_nome or to_email}],
+        'subject': assunto,
+        'body': html,
+    }
+    if reply_to:
+        payload['reply_to'] = reply_to
+    _, erro = _unipile('POST', '/emails', json=payload)
+    if erro:
+        logger.error('Unipile: falha ao enviar para %s: %s', to_email, erro)
+        return False
+    logger.info('Unipile OK -> %s', to_email)
+    return True
+
+
+@app.route('/api/<bot>/config/email/conectar', methods=['POST'])
+@login_required
+@limiter.limit("10 per minute")
+def api_unipile_conectar(bot):
+    """Gera o link do assistente da Unipile para este cliente."""
+    schema = _get_schema()
+    if not _unipile_ativo():
+        return jsonify({'ok': False,
+                        'error': 'Conexão de email indisponível'}), 503
+    base = os.environ.get('BASE_URL', '').rstrip('/') or \
+        request.host_url.rstrip('/').replace('http://', 'https://')
+    expira = (_dt.datetime.now(_dt.timezone.utc)
+              + _dt.timedelta(hours=1)).isoformat().replace('+00:00', 'Z')
+    corpo, erro = _unipile('POST', '/hosted/accounts/link', json={
+        'type': 'create',
+        'providers': ['GOOGLE', 'MICROSOFT', 'IMAP'],
+        'api_url': _UNIPILE_DSN,
+        'expiresOn': expira,
+        'name': schema,                     # volta no webhook
+        'notify_url': f'{base}/webhook/unipile',
+        'success_redirect_url': f'{base}/configurar?email_ok=conectado',
+        'failure_redirect_url': f'{base}/configurar?email_erro=negado',
+    })
+    if erro:
+        return jsonify({'ok': False, 'error': erro}), 502
+    return jsonify({'ok': True, 'url': (corpo or {}).get('url')})
+
+
+@app.route('/webhook/unipile', methods=['POST'])
+@limiter.limit("60 per minute")
+def webhook_unipile():
+    """Avisa qual conta foi conectada. O campo name traz o schema."""
+    data = request.get_json(silent=True) or {}
+    schema = (data.get('name') or '').strip()
+    account_id = (data.get('account_id') or '').strip()
+    status = (data.get('status') or '').upper()
+    if status != 'CREATION_SUCCESS' or not account_id:
+        logger.info('Unipile webhook ignorado: %s', str(data)[:200])
+        return jsonify({'ok': True})
+    if not _safe_sql_name(schema):
+        logger.warning('Unipile webhook com schema invalido: %r', schema)
+        return jsonify({'ok': True})
+    email_conta = ''
+    corpo, _ = _unipile('GET', f'/accounts/{account_id}')
+    if isinstance(corpo, dict):
+        email_conta = (corpo.get('name') or corpo.get('username')
+                       or (corpo.get('connection_params') or {}).get('mail')
+                       or '')
+    try:
+        with _conn(schema) as conn:
+            with conn.cursor() as c:
+                c.execute("""UPDATE bot_config SET unipile_account_id=%s,
+                             unipile_email=%s, email_metodo='unipile',
+                             atualizado_em=NOW()""",
+                          (account_id, email_conta or None))
+            conn.commit()
+        logger.info('Unipile: conta %s ligada ao schema %s', account_id,
+                    schema)
+    except Exception:
+        logger.exception('Unipile: falha ao gravar conta')
+    return jsonify({'ok': True})
 
 
 _PROVEDOR_PESSOAL = {
@@ -4363,7 +4501,17 @@ def api_dominio_verificar(bot):
 
 
 def _send_email(ecfg, to_email, to_name, subject, html):
-    """Envia via OAuth do cliente, Resend ou SMTP — nessa ordem."""
+    """Envia pela caixa do cliente (Unipile/OAuth), Resend ou SMTP."""
+    conta_unipile = ecfg.get('unipile_account_id', '')
+    if conta_unipile:
+        if _unipile_enviar(conta_unipile, ecfg.get('sender_name', ''),
+                           to_email, to_name, subject, html,
+                           ecfg.get('reply_to', '')):
+            return True
+        logger.warning('Unipile falhou, caindo para o remetente global')
+        ecfg = _email_config_global(ecfg.get('sender_name', ''),
+                                    ecfg.get('sender_email', ''))
+
     provider = ecfg.get('oauth_provider', '')
     refresh = ecfg.get('oauth_refresh_token', '')
     if provider and refresh:
@@ -4952,6 +5100,8 @@ def api_save_config(bot):
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_verificado BOOLEAN DEFAULT FALSE",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS segmentos_evitar JSONB DEFAULT '[]'",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS unipile_account_id TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS unipile_email TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_metodo TEXT DEFAULT 'global'",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS oauth_provider TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS oauth_refresh_token TEXT",
