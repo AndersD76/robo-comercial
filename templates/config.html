@@ -844,8 +844,13 @@ async function configurarEmail(){
 
     if(d.tipo==='oauth'&&d.disponivel){
       const label=d.provider==='google'?'Gmail':'Outlook'
-      box.innerHTML='<div class="info-box">Detectei que seu email é do <strong>'+label+'</strong>. '
-        +'Autorize uma vez e as campanhas passam a sair de <code>'+email+'</code>.'
+      const onde=d.provider==='google'?'Google Workspace':'Microsoft 365'
+      const frase=d.empresarial
+        ? 'O email do seu domínio <code>'+d.dominio+'</code> está hospedado no <strong>'+onde+'</strong>. '
+          +'Então não precisa mexer em DNS: '
+        : 'Detectei que seu email é do <strong>'+label+'</strong>. '
+      box.innerHTML='<div class="info-box">'+frase
+        +'autorize uma vez e as campanhas passam a sair de <code>'+email+'</code>.'
         +'<div style="margin-top:12px"><a href="/oauth/'+d.provider+'/start" class="btn-gen" '
         +'style="padding:11px 18px;text-decoration:none;display:inline-flex;align-items:center;gap:8px">'
         +'<i class="fa fa-link"></i> Conectar '+label+'</a></div></div>'

@@ -4164,6 +4164,33 @@ _PROVEDOR_PESSOAL = {
 }
 
 
+@lru_cache(maxsize=512)
+def _mx_provider(dominio):
+    """Onde o email desse domínio está hospedado, pelo MX.
+
+    Metade dos domínios de empresa no Brasil usa Microsoft 365 ou Google
+    Workspace. Nesses casos o OAuth envia do endereço real do cliente sem
+    tocar em DNS — sem essa checagem eles cairiam no caminho de SPF/DKIM
+    à toa. Consulta por DNS-over-HTTPS porque UDP/53 costuma ser bloqueado.
+    """
+    try:
+        import requests as http
+        r = http.get('https://cloudflare-dns.com/dns-query',
+                     params={'name': dominio, 'type': 'MX'},
+                     headers={'Accept': 'application/dns-json'}, timeout=8)
+        if not r.ok:
+            return ''
+        alvos = ' '.join(a.get('data', '').lower()
+                         for a in (r.json().get('Answer') or []))
+        if 'google' in alvos or 'googlemail' in alvos:
+            return 'google'
+        if 'outlook' in alvos or 'microsoft' in alvos:
+            return 'microsoft'
+    except Exception:
+        logger.info('MX de %s indisponivel', dominio)
+    return ''
+
+
 def _classificar_email(email):
     """Descobre sozinho qual caminho de envio serve para este endereço."""
     dominio = email.rsplit('@', 1)[-1].lower().strip() if '@' in email else ''
@@ -4178,9 +4205,12 @@ def _classificar_email(email):
         elif 'google' in dominio:
             prov = 'google'
         else:
-            prov = ''
+            # domínio da empresa: se o email dele mora no Google/Microsoft,
+            # OAuth resolve sem DNS nenhum
+            prov = _mx_provider(dominio)
     if prov in ('google', 'microsoft'):
         return {'tipo': 'oauth', 'provider': prov, 'dominio': dominio,
+                'empresarial': dominio not in _PROVEDOR_PESSOAL,
                 'disponivel': _oauth_ativo(prov)}
     if prov == 'outro':
         # provedor pessoal sem OAuth nosso — só resta o remetente global
@@ -4251,6 +4281,7 @@ def api_email_auto(bot):
     if info['tipo'] == 'oauth':
         resp['provider'] = info['provider']
         resp['disponivel'] = info['disponivel']
+        resp['empresarial'] = info.get('empresarial', False)
     if erro_dom:
         resp['aviso_dominio'] = erro_dom
     return jsonify(resp)
