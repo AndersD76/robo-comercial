@@ -4469,11 +4469,16 @@ def _send_email_classico(ecfg, to_email, to_name, subject, html):
             for p in ports_to_try:
                 try:
                     if p == 465:
-                        with smtplib.SMTP_SSL(smtp_host, p, timeout=15) as s:
+                        import socket as _sk
+                        _i = _sk.getaddrinfo(smtp_host, p, _sk.AF_INET,
+                                             _sk.SOCK_STREAM)[0][4]
+                        with smtplib.SMTP_SSL(_i[0], p, timeout=15) as s:
+                            s._host = smtp_host
                             s.login(smtp_user, smtp_pass)
                             s.sendmail(sender_email, to_email, msg.as_string())
                     else:
-                        with smtplib.SMTP(smtp_host, p, timeout=15) as s:
+                        # IPv4 explícito: ver comentário em _smtp_conectar
+                        with _smtp_conectar(smtp_host, p, timeout=15) as s:
                             s.ehlo()
                             s.starttls()
                             s.login(smtp_user, smtp_pass)
@@ -4769,7 +4774,7 @@ def api_test_email(bot):
         msg['From'] = f'TurboVenda Teste <{email}>'
         msg['To'] = email
         msg['Subject'] = 'TurboVenda — Teste de email OK'
-        server = smtplib.SMTP(smtp_host, smtp_port, timeout=8)
+        server = _smtp_conectar(smtp_host, smtp_port, timeout=8)
         server.starttls()
         server.login(email, password)
         server.sendmail(email, [email], msg.as_string())
@@ -4807,12 +4812,73 @@ def _set_smtp_verificado(schema, valor):
         logger.exception('falha ao gravar smtp_verificado')
 
 
+def _smtp_conectar(host, port, timeout=8):
+    """Conecta forçando IPv4.
+
+    'Network is unreachable' num container costuma ser o resolver
+    devolvendo AAAA sem haver rota IPv6 — o que parece bloqueio da
+    hospedagem e não é. Resolvemos o A na mão e mantemos o hostname
+    para o certificado do STARTTLS bater.
+    """
+    import smtplib
+    import socket
+    infos = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+    if not infos:
+        raise OSError(f'sem registro A para {host}')
+    ultimo = None
+    for info in infos:
+        ip = info[4][0]
+        try:
+            s = smtplib.SMTP(ip, port, timeout=timeout)
+            s._host = host  # SNI/cert usam o nome, não o IP
+            return s
+        except OSError as e:
+            ultimo = e
+    raise ultimo or OSError('falha ao conectar')
+
+
+@app.route('/api/<bot>/config/smtp-diag')
+@login_required
+@limiter.limit("4 per minute")
+def api_smtp_diag(bot):
+    """Diz se o host realmente bloqueia SMTP ou se era só IPv6."""
+    import socket
+    host = request.args.get('host', 'smtp-mail.outlook.com')
+    if not re.fullmatch(r'[a-z0-9.-]+', host.lower() or ''):
+        return jsonify({'error': 'host inválido'}), 400
+    out = {'host': host, 'ipv4': [], 'ipv6': [], 'portas': {}}
+    for fam, chave in ((socket.AF_INET, 'ipv4'), (socket.AF_INET6, 'ipv6')):
+        try:
+            out[chave] = sorted({i[4][0] for i in socket.getaddrinfo(
+                host, 587, fam, socket.SOCK_STREAM)})
+        except Exception as e:
+            out[chave] = [f'erro: {e}']
+    for porta in (587, 465, 25):
+        r = {}
+        for fam, chave in ((socket.AF_INET, 'v4'), (socket.AF_INET6, 'v6')):
+            try:
+                infos = socket.getaddrinfo(host, porta, fam,
+                                           socket.SOCK_STREAM)
+                with socket.create_connection(infos[0][4], 4):
+                    r[chave] = 'abriu'
+            except Exception as e:
+                r[chave] = f'{type(e).__name__}: {e}'
+        out['portas'][porta] = r
+    abriu_v4 = any(v.get('v4') == 'abriu' for v in out['portas'].values())
+    out['veredito'] = ('SMTP funciona por IPv4 — o erro anterior era IPv6'
+                       if abriu_v4 else
+                       'A hospedagem bloqueia mesmo a saída SMTP')
+    return jsonify(out)
+
+
 def _smtp_bloqueado(host, portas=(587, 465, 25), timeout=3):
     """True se nenhuma porta SMTP abre — indica bloqueio da hospedagem."""
     import socket
     for porta in portas:
         try:
-            with socket.create_connection((host, porta), timeout):
+            infos = socket.getaddrinfo(host, porta, socket.AF_INET,
+                                       socket.SOCK_STREAM)
+            with socket.create_connection(infos[0][4], timeout):
                 return False
         except OSError:
             continue
