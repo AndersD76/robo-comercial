@@ -5236,8 +5236,11 @@ def _extrair_pitch(descricao, empresa_nome='', max_chars=150):
 
     def _limpar(frase):
         p = frase
+        p = re.sub(r'^(?:O|A)\s+\S+\s+(?:é|permite|ajuda|oferece)\s+(?:uma?\s+)?',
+                    '', p, flags=re.IGNORECASE)
         if empresa_nome:
-            p = re.sub(rf'^(?:O|A)\s+{re.escape(empresa_nome)}\s+(?:é|permite|ajuda|oferece)\s+',
+            nome_sem = empresa_nome.replace(' ', '')
+            p = re.sub(rf'^(?:O|A)\s+{re.escape(nome_sem)}\s+(?:é|permite|ajuda|oferece)\s+(?:uma?\s+)?',
                         '', p, flags=re.IGNORECASE)
         p = re.sub(r'^(?:O objetivo [eé]|A meta [eé]|O foco [eé]|Nosso objetivo [eé]|Nós)\s+',
                     '', p, flags=re.IGNORECASE)
@@ -5247,7 +5250,11 @@ def _extrair_pitch(descricao, empresa_nome='', max_chars=150):
         p = re.sub(r'^Somos\s+(?:uma?\s+)?', '', p, flags=re.IGNORECASE)
         if p:
             p = p[0].upper() + p[1:]
-        return p[:max_chars].rsplit(' ', 1)[0] if len(p) > max_chars else p
+        if len(p) > max_chars:
+            p = p[:max_chars].rsplit(' ', 1)[0]
+            p = re.sub(r'\s+(?:e|ou|de|da|do|das|dos|em|para|a|o|que|com|na|no|nas|nos)$',
+                        '', p, flags=re.IGNORECASE)
+        return p
 
     def _rejeitada(frase):
         fl = frase.lower()
