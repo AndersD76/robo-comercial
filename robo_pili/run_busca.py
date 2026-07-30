@@ -191,6 +191,40 @@ def _gerar_palavras_concorrente(descricao: str) -> list:
     return unicas
 
 
+def get_evitar(schema: str) -> list:
+    """Palavras que denunciam concorrente do cliente, não lead."""
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute('SELECT segmentos_evitar FROM bot_config '
+                  'ORDER BY id DESC LIMIT 1')
+        row = c.fetchone()
+        conn.close()
+        if row and row['segmentos_evitar']:
+            ev = row['segmentos_evitar']
+            if isinstance(ev, str):
+                ev = json.loads(ev)
+            return [str(x).lower() for x in ev if str(x).strip()]
+    except Exception as e:
+        print(f'[run_busca] erro ao ler segmentos_evitar: {e}', flush=True)
+    return []
+
+
+def _e_concorrente(lead, evitar, texto_bruto=''):
+    """True se o lead parece ser do mesmo ramo do cliente.
+
+    Olha também o título/snippet originais: o nome já vem limpo, então
+    "Contato Qualità - Sistema de Gestão" viraria só "Qualità" e o ramo
+    se perderia.
+    """
+    if not evitar:
+        return False
+    alvo = _sem_acento(
+        f"{lead.get('nome_fantasia', '')} {lead.get('website', '')} "
+        f"{texto_bruto}".lower())
+    return any(_sem_acento(e) in alvo for e in evitar)
+
+
 def get_termos(schema: str) -> list:
     """Lê termos de busca da tabela bot_config. Fallback para config.py."""
     _ensure_bot_config(schema)
@@ -339,10 +373,21 @@ def salvar_empresa(schema: str, dados: dict):
 
 
 def _extrair_emails(texto):
-    """Extrai emails de um texto."""
+    """Extrai emails de um texto, limpando resíduo de URL (%20, mailto:)."""
     if not texto:
         return []
-    return re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', texto)
+    from urllib.parse import unquote
+    texto = unquote(texto.replace('mailto:', ' '))
+    brutos = re.findall(
+        r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', texto)
+    limpos = []
+    for e in brutos:
+        # sobra de encoding/HTML grudada no começo do local-part
+        e = re.sub(r'^[%\d]+(?=[a-zA-Z])', '', e)
+        e = e.strip('._-%+')
+        if re.fullmatch(r'[a-zA-Z0-9._+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', e):
+            limpos.append(e)
+    return limpos
 
 
 def _extrair_telefones_texto(texto):
@@ -394,17 +439,32 @@ _CARGOS_DECISOR = [
 ]
 
 
+def _cnpj_valido(digitos):
+    """Valida os dois dígitos verificadores do CNPJ."""
+    d = re.sub(r'\D', '', digitos or '')
+    if len(d) != 14 or len(set(d)) == 1:
+        return False
+    for tamanho in (12, 13):
+        pesos = list(range(tamanho - 7, 1, -1)) + list(range(9, 1, -1))
+        soma = sum(int(d[i]) * pesos[i] for i in range(tamanho))
+        resto = soma % 11
+        esperado = 0 if resto < 2 else 11 - resto
+        if int(d[tamanho]) != esperado:
+            return False
+    return True
+
+
 def _extrair_cnpj(texto):
-    """Extrai CNPJ de um texto (XX.XXX.XXX/XXXX-XX ou só dígitos)."""
+    """Extrai CNPJ válido de um texto. Ignora sequências inventadas."""
     if not texto:
         return None
-    m = re.search(r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}', texto)
-    if m:
-        return m.group()
-    m = re.search(r'(?<!\d)(\d{14})(?!\d)', texto)
-    if m:
+    for m in re.finditer(r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}', texto):
+        if _cnpj_valido(m.group()):
+            return m.group()
+    for m in re.finditer(r'(?<!\d)(\d{14})(?!\d)', texto):
         d = m.group()
-        return f'{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}'
+        if _cnpj_valido(d):
+            return f'{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}'
     return None
 
 
@@ -638,6 +698,64 @@ async def _scrape_site(url: str) -> dict:
     return resultado
 
 
+_TITULO_JUNK = (
+    'termos de uso', 'termos', 'politica de privacidade', 'privacidade',
+    'home', 'homepage', 'pagina inicial', 'inicial', 'inicio', 'principal',
+    'contato', 'contatos', 'fale conosco', 'quem somos', 'sobre nos',
+    'sobre', 'institucional', 'a empresa', 'nossa empresa', 'empresa',
+    'produtos', 'servicos', 'solucoes', 'blog', 'noticias', 'novidades',
+    'trabalhe conosco', 'localizacao', 'onde estamos', 'lgpd', 'cookies',
+    'area do cliente', 'login', 'orcamento', 'faq', 'duvidas', 'atendimento',
+)
+
+
+def _sem_acento(t):
+    import unicodedata
+    return ''.join(c for c in unicodedata.normalize('NFD', t or '')
+                   if unicodedata.category(c) != 'Mn')
+
+
+def _e_junk(t):
+    return _sem_acento((t or '').strip().lower()).strip(' -–—|:.') \
+        in _TITULO_JUNK
+
+
+def _limpar_nome_empresa(titulo, dominio):
+    """Tira 'Contato -', 'Home |' e taglines do título da página.
+
+    O título é a única fonte de nome que temos, mas metade das páginas
+    indexadas é 'Termos de Uso' ou 'Sobre nós - Fulano'. Sem isso o lead
+    entra na lista chamado 'Termos de Uso'.
+    """
+    titulo = re.sub(r'\s+', ' ', (titulo or '')).strip()
+    partes = [p.strip() for p in re.split(r'\s*[|:]\s*|\s+[-–—]\s+', titulo)
+              if p.strip()]
+    nome = ''
+    for p in partes:
+        if not _e_junk(p) and len(p) >= 3:
+            nome = p
+            break
+    if not nome:
+        # título inteiro é lixo ("Termos de Uso") — usa o domínio
+        base = re.sub(r'^www\.', '', (dominio or '')).split('.')[0]
+        return base.replace('-', ' ').title() if base else ''
+    # "Contato Qualità" -> "Qualità"; "Grupo XYZ Home" -> "Grupo XYZ"
+    for _ in range(3):
+        ant = nome
+        for j in _TITULO_JUNK:
+            nome = re.sub(rf'^{re.escape(j)}\s+', '', nome,
+                          flags=re.IGNORECASE)
+            nome = re.sub(rf'\s+{re.escape(j)}$', '', nome,
+                          flags=re.IGNORECASE)
+        nome = nome.strip(' -–—|:,.')
+        if nome == ant:
+            break
+    if len(nome) < 3:
+        base = re.sub(r'^www\.', '', (dominio or '')).split('.')[0]
+        return base.replace('-', ' ').title() if base else ''
+    return nome[:100]
+
+
 def _resultado_para_empresa(r):
     """Converte resultado do buscador para formato de empresa."""
     titulo = r.get('titulo', '')
@@ -647,15 +765,7 @@ def _resultado_para_empresa(r):
     url = r.get('url', '')
     texto_completo = titulo + ' ' + snippet
 
-    # Extrair nome da empresa do título (remove sufixos comuns)
-    nome = re.sub(
-        r'\s*[-–|]\s*(Fone|Tel|Contato|Home|Página|Site).*$', '',
-        titulo, flags=re.IGNORECASE
-    ).strip()
-    if len(nome) > 100:
-        nome = nome[:100]
-    if not nome or len(nome) < 3:
-        nome = dominio.replace('www.', '').split('.')[0].title()
+    nome = _limpar_nome_empresa(titulo, dominio)
 
     # Extrair emails do snippet
     emails = _extrair_emails(texto_completo)
@@ -722,7 +832,8 @@ def _resultado_para_empresa(r):
 
 
 async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
-                      palavras_concorrente: list = None) -> tuple:
+                      palavras_concorrente: list = None,
+                      evitar: list = None) -> tuple:
     """Um ciclo de busca. Retorna (qtd_leads_salvos, termo_usado)."""
 
     termo = random.choice(termos)
@@ -769,6 +880,15 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
         if is_blacklisted:
             print(f'[{schema}]   ✗ Skip (blog/portal): {dominio}',
                   flush=True)
+            continue
+
+        # Filtro preciso: lista da IA com o ramo do próprio cliente.
+        # Um match já basta — "consultoria", "certificadora" etc. nunca
+        # são cliente de quem vende consultoria.
+        if _e_concorrente(lead, evitar,
+                          r.get('titulo', '') + ' ' + r.get('snippet', '')):
+            print(f'[{schema}]   ✗ Skip (mesmo ramo do cliente): '
+                  f'{lead.get("nome_fantasia", dominio)}', flush=True)
             continue
 
         # Filtra concorrentes (empresas que VENDEM o mesmo serviço)
@@ -951,6 +1071,10 @@ async def main_loop(schema: str):
     palavras_conc = _gerar_palavras_concorrente(descricao)
     if palavras_conc:
         print(f'[{schema}] Filtro concorrentes: {len(palavras_conc)} palavras-chave do produto', flush=True)
+    evitar = get_evitar(schema)
+    if evitar:
+        print(f'[{schema}] Ramo do cliente (nao prospectar): '
+              f'{", ".join(evitar)}', flush=True)
 
     ciclo = 0
     # Rastreia páginas já buscadas por termo: {termo: página_atual}
@@ -989,7 +1113,8 @@ async def main_loop(schema: str):
 
         termo_usado = None
         try:
-            resultado = await ciclo_busca(schema, buscador, termos_ativos, palavras_conc)
+            resultado = await ciclo_busca(schema, buscador, termos_ativos,
+                                          palavras_conc, evitar)
             if isinstance(resultado, tuple):
                 salvos, termo_usado = resultado
             else:

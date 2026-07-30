@@ -492,6 +492,7 @@ def _init_user_schema(schema: str):
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_user TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_verificado BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS segmentos_evitar JSONB DEFAULT '[]'",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_metodo TEXT DEFAULT 'global'",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS oauth_provider TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS oauth_refresh_token TEXT",
@@ -4682,6 +4683,7 @@ def api_save_config(bot):
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_user TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_verificado BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS segmentos_evitar JSONB DEFAULT '[]'",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_metodo TEXT DEFAULT 'global'",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS oauth_provider TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS oauth_refresh_token TEXT",
@@ -4925,17 +4927,30 @@ Regras para "segmentos":
 
 Regras para "cargos": 6 a 10 cargos de quem decide a compra, sem acento.
 
+Regras para "evitar" — CRITICO:
+- Palavras que denunciam um CONCORRENTE dela, nao um cliente.
+- Se a {empresa} e uma consultoria de qualidade, entao "consultoria",
+  "assessoria", "certificadora", "auditoria" sao concorrentes — nunca
+  clientes. Quem vende software nao prospecta software house.
+- Inclua tambem o proprio ramo dela e sinonimos.
+- De 4 a 10 palavras, minusculas, sem acento.
+
 Responda SO com este JSON:
-{{"segmentos": ["..."], "cargos": ["..."]}}"""
-    d = _ai_json(prompt, max_tokens=700) or {}
+{{"segmentos": ["..."], "cargos": ["..."], "evitar": ["..."]}}"""
+    d = _ai_json(prompt, max_tokens=800) or {}
     segs = [s.strip().lower() for s in (d.get('segmentos') or [])
             if isinstance(s, str) and 3 < len(s.strip()) < 40]
     cargos = [c.strip().title() for c in (d.get('cargos') or [])
               if isinstance(c, str) and 3 < len(c.strip()) < 40]
+    evitar = [e.strip().lower() for e in (d.get('evitar') or [])
+              if isinstance(e, str) and 2 < len(e.strip()) < 40]
+    # nunca deixa um termo a evitar virar segmento-alvo
+    segs = [s for s in segs if not any(e in s for e in evitar)]
     if not segs:
         return {}
     return {'segmentos': list(dict.fromkeys(segs)),
-            'cargos': list(dict.fromkeys(cargos))}
+            'cargos': list(dict.fromkeys(cargos)),
+            'evitar': list(dict.fromkeys(evitar))}
 
 
 @app.route('/api/<bot>/config/generate-terms', methods=['POST'])
@@ -4948,7 +4963,19 @@ def api_generate_terms(bot):
         data.get('website', ''),
         data.get('estados') or []
     )
-    return jsonify({'ok': True, 'termos': result['termos'], 'cargos': result['cargos']})
+    schema = _get_schema()
+    evitar = result.get('evitar') or []
+    if schema and evitar:
+        try:
+            with _conn(schema) as conn:
+                with conn.cursor() as c:
+                    c.execute('UPDATE bot_config SET segmentos_evitar=%s',
+                              (psycopg2.extras.Json(evitar),))
+                conn.commit()
+        except Exception:
+            logger.exception('falha ao salvar segmentos_evitar')
+    return jsonify({'ok': True, 'termos': result['termos'],
+                    'cargos': result['cargos'], 'evitar': evitar})
 
 
 def _gerar_termos(empresa_nome: str, descricao: str, website: str, estados_selecionados: list = None) -> dict:
@@ -5250,10 +5277,16 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str, estados_selec
 
     # ── 3.5 IA: substitui segmentos/cargos heuristicos quando disponivel ──
     _icp = _ai_icp(empresa_nome, descricao)
+    evitar = _icp.get('evitar') or []
     if _icp.get('segmentos'):
         segmentos = _icp['segmentos']
     if _icp.get('cargos'):
         cargos = list(dict.fromkeys(_icp['cargos'] + cargos_base))
+    # Sem isso, "A X é uma consultoria..." fazia "consultoria" virar
+    # segmento-alvo e a busca trazia os concorrentes do cliente.
+    if evitar:
+        segmentos = [s for s in segmentos
+                     if not any(e in s.lower() for e in evitar)]
 
     if not segmentos:
         segmentos = ['industria', 'distribuidora', 'construtora',
@@ -5292,7 +5325,7 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str, estados_selec
 
     lista = list(termos)
     random.shuffle(lista)
-    return {'termos': lista, 'cargos': cargos}
+    return {'termos': lista, 'cargos': cargos, 'evitar': evitar}
 
 
 
