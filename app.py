@@ -4844,9 +4844,17 @@ def _ai_json(prompt: str, max_tokens: int = 1000):
         try:
             import anthropic
             client = anthropic.Anthropic(api_key=_AI_KEY, timeout=30.0)
-            resp = client.messages.create(
-                model=modelo, max_tokens=max_tokens,
-                messages=[{'role': 'user', 'content': prompt}])
+            # thinking desligado: o Sonnet 5 raciocina por padrão e gastava
+            # o orçamento inteiro pensando (stop_reason=max_tokens, zero
+            # blocos de texto), então o JSON voltava vazio e tudo caía no
+            # gerador heurístico. Copy curta não precisa de raciocínio.
+            kwargs = {'model': modelo, 'max_tokens': max_tokens,
+                      'messages': [{'role': 'user', 'content': prompt}]}
+            try:
+                resp = client.messages.create(
+                    thinking={'type': 'disabled'}, **kwargs)
+            except TypeError:
+                resp = client.messages.create(**kwargs)
             txt = ''.join(b.text for b in resp.content
                           if getattr(b, 'type', '') == 'text').strip()
             m = re.search(r'\{.*\}', txt, re.S)
