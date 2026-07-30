@@ -147,6 +147,57 @@ Para conferir se a IA esta ativa: as respostas de `/config/generate-msg` e
 `/config/generate-email` trazem `"ia": true`. Se vier `false`, o log mostra o
 motivo (`IA desativada`, `IA falhou`, `IA nao devolveu JSON`).
 
+## Envio pelo email do proprio cliente
+
+O Railway bloqueia saida SMTP, entao o cliente nao consegue usar email+senha.
+Foram implementados 3 caminhos que funcionam por HTTPS. Enquanto nenhum estiver
+configurado, o app continua enviando pelo remetente global com Reply-To do
+cliente — nada quebra.
+
+### 1. Gmail (OAuth) — `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
+
+1. console.cloud.google.com > criar projeto
+2. APIs e Servicos > Biblioteca > ativar **Gmail API**
+3. Tela de consentimento OAuth > Externo > preencher nome, email de suporte,
+   dominio autorizado `turbovenda.com.br`
+4. Escopo a adicionar: `https://www.googleapis.com/auth/gmail.send`
+5. Credenciais > Criar > ID do cliente OAuth > Aplicativo da Web
+6. URI de redirecionamento autorizado:
+   `https://www.turbovenda.com.br/oauth/google/callback`
+7. Copiar Client ID e Client Secret para o Railway
+
+> **Atencao:** `gmail.send` e escopo sensivel. Sem passar pela verificacao do
+> Google o app fica limitado a 100 usuarios de teste. Para producao aberta e
+> preciso enviar para revisao (leva semanas). Ate la, cadastre os clientes como
+> usuarios de teste na tela de consentimento.
+
+### 2. Outlook (OAuth) — `MS_CLIENT_ID` / `MS_CLIENT_SECRET`
+
+1. portal.azure.com > Microsoft Entra ID > Registros de aplicativo > Novo
+2. Contas suportadas: **qualquer diretorio organizacional e contas pessoais**
+3. URI de redirecionamento (Web):
+   `https://www.turbovenda.com.br/oauth/microsoft/callback`
+4. Permissoes de API > Microsoft Graph > Delegadas: `Mail.Send`,
+   `User.Read`, `offline_access`
+5. Certificados e segredos > Novo segredo do cliente > copiar o **valor**
+6. Colar Client ID e Secret no Railway
+
+### 3. Dominio proprio do cliente — usa a `RESEND_API_KEY` que ja existe
+
+Nao precisa de variavel nova. O cliente digita o dominio, o app registra na
+Resend e mostra os registros DNS (SPF/DKIM) para ele colar no provedor.
+Depois clica em verificar. Requer que sua conta Resend permita multiplos
+dominios (plano pago acima de 1 dominio).
+
+### Resumo das variaveis
+
+| Variavel | Para que | Obrigatoria? |
+|---|---|---|
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Botao "Conectar Gmail" | Nao — botao some sem ela |
+| `MS_CLIENT_ID` / `MS_CLIENT_SECRET` | Botao "Conectar Outlook" | Nao — botao some sem ela |
+| `BASE_URL` | Montar o redirect_uri do OAuth | Sim, se usar OAuth |
+| `RESEND_API_KEY` | Remetente global + dominio proprio | Ja configurada |
+
 ## Unico item pendente
 
 | Item | Acao | Quem |

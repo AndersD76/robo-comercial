@@ -101,7 +101,7 @@ def _decrypt_field(value: str) -> str:
         return value
 
 
-_SENSITIVE_FIELDS = ('linkedin_password', 'smtp_password', 'resend_api_key', 'serper_api_key', 'brave_api_key', 'google_cse_key')
+_SENSITIVE_FIELDS = ('linkedin_password', 'smtp_password', 'resend_api_key', 'serper_api_key', 'brave_api_key', 'google_cse_key', 'oauth_refresh_token')
 
 
 def _csrf_token():
@@ -492,6 +492,13 @@ def _init_user_schema(schema: str):
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_user TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_verificado BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_metodo TEXT DEFAULT 'global'",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS oauth_provider TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS oauth_refresh_token TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS oauth_email TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS dominio_proprio TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS dominio_id TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS dominio_verificado BOOLEAN DEFAULT FALSE",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS serper_api_key TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS brave_api_key TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS google_cse_key TEXT",
@@ -2699,6 +2706,11 @@ def config_page():
     just_registered = session.pop('just_registered', False)
     return render_template('config.html', user=user, cfg=cfg,
                            just_registered=just_registered,
+                           oauth_google=_oauth_ativo('google'),
+                           oauth_microsoft=_oauth_ativo('microsoft'),
+                           dominio_ativo=bool(os.environ.get('RESEND_API_KEY')),
+                           email_ok=request.args.get('email_ok', ''),
+                           email_erro=request.args.get('email_erro', ''),
                            ga_id=GA_MEASUREMENT_ID)
 
 
@@ -3839,14 +3851,47 @@ def _detect_smtp(email: str) -> tuple:
 
 
 def _get_email_config(schema: str) -> dict:
-    """Lê config de email do user (bot_config). Prioriza SMTP do cliente."""
+    """Config de envio. Ordem: OAuth > domínio próprio > SMTP > global."""
     cfg = get_bot_config(schema) if schema else {}
     user = get_current_user() or {}
     client_email = cfg.get('email_remetente') or ''
     client_password = cfg.get('smtp_password') or ''
     client_resend = cfg.get('resend_api_key') or ''
-    # Só usa SMTP do cliente se o teste de envio passou. Muitos hosts
-    # (Railway incluso) bloqueiam saída SMTP — sem essa trava as campanhas
+    nome_remetente = (cfg.get('email_remetente_nome')
+                      or cfg.get('empresa_nome') or '')
+
+    # 1. OAuth (Gmail/Outlook) — HTTPS, imune a bloqueio de porta SMTP
+    provider = cfg.get('oauth_provider') or ''
+    refresh = cfg.get('oauth_refresh_token') or ''
+    oauth_email = cfg.get('oauth_email') or ''
+    if provider and refresh and oauth_email:
+        return {
+            'sender_email': oauth_email,
+            'sender_name': nome_remetente,
+            'reply_to': '',
+            'smtp_host': '', 'smtp_port': 587, 'smtp_user': '',
+            'smtp_password': '', 'resend_api_key': '',
+            'oauth_provider': provider, 'oauth_refresh_token': refresh,
+        }
+
+    # 2. Domínio próprio verificado — envia pela Resend com o domínio do cliente
+    dominio = cfg.get('dominio_proprio') or ''
+    if dominio and cfg.get('dominio_verificado'):
+        remetente = client_email
+        if not remetente.endswith('@' + dominio):
+            remetente = f'contato@{dominio}'
+        return {
+            'sender_email': remetente,
+            'sender_name': nome_remetente,
+            'reply_to': client_email if client_email != remetente else '',
+            'smtp_host': '', 'smtp_port': 587, 'smtp_user': '',
+            'smtp_password': '',
+            'resend_api_key': os.environ.get('RESEND_API_KEY', '') or '',
+            'oauth_provider': '', 'oauth_refresh_token': '',
+        }
+
+    # 3. SMTP do cliente — só se o teste passou. Muitos hosts (Railway
+    # incluso) bloqueiam saída SMTP; sem essa trava as campanhas
     # falhariam silenciosamente em vez de cair no remetente global.
     has_client_smtp = bool(client_email and client_password
                            and cfg.get('smtp_verificado'))
@@ -3872,18 +3917,344 @@ def _get_email_config(schema: str) -> dict:
             'smtp_host': '', 'smtp_port': 587, 'smtp_user': '', 'smtp_password': '',
             'resend_api_key': client_resend,
         }
-    return {
-        'sender_email': os.environ.get('EMAIL_FROM', 'contato@turbovenda.com.br'),
-        'sender_name': (cfg.get('email_remetente_nome') or
-                        cfg.get('empresa_nome') or ''),
-        'reply_to': client_email or user.get('email') or '',
-        'smtp_host': '', 'smtp_port': 587, 'smtp_user': '', 'smtp_password': '',
-        'resend_api_key': os.environ.get('RESEND_API_KEY', '') or '',
+    return _email_config_global(
+        nome_remetente, client_email or user.get('email') or '')
+
+
+# =============================================================================
+# ENVIO PELO EMAIL DO PROPRIO CLIENTE — OAuth (HTTPS, nao bloqueado) e dominio
+# =============================================================================
+
+_OAUTH = {
+    'google': {
+        'nome': 'Gmail',
+        'client_id': os.environ.get('GOOGLE_CLIENT_ID', ''),
+        'client_secret': os.environ.get('GOOGLE_CLIENT_SECRET', ''),
+        'auth': 'https://accounts.google.com/o/oauth2/v2/auth',
+        'token': 'https://oauth2.googleapis.com/token',
+        'scope': ('https://www.googleapis.com/auth/gmail.send openid email'),
+        'extra': {'access_type': 'offline', 'prompt': 'consent'},
+    },
+    'microsoft': {
+        'nome': 'Outlook',
+        'client_id': os.environ.get('MS_CLIENT_ID', ''),
+        'client_secret': os.environ.get('MS_CLIENT_SECRET', ''),
+        'auth': ('https://login.microsoftonline.com/common/oauth2/v2.0/'
+                 'authorize'),
+        'token': ('https://login.microsoftonline.com/common/oauth2/v2.0/'
+                  'token'),
+        'scope': 'offline_access Mail.Send User.Read',
+        'extra': {'prompt': 'consent'},
+    },
+}
+
+
+def _oauth_ativo(provider):
+    p = _OAUTH.get(provider) or {}
+    return bool(p.get('client_id') and p.get('client_secret'))
+
+
+def _oauth_redirect_uri(provider):
+    base = os.environ.get('BASE_URL', '').rstrip('/')
+    if not base:
+        base = request.host_url.rstrip('/').replace('http://', 'https://')
+    return f'{base}/oauth/{provider}/callback'
+
+
+def _oauth_troca_token(provider, dados):
+    """Troca code/refresh_token por tokens. Devolve dict ou None."""
+    p = _OAUTH.get(provider)
+    if not p:
+        return None
+    try:
+        import requests as http
+        payload = dict(dados)
+        payload.update({'client_id': p['client_id'],
+                        'client_secret': p['client_secret']})
+        r = http.post(p['token'], data=payload, timeout=15)
+        if r.status_code != 200:
+            logger.error('OAuth %s token %s: %s', provider, r.status_code,
+                         r.text[:300])
+            return None
+        return r.json()
+    except Exception:
+        logger.exception('OAuth %s falha na troca de token', provider)
+        return None
+
+
+def _oauth_access_token(provider, refresh_token):
+    """Access token novo a partir do refresh token."""
+    d = _oauth_troca_token(provider, {
+        'refresh_token': refresh_token, 'grant_type': 'refresh_token'})
+    return (d or {}).get('access_token', '')
+
+
+def _oauth_identidade(provider, access_token):
+    """Descobre o email da conta autorizada."""
+    try:
+        import requests as http
+        h = {'Authorization': f'Bearer {access_token}'}
+        if provider == 'google':
+            r = http.get('https://www.googleapis.com/oauth2/v2/userinfo',
+                         headers=h, timeout=15)
+            return (r.json() or {}).get('email', '') if r.ok else ''
+        r = http.get('https://graph.microsoft.com/v1.0/me', headers=h,
+                     timeout=15)
+        if not r.ok:
+            return ''
+        j = r.json() or {}
+        return j.get('mail') or j.get('userPrincipalName') or ''
+    except Exception:
+        logger.exception('OAuth %s falha ao ler identidade', provider)
+        return ''
+
+
+@app.route('/oauth/<provider>/start')
+@login_required
+def oauth_start(provider):
+    if not _oauth_ativo(provider):
+        return redirect('/configurar?email_erro=indisponivel')
+    state = secrets.token_urlsafe(24)
+    session['oauth_state'] = state
+    session['oauth_provider'] = provider
+    p = _OAUTH[provider]
+    params = {
+        'client_id': p['client_id'],
+        'redirect_uri': _oauth_redirect_uri(provider),
+        'response_type': 'code',
+        'scope': p['scope'],
+        'state': state,
     }
+    params.update(p.get('extra') or {})
+    from urllib.parse import urlencode
+    return redirect(f"{p['auth']}?{urlencode(params)}")
+
+
+@app.route('/oauth/<provider>/callback')
+@login_required
+def oauth_callback(provider):
+    esperado = session.pop('oauth_state', None)
+    session.pop('oauth_provider', None)
+    recebido = request.args.get('state', '')
+    if not esperado or not recebido or not _hmac.compare_digest(
+            str(esperado), str(recebido)):
+        return redirect('/configurar?email_erro=state')
+    if request.args.get('error') or not request.args.get('code'):
+        return redirect('/configurar?email_erro=negado')
+    if not _oauth_ativo(provider):
+        return redirect('/configurar?email_erro=indisponivel')
+
+    tok = _oauth_troca_token(provider, {
+        'code': request.args['code'],
+        'grant_type': 'authorization_code',
+        'redirect_uri': _oauth_redirect_uri(provider)})
+    refresh = (tok or {}).get('refresh_token', '')
+    access = (tok or {}).get('access_token', '')
+    if not refresh:
+        # sem refresh_token nao da pra enviar depois que o access expira
+        return redirect('/configurar?email_erro=sem_refresh')
+
+    email_conta = _oauth_identidade(provider, access)
+    if not email_conta:
+        return redirect('/configurar?email_erro=identidade')
+
+    schema = _get_schema()
+    try:
+        with _conn(schema) as conn:
+            with conn.cursor() as c:
+                c.execute(
+                    """UPDATE bot_config SET email_metodo=%s,
+                       oauth_provider=%s, oauth_refresh_token=%s,
+                       oauth_email=%s, atualizado_em=NOW()""",
+                    (provider, provider, _encrypt_field(refresh),
+                     email_conta))
+            conn.commit()
+    except Exception:
+        logger.exception('falha ao salvar OAuth')
+        return redirect('/configurar?email_erro=salvar')
+    return redirect('/configurar?email_ok=' + provider)
+
+
+@app.route('/api/<bot>/config/email/desconectar', methods=['POST'])
+@login_required
+def api_email_desconectar(bot):
+    schema = _get_schema()
+    try:
+        with _conn(schema) as conn:
+            with conn.cursor() as c:
+                c.execute("""UPDATE bot_config SET email_metodo='global',
+                             oauth_provider=NULL, oauth_refresh_token=NULL,
+                             oauth_email=NULL, atualizado_em=NOW()""")
+            conn.commit()
+        return jsonify({'ok': True})
+    except Exception:
+        logger.exception('falha ao desconectar email')
+        return jsonify({'ok': False, 'error': 'Erro interno'}), 500
+
+
+def _send_oauth(provider, refresh_token, sender_email, sender_name,
+                to_email, subject, html, reply_to=''):
+    """Envia pela API do Gmail/Graph — HTTPS, nao sofre bloqueio de SMTP."""
+    import base64
+    from email.mime.text import MIMEText
+    access = _oauth_access_token(provider, refresh_token)
+    if not access:
+        logger.error('OAuth %s: nao consegui access token', provider)
+        return False
+    try:
+        import requests as http
+        if provider == 'google':
+            msg = MIMEText(html, 'html', 'utf-8')
+            msg['To'] = to_email
+            msg['From'] = (f'{sender_name} <{sender_email}>' if sender_name
+                           else sender_email)
+            msg['Subject'] = subject
+            if reply_to:
+                msg['Reply-To'] = reply_to
+            raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+            r = http.post(
+                'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
+                headers={'Authorization': f'Bearer {access}'},
+                json={'raw': raw}, timeout=20)
+        else:
+            corpo = {
+                'message': {
+                    'subject': subject,
+                    'body': {'contentType': 'HTML', 'content': html},
+                    'toRecipients': [
+                        {'emailAddress': {'address': to_email}}],
+                },
+                'saveToSentItems': True,
+            }
+            if reply_to:
+                corpo['message']['replyTo'] = [
+                    {'emailAddress': {'address': reply_to}}]
+            r = http.post('https://graph.microsoft.com/v1.0/me/sendMail',
+                          headers={'Authorization': f'Bearer {access}'},
+                          json=corpo, timeout=20)
+        if r.status_code in (200, 201, 202):
+            logger.info('OAuth %s OK -> %s', provider, to_email)
+            return True
+        logger.error('OAuth %s erro %s: %s', provider, r.status_code,
+                     r.text[:300])
+    except Exception:
+        logger.exception('OAuth %s falha no envio', provider)
+    return False
+
+
+# ── Dominio proprio via Resend ────────────────────────────────────────────
+
+def _resend_admin():
+    return os.environ.get('RESEND_API_KEY', '')
+
+
+@app.route('/api/<bot>/config/dominio', methods=['POST'])
+@login_required
+@limiter.limit("5 per minute")
+def api_dominio_criar(bot):
+    """Registra o dominio do cliente na Resend e devolve os registros DNS."""
+    schema = _get_schema()
+    data = request.get_json(silent=True) or {}
+    dominio = (data.get('dominio') or '').strip().lower()
+    dominio = re.sub(r'^https?://', '', dominio).strip('/')
+    dominio = dominio.split('/')[0]
+    if not re.fullmatch(r'[a-z0-9.-]+\.[a-z]{2,}', dominio or ''):
+        return jsonify({'ok': False, 'error': 'Domínio inválido'}), 400
+    key = _resend_admin()
+    if not key:
+        return jsonify({'ok': False,
+                        'error': 'Envio por domínio indisponível'}), 503
+    try:
+        import requests as http
+        r = http.post('https://api.resend.com/domains',
+                      headers={'Authorization': f'Bearer {key}'},
+                      json={'name': dominio}, timeout=20)
+        j = r.json() if r.content else {}
+        if r.status_code not in (200, 201):
+            return jsonify({'ok': False, 'error':
+                            j.get('message') or 'Falha ao registrar domínio'
+                            }), 400
+        with _conn(schema) as conn:
+            with conn.cursor() as c:
+                c.execute("""UPDATE bot_config SET dominio_proprio=%s,
+                             dominio_id=%s, dominio_verificado=FALSE,
+                             atualizado_em=NOW()""", (dominio, j.get('id')))
+            conn.commit()
+        return jsonify({'ok': True, 'dominio': dominio,
+                        'registros': j.get('records') or []})
+    except Exception:
+        logger.exception('falha ao criar dominio')
+        return jsonify({'ok': False, 'error': 'Erro interno'}), 500
+
+
+@app.route('/api/<bot>/config/dominio/verificar', methods=['POST'])
+@login_required
+@limiter.limit("10 per minute")
+def api_dominio_verificar(bot):
+    """Pede verificacao do DNS e grava o resultado."""
+    schema = _get_schema()
+    cfg = get_bot_config(schema) or {}
+    dom_id = cfg.get('dominio_id')
+    key = _resend_admin()
+    if not dom_id or not key:
+        return jsonify({'ok': False,
+                        'error': 'Cadastre o domínio primeiro'}), 400
+    try:
+        import requests as http
+        h = {'Authorization': f'Bearer {key}'}
+        http.post(f'https://api.resend.com/domains/{dom_id}/verify',
+                  headers=h, timeout=20)
+        r = http.get(f'https://api.resend.com/domains/{dom_id}', headers=h,
+                     timeout=20)
+        j = r.json() if r.content else {}
+        verificado = (j.get('status') == 'verified')
+        with _conn(schema) as conn:
+            with conn.cursor() as c:
+                c.execute("""UPDATE bot_config SET dominio_verificado=%s,
+                             email_metodo=CASE WHEN %s THEN 'dominio'
+                             ELSE email_metodo END, atualizado_em=NOW()""",
+                          (verificado, verificado))
+            conn.commit()
+        return jsonify({'ok': True, 'verificado': verificado,
+                        'status': j.get('status'),
+                        'registros': j.get('records') or []})
+    except Exception:
+        logger.exception('falha ao verificar dominio')
+        return jsonify({'ok': False, 'error': 'Erro interno'}), 500
 
 
 def _send_email(ecfg, to_email, to_name, subject, html):
-    """Envia email via Resend API (prioridade) ou SMTP direto."""
+    """Envia via OAuth do cliente, Resend ou SMTP — nessa ordem."""
+    provider = ecfg.get('oauth_provider', '')
+    refresh = ecfg.get('oauth_refresh_token', '')
+    if provider and refresh:
+        ok = _send_oauth(provider, refresh, ecfg.get('sender_email', ''),
+                         ecfg.get('sender_name', ''), to_email, subject,
+                         html, ecfg.get('reply_to', ''))
+        if ok:
+            return True
+        logger.warning('OAuth falhou, caindo para o remetente global')
+        ecfg = dict(ecfg, **_email_config_global(ecfg.get('sender_name', ''),
+                                                 ecfg.get('sender_email', '')))
+    return _send_email_classico(ecfg, to_email, to_name, subject, html)
+
+
+def _email_config_global(sender_name='', reply_to=''):
+    """Remetente do TurboVenda, com resposta indo pro email do cliente."""
+    return {
+        'sender_email': os.environ.get('EMAIL_FROM',
+                                       'contato@turbovenda.com.br'),
+        'sender_name': sender_name,
+        'reply_to': reply_to,
+        'smtp_host': '', 'smtp_port': 587, 'smtp_user': '',
+        'smtp_password': '',
+        'resend_api_key': os.environ.get('RESEND_API_KEY', '') or '',
+        'oauth_provider': '', 'oauth_refresh_token': '',
+    }
+
+
+def _send_email_classico(ecfg, to_email, to_name, subject, html):
+    """Envia via Resend API (prioridade) ou SMTP direto."""
     sender_email = ecfg.get('sender_email', '')
     sender_name = ecfg.get('sender_name', '')
     logger.info(f'to={to_email} from={sender_email}')
@@ -4308,6 +4679,13 @@ def api_save_config(bot):
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_user TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_verificado BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_metodo TEXT DEFAULT 'global'",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS oauth_provider TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS oauth_refresh_token TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS oauth_email TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS dominio_proprio TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS dominio_id TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS dominio_verificado BOOLEAN DEFAULT FALSE",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS serper_api_key TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS brave_api_key TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS google_cse_key TEXT",

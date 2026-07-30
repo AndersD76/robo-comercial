@@ -326,37 +326,117 @@
 
   <!-- CONFIG EMAIL -->
   <div class="card" {% if just_registered %}id="card-email-cfg" style="display:none"{% endif %}>
-    <div class="card-title"><i class="fa fa-at"></i> Configuração de Email</div>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
-      Configure o email que vai enviar as campanhas para seus leads. O servidor SMTP é detectado automaticamente.
-    </p>
-    <form id="email-cfg-form" autocomplete="on" onsubmit="return false">
-    <div class="field">
-      <label>Nome do remetente <small>(aparece no "De:" do email)</small></label>
-      <input type="text" id="email_remetente_nome" value="{{ cfg.email_remetente_nome or '' }}" placeholder="Ex: João da Empresa XYZ">
+    <div class="card-title"><i class="fa fa-at"></i> De qual email saem as campanhas</div>
+
+    {% if email_ok %}
+    <div class="info-box" style="margin-bottom:14px;border-color:rgba(34,197,94,.35)">
+      <span style="color:#22c55e"><i class="fa fa-circle-check"></i></span>
+      Conta conectada. Suas campanhas já saem do seu próprio email.
     </div>
-    <div class="field">
-      <label>Seu email de envio</label>
-      <input type="email" id="email_remetente" value="{{ cfg.email_remetente or user.email or '' }}" placeholder="voce@gmail.com" autocomplete="username">
+    {% elif email_erro %}
+    <div class="info-box" style="margin-bottom:14px;border-color:rgba(248,113,113,.35)">
+      <span style="color:#f87171"><i class="fa fa-circle-exclamation"></i></span>
+      {% if email_erro == 'negado' %}Você cancelou a autorização — nada foi alterado.
+      {% elif email_erro == 'sem_refresh' %}O provedor não liberou acesso contínuo. Tente de novo e aceite todas as permissões.
+      {% elif email_erro == 'indisponivel' %}Essa opção ainda não está disponível.
+      {% else %}Não consegui concluir a conexão. Tente novamente.{% endif %}
     </div>
-    <div class="field">
-      <label>Senha do email <small>(ou Senha de App para Gmail)</small></label>
-      <input type="password" id="smtp_password" value="{{ cfg.smtp_password or '' }}" placeholder="••••••••" autocomplete="current-password">
-      <small style="color:var(--muted);display:block;margin-top:6px;line-height:1.6">
-        <strong>Gmail:</strong> Use uma <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener" style="color:#818cf8">Senha de App</a> (16 caracteres). Precisa ter verificação em 2 etapas ativa.<br>
-        <strong>Outlook/Hotmail:</strong> Use sua senha normal.
-      </small>
+    {% endif %}
+
+    <!-- ESTADO ATUAL -->
+    {% set metodo = cfg.email_metodo or 'global' %}
+    <div class="info-box" style="margin-bottom:18px">
+      {% if cfg.oauth_email and cfg.oauth_provider %}
+        <span style="color:#22c55e"><i class="fa fa-circle-check"></i></span>
+        Enviando por <strong>{{ 'Gmail' if cfg.oauth_provider == 'google' else 'Outlook' }}</strong>
+        como <code>{{ cfg.oauth_email }}</code>.
+        <button onclick="desconectarEmail()" style="margin-left:8px;background:none;border:none;color:#f87171;cursor:pointer;font-size:12px;text-decoration:underline">desconectar</button>
+      {% elif cfg.dominio_proprio and cfg.dominio_verificado %}
+        <span style="color:#22c55e"><i class="fa fa-circle-check"></i></span>
+        Enviando pelo seu domínio <code>{{ cfg.dominio_proprio }}</code>.
+      {% else %}
+        <span style="color:#60a5fa"><i class="fa fa-circle-info"></i></span>
+        Hoje suas campanhas saem como <code>Seu Nome &lt;contato@turbovenda.com.br&gt;</code>,
+        com as respostas chegando no seu email. Funciona bem — conecte sua conta abaixo
+        para enviar do seu próprio endereço.
+      {% endif %}
     </div>
-    </form>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <button class="btn-gen" id="btn-test-email" onclick="testEmail()" style="padding:10px 18px">
-        <i class="fa fa-paper-plane"></i> Testar envio
-      </button>
-      <span id="test-email-result" style="font-size:12px"></span>
+
+    <!-- OPCAO 1: OAUTH -->
+    {% if oauth_google or oauth_microsoft %}
+    <div style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:8px">
+      Opção mais simples — conectar em 2 cliques
     </div>
-    <div class="info-box" style="margin-top:12px">
-      <span style="color:#22c55e"><i class="fa fa-check-circle"></i></span> Sem email configurado, campanhas saem como <code>Seu Nome &lt;contato@turbovenda.com.br&gt;</code> com respostas indo para o email da sua conta.
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
+      {% if oauth_google %}
+      <a href="/oauth/google/start" class="btn-gen" style="padding:11px 18px;text-decoration:none;display:inline-flex;align-items:center;gap:8px">
+        <i class="fa-brands fa-google"></i> Conectar Gmail
+      </a>
+      {% endif %}
+      {% if oauth_microsoft %}
+      <a href="/oauth/microsoft/start" class="btn-gen" style="padding:11px 18px;text-decoration:none;display:inline-flex;align-items:center;gap:8px">
+        <i class="fa-brands fa-microsoft"></i> Conectar Outlook
+      </a>
+      {% endif %}
     </div>
+    {% endif %}
+
+    <!-- OPCAO 2: DOMINIO PROPRIO -->
+    {% if dominio_ativo %}
+    <details style="margin-bottom:16px" {% if cfg.dominio_proprio and not cfg.dominio_verificado %}open{% endif %}>
+      <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:8px">
+        Tenho domínio próprio (ex: contato@minhaempresa.com.br)
+      </summary>
+      <div style="padding-top:12px">
+        <div class="field">
+          <label>Seu domínio</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input type="text" id="dominio_proprio" value="{{ cfg.dominio_proprio or '' }}" placeholder="minhaempresa.com.br" style="flex:1;min-width:200px">
+            <button class="btn-gen" id="btn-dominio" onclick="cadastrarDominio()" style="padding:10px 18px">Gerar registros</button>
+          </div>
+          <small style="color:var(--muted);display:block;margin-top:6px;line-height:1.6">
+            Vamos gerar os registros DNS. Quem cuida do seu site/domínio cola eles no painel do provedor — é uma vez só.
+          </small>
+        </div>
+        <div id="dns-registros" style="margin-top:12px"></div>
+      </div>
+    </details>
+    {% endif %}
+
+    <!-- OPCAO 3: SMTP (avancado) -->
+    <details>
+      <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--muted)">
+        Configurar servidor de email manualmente (avançado)
+      </summary>
+      <div style="padding-top:14px">
+        <form id="email-cfg-form" autocomplete="on" onsubmit="return false">
+        <div class="field">
+          <label>Nome do remetente <small>(aparece no "De:" do email)</small></label>
+          <input type="text" id="email_remetente_nome" value="{{ cfg.email_remetente_nome or '' }}" placeholder="Ex: João da Empresa XYZ">
+        </div>
+        <div class="field">
+          <label>Seu email de envio</label>
+          <input type="email" id="email_remetente" value="{{ cfg.email_remetente or user.email or '' }}" placeholder="voce@gmail.com" autocomplete="username">
+        </div>
+        <div class="field">
+          <label>Senha do email <small>(ou Senha de App para Gmail)</small></label>
+          <input type="password" id="smtp_password" value="{{ cfg.smtp_password or '' }}" placeholder="••••••••" autocomplete="current-password">
+          <small style="color:var(--muted);display:block;margin-top:6px;line-height:1.6">
+            <strong>Gmail:</strong> Use uma <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener" style="color:#818cf8">Senha de App</a> (16 caracteres). Precisa ter verificação em 2 etapas ativa.<br>
+            <strong>Outlook/Hotmail:</strong> Use sua senha normal.<br>
+            Muitas hospedagens bloqueiam esse tipo de conexão. Se o teste falhar, use uma das opções acima.
+          </small>
+        </div>
+        </form>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn-gen" id="btn-test-email" onclick="testEmail()" style="padding:10px 18px">
+            <i class="fa fa-paper-plane"></i> Testar envio
+          </button>
+          <span id="test-email-result" style="font-size:12px"></span>
+        </div>
+      </div>
+    </details>
+
     <input type="hidden" id="resend_api_key" value="{{ cfg.resend_api_key or '' }}">
   </div>
 
@@ -799,6 +879,70 @@ async function testEmail(){
     btn.disabled=false
     btn.innerHTML='<i class="fa fa-paper-plane"></i> Testar envio'
   }
+}
+
+// === DESCONECTAR EMAIL ===
+async function desconectarEmail(){
+  if(!confirm('Desconectar sua conta? As campanhas voltam a sair pelo TurboVenda com as respostas indo para o seu email.'))return
+  try{
+    const r=await fetch(`/api/${BOT}/config/email/desconectar`,{method:'POST'})
+    const d=await r.json()
+    if(d.ok){location.reload()}else{showToast(d.error||'Erro ao desconectar',false)}
+  }catch(e){showToast('Erro de conexão',false)}
+}
+
+// === DOMINIO PROPRIO ===
+function renderRegistrosDNS(regs,verificado){
+  const box=document.getElementById('dns-registros')
+  if(!regs||!regs.length){box.innerHTML='';return}
+  let h='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">'
+  h+= verificado
+    ? '<span style="color:#22c55e"><i class="fa fa-circle-check"></i> Domínio verificado — já pode enviar por ele.</span>'
+    : 'Cole estes registros no painel do seu domínio e clique em verificar. Pode levar alguns minutos para propagar.'
+  h+='</div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px;font-family:monospace">'
+  h+='<tr style="text-align:left;color:var(--muted)"><th style="padding:6px 8px">Tipo</th><th style="padding:6px 8px">Nome</th><th style="padding:6px 8px">Valor</th></tr>'
+  regs.forEach(function(x){
+    h+='<tr style="border-top:1px solid rgba(255,255,255,.06)">'
+      +'<td style="padding:6px 8px">'+(x.type||'')+'</td>'
+      +'<td style="padding:6px 8px;word-break:break-all">'+(x.name||'')+'</td>'
+      +'<td style="padding:6px 8px;word-break:break-all">'+(x.value||'')+'</td></tr>'
+  })
+  h+='</table></div>'
+  if(!verificado){
+    h+='<button class="btn-gen" onclick="verificarDominio()" style="padding:9px 16px;margin-top:10px">'
+      +'<i class="fa fa-rotate"></i> Já coloquei — verificar agora</button>'
+  }
+  h+='<span id="dns-status" style="font-size:12px;margin-left:10px"></span>'
+  box.innerHTML=h
+}
+
+async function cadastrarDominio(){
+  const dom=document.getElementById('dominio_proprio').value.trim()
+  if(!dom){showToast('Digite seu domínio',false);return}
+  const btn=document.getElementById('btn-dominio')
+  btn.disabled=true;btn.textContent='Gerando...'
+  try{
+    const r=await fetch(`/api/${BOT}/config/dominio`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({dominio:dom})})
+    const d=await r.json()
+    if(d.ok){renderRegistrosDNS(d.registros,false)}
+    else{showToast(d.error||'Erro ao cadastrar domínio',false)}
+  }catch(e){showToast('Erro de conexão',false)}
+  finally{btn.disabled=false;btn.textContent='Gerar registros'}
+}
+
+async function verificarDominio(){
+  const st=document.getElementById('dns-status')
+  if(st)st.innerHTML='<i class="fa fa-spinner fa-spin"></i> verificando...'
+  try{
+    const r=await fetch(`/api/${BOT}/config/dominio/verificar`,{method:'POST'})
+    const d=await r.json()
+    if(d.ok&&d.verificado){renderRegistrosDNS(d.registros,true);showToast('Domínio verificado!',true)}
+    else if(d.ok){
+      if(st)st.innerHTML='<span style="color:#fbbf24">Ainda não propagou. Aguarde alguns minutos e tente de novo.</span>'
+    }else{if(st)st.innerHTML='<span style="color:#f87171">'+(d.error||'Erro')+'</span>'}
+  }catch(e){if(st)st.innerHTML='<span style="color:#f87171">Erro de conexão</span>'}
 }
 
 // === SETUP ALL (onboarding) ===
