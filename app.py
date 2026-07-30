@@ -858,8 +858,10 @@ def get_leads(schema: str, limite: int = 50, page: int = 1, per_page: int = 50) 
             _exec()
         rows = [_serialize_row(dict(r)) for r in c.fetchall()]
         return rows
-    except Exception as e:
-        logger.error(f'leads/{schema}: {e}')
+    except Exception:
+        # lista vazia e falha de schema ficam iguais pro frontend — por isso
+        # o traceback completo vai pro log, senao o bug fica invisivel
+        logger.exception('get_leads falhou (schema=%s)', schema)
         return []
     finally:
         if conn:
@@ -2775,8 +2777,9 @@ def api_pipeline():
 @login_required
 def api_leads(bot):
     schema = _get_schema()
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 50, type=int)
+    page = max(1, request.args.get('page', 1, type=int) or 1)
+    per_page = request.args.get('per_page', 50, type=int) or 50
+    per_page = max(1, min(per_page, 1000))  # teto pra nao derrubar o servidor
     return jsonify(get_leads(schema, per_page=per_page, page=page))
 
 

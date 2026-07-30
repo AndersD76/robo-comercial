@@ -1063,12 +1063,22 @@ let _waPage=1;
 const _waPerPage=50;
 
 let _firstLeadsTracked=false;
-function loadWA(){
-  fetch(`/api/${BOT}/leads`).then(r=>r.json()).then(d=>{
+function loadWA(silencioso){
+  // silencioso = auto-refresh: mantem pagina e checkboxes marcados
+  const marcados=silencioso
+    ? new Set(Array.from(document.querySelectorAll('.lead-chk:checked')).map(c=>c.value))
+    : null;
+  const paginaAtual=_waPage;
+  fetch(`/api/${BOT}/leads?per_page=1000`).then(r=>r.json()).then(d=>{
     _waAllLeads=d;
-    _waPage=1;
+    _waPage=silencioso?paginaAtual:1;
     populateEstadoFilter();
     renderLeadsList();
+    if(marcados&&marcados.size){
+      document.querySelectorAll('.lead-chk').forEach(c=>{
+        if(marcados.has(c.value))c.checked=true;
+      });
+    }
     if(d.length>0 && !_firstLeadsTracked){
       _firstLeadsTracked=true;
       if(typeof gtag==='function') gtag('event','first_leads_generated',{value:d.length});
@@ -2036,6 +2046,13 @@ setInterval(refreshStats,30000);
 setInterval(loadPipe,60000);
 setInterval(loadBotStatus,10000);
 setInterval(loadPendingTasks,120000);
+// A lista de leads tambem precisa atualizar sozinha: sem isso ela ficava
+// congelada no estado do carregamento da pagina enquanto o kanban enchia.
+setInterval(function(){
+  const ov=document.getElementById('edit-overlay');
+  if(ov&&ov.classList.contains('open'))return;  // nao mexe com modal aberto
+  loadWA(true);
+},30000);
 
 
 // == CRUD: Edit / Delete ==
@@ -2111,7 +2128,7 @@ function delWA(id){
 
 // ── WhatsApp ──────────────────────────────────────────────────────────────
 function loadWaStats(){
-  fetch(`/api/${BOT}/leads?limite=9999`).then(r=>r.json()).then(d=>{
+  fetch(`/api/${BOT}/leads?per_page=1000`).then(r=>r.json()).then(d=>{
     const comWa=d.filter(l=>l.whatsapp);
     const el=document.getElementById('wa-lead-count');
     if(el) el.textContent=comWa.length;
@@ -2358,7 +2375,7 @@ function marcarStatus(leadId,status){
 // ── Email Leads List ──────────────────────────────────────────────────────
 let _emailLeadsAll=[];
 function loadEmailLeads(){
-  fetch(`/api/${BOT}/leads?limite=9999`).then(r=>r.json()).then(d=>{
+  fetch(`/api/${BOT}/leads?per_page=1000`).then(r=>r.json()).then(d=>{
     const comEmail=d.filter(l=>l.email);
     _emailLeadsAll=comEmail;
     document.getElementById('email-lead-count').textContent=comEmail.length+' leads com email';
