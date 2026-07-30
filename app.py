@@ -4566,6 +4566,18 @@ def api_test_email(bot):
         return jsonify({'ok': False, 'error': 'Preencha email e senha'}), 400
     smtp_host, smtp_port = _detect_smtp(email)
     import smtplib
+    # Sonda as portas ANTES do handshake. Se a hospedagem bloqueia, isso
+    # responde em segundos em vez de gastar o timeout inteiro do SMTP e
+    # estourar o limite do navegador.
+    if _smtp_bloqueado(smtp_host):
+        _set_smtp_verificado(schema, False)
+        logger.warning('SMTP bloqueado pelo host (%s)', smtp_host)
+        return jsonify({
+            'ok': False, 'bloqueado': True, 'error':
+            'Nosso servidor não consegue enviar direto pelo seu provedor '
+            '(a hospedagem bloqueia esse tipo de conexão). Sem problema: '
+            'suas campanhas saem pelo TurboVenda com o seu nome, e as '
+            'respostas chegam normalmente no seu email.'}), 200
     try:
         from email.mime.text import MIMEText
         msg = MIMEText('Este é um email de teste do TurboVenda. Se você recebeu, a configuração está correta!', 'plain', 'utf-8')
@@ -4587,18 +4599,12 @@ def api_test_email(bot):
                         'Senha incorreta ou acesso não autorizado. '
                         'Para Gmail, use uma Senha de App.'}), 400
     except Exception as e:
+        # A porta abre (sondamos antes), então aqui é problema de credencial
+        # ou do próprio provedor — não bloqueio da hospedagem.
         _set_smtp_verificado(schema, False)
-        bloqueado = _smtp_bloqueado(smtp_host)
-        if bloqueado:
-            logger.warning('SMTP bloqueado pelo host (%s): %s', smtp_host, e)
-            return jsonify({
-                'ok': False, 'bloqueado': True, 'error':
-                'Nosso servidor não consegue enviar direto pelo seu provedor '
-                '(a hospedagem bloqueia esse tipo de conexão). Sem problema: '
-                'suas campanhas saem pelo TurboVenda com o seu nome, e as '
-                'respostas chegam normalmente no seu email.'}), 200
+        logger.warning('SMTP %s:%s falhou: %s', smtp_host, smtp_port, e)
         return jsonify({'ok': False, 'bloqueado': False, 'error':
-                        f'Não consegui conectar em {smtp_host}:{smtp_port}. '
+                        f'Não consegui enviar por {smtp_host}. '
                         f'Confira o email e a senha. ({e})'}), 400
 
 
@@ -4616,7 +4622,7 @@ def _set_smtp_verificado(schema, valor):
         logger.exception('falha ao gravar smtp_verificado')
 
 
-def _smtp_bloqueado(host, portas=(587, 465, 25), timeout=4):
+def _smtp_bloqueado(host, portas=(587, 465, 25), timeout=3):
     """True se nenhuma porta SMTP abre — indica bloqueio da hospedagem."""
     import socket
     for porta in portas:
@@ -4951,6 +4957,26 @@ Responda SO com este JSON:
     return {'segmentos': list(dict.fromkeys(segs)),
             'cargos': list(dict.fromkeys(cargos)),
             'evitar': list(dict.fromkeys(evitar))}
+
+
+@app.route('/api/<bot>/config/ia-status')
+@login_required
+@limiter.limit("6 per minute")
+def api_ia_status(bot):
+    """Diz se a IA está mesmo respondendo — sem isso a queda pro gerador
+    heurístico é silenciosa e o cliente só vê 'o texto está ruim'."""
+    if not _AI_KEY:
+        return jsonify({
+            'ativa': False,
+            'motivo': 'O servidor não tem a chave da Anthropic configurada '
+                      '(ANTHROPIC_API_KEY).'})
+    if _ai_json('Responda somente com este JSON: {"ok": true}',
+                max_tokens=32):
+        return jsonify({'ativa': True, 'modelo': _AI_MODEL})
+    return jsonify({
+        'ativa': False,
+        'motivo': f'A chave existe, mas a chamada ao modelo {_AI_MODEL} '
+                  f'falhou. Veja o log do servidor.'})
 
 
 @app.route('/api/<bot>/config/generate-terms', methods=['POST'])
