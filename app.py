@@ -3876,6 +3876,7 @@ def _get_email_config(schema: str) -> dict:
             'smtp_host': '', 'smtp_port': 587, 'smtp_user': '',
             'smtp_password': '', 'resend_api_key': '',
             'oauth_provider': provider, 'oauth_refresh_token': refresh,
+            'compartilhado': False,
         }
 
     # 2. Domínio próprio verificado — envia pela Resend com o domínio do cliente
@@ -3892,6 +3893,7 @@ def _get_email_config(schema: str) -> dict:
             'smtp_password': '',
             'resend_api_key': os.environ.get('RESEND_API_KEY', '') or '',
             'oauth_provider': '', 'oauth_refresh_token': '',
+            'compartilhado': False,
         }
 
     # 3. SMTP do cliente — só se o teste passou. Muitos hosts (Railway
@@ -4152,6 +4154,108 @@ def _resend_admin():
     return os.environ.get('RESEND_API_KEY', '')
 
 
+_PROVEDOR_PESSOAL = {
+    'gmail.com': 'google', 'googlemail.com': 'google',
+    'outlook.com': 'microsoft', 'hotmail.com': 'microsoft',
+    'live.com': 'microsoft', 'msn.com': 'microsoft',
+    'yahoo.com': 'outro', 'yahoo.com.br': 'outro',
+    'uol.com.br': 'outro', 'bol.com.br': 'outro', 'terra.com.br': 'outro',
+    'ig.com.br': 'outro', 'globo.com': 'outro', 'icloud.com': 'outro',
+}
+
+
+def _classificar_email(email):
+    """Descobre sozinho qual caminho de envio serve para este endereço."""
+    dominio = email.rsplit('@', 1)[-1].lower().strip() if '@' in email else ''
+    if not dominio:
+        return {'tipo': 'invalido', 'dominio': ''}
+    if dominio in _PROVEDOR_PESSOAL:
+        prov = _PROVEDOR_PESSOAL[dominio]
+    else:
+        base = dominio.split('.')[0]
+        if base in _SMTP_MICROSOFT:
+            prov = 'microsoft'
+        elif 'google' in dominio:
+            prov = 'google'
+        else:
+            prov = ''
+    if prov in ('google', 'microsoft'):
+        return {'tipo': 'oauth', 'provider': prov, 'dominio': dominio,
+                'disponivel': _oauth_ativo(prov)}
+    if prov == 'outro':
+        # provedor pessoal sem OAuth nosso — só resta o remetente global
+        return {'tipo': 'pessoal', 'dominio': dominio}
+    return {'tipo': 'dominio', 'dominio': dominio}
+
+
+def _resend_criar_dominio(dominio):
+    """Registra o domínio na Resend. Devolve (id, registros, erro)."""
+    key = _resend_admin()
+    if not key:
+        return None, [], 'indisponivel'
+    try:
+        import requests as http
+        h = {'Authorization': f'Bearer {key}'}
+        r = http.post('https://api.resend.com/domains', headers=h,
+                      json={'name': dominio}, timeout=20)
+        j = r.json() if r.content else {}
+        if r.status_code in (200, 201):
+            return j.get('id'), j.get('records') or [], None
+        # já cadastrado antes: recupera em vez de falhar
+        lst = http.get('https://api.resend.com/domains', headers=h, timeout=20)
+        for d in (lst.json() or {}).get('data', []) if lst.ok else []:
+            if d.get('name') == dominio:
+                det = http.get(f"https://api.resend.com/domains/{d['id']}",
+                               headers=h, timeout=20)
+                dj = det.json() if det.ok else {}
+                return d['id'], dj.get('records') or [], None
+        return None, [], (j.get('message') or 'falha ao registrar')
+    except Exception:
+        logger.exception('resend: erro ao criar dominio')
+        return None, [], 'erro interno'
+
+
+@app.route('/api/<bot>/config/email/auto', methods=['POST'])
+@login_required
+@limiter.limit("10 per minute")
+def api_email_auto(bot):
+    """Cliente informa nome + email; o resto é decidido aqui."""
+    schema = _get_schema()
+    data = request.get_json(silent=True) or {}
+    nome = (data.get('nome') or '').strip()[:120]
+    email = (data.get('email') or '').strip().lower()
+    if not re.fullmatch(r'[^@\s]+@[^@\s]+\.[a-z]{2,}', email or ''):
+        return jsonify({'ok': False, 'error': 'Informe um email válido'}), 400
+
+    info = _classificar_email(email)
+    dom_id, registros, erro_dom = None, [], None
+    if info['tipo'] == 'dominio':
+        dom_id, registros, erro_dom = _resend_criar_dominio(info['dominio'])
+
+    try:
+        with _conn(schema) as conn:
+            with conn.cursor() as c:
+                c.execute("""UPDATE bot_config SET email_remetente=%s,
+                             email_remetente_nome=%s, atualizado_em=NOW()""",
+                          (email, nome or None))
+                if dom_id:
+                    c.execute("""UPDATE bot_config SET dominio_proprio=%s,
+                                 dominio_id=%s""", (info['dominio'], dom_id))
+            conn.commit()
+    except Exception:
+        logger.exception('falha ao salvar email do remetente')
+        return jsonify({'ok': False, 'error': 'Erro interno'}), 500
+
+    resp = {'ok': True, 'tipo': info['tipo'], 'dominio': info['dominio'],
+            'registros': registros}
+    if info['tipo'] == 'oauth':
+        resp['provider'] = info['provider']
+        resp['disponivel'] = info['disponivel']
+    if erro_dom:
+        resp['aviso_dominio'] = erro_dom
+    return jsonify(resp)
+
+
 @app.route('/api/<bot>/config/dominio', methods=['POST'])
 @login_required
 @limiter.limit("5 per minute")
@@ -4243,9 +4347,32 @@ def _send_email(ecfg, to_email, to_name, subject, html):
     return _send_email_classico(ecfg, to_email, to_name, subject, html)
 
 
+# Teto diário por cliente no remetente COMPARTILHADO. Todos os clientes sem
+# domínio/OAuth próprio dividem a reputação de um mesmo domínio — sem teto,
+# um cliente sozinho manda o email de todos os outros para o spam.
+LIMITE_DIARIO_COMPARTILHADO = {
+    'trial': 30, 'starter': 150, 'pro': 400, 'enterprise': 800,
+}
+
+
+def _emails_hoje(schema):
+    """Quantos emails este cliente já disparou hoje."""
+    try:
+        with _conn(schema) as conn:
+            with conn.cursor() as c:
+                c.execute('SELECT COUNT(*) AS n FROM empresas '
+                          'WHERE email_enviado::date = CURRENT_DATE')
+                row = c.fetchone()
+                return (row['n'] if row else 0) or 0
+    except Exception:
+        logger.exception('falha ao contar envios do dia')
+        return 0
+
+
 def _email_config_global(sender_name='', reply_to=''):
     """Remetente do TurboVenda, com resposta indo pro email do cliente."""
     return {
+        'compartilhado': True,
         'sender_email': os.environ.get('EMAIL_FROM',
                                        'contato@turbovenda.com.br'),
         'sender_name': sender_name,
@@ -4382,6 +4509,27 @@ def api_send_emails(bot):
     if not leads:
         return jsonify({'error': 'Nenhum lead elegível (todos bounce/spam ou sem email)'}), 400
 
+    # Teto só no remetente compartilhado: quem envia pelo próprio domínio
+    # ou pela própria conta responde pela reputação dele, não pela de todos.
+    if ecfg.get('compartilhado'):
+        teto = LIMITE_DIARIO_COMPARTILHADO.get(_get_user_plano(), 30)
+        ja = _emails_hoje(schema)
+        se_restam = teto - ja
+        if se_restam <= 0:
+            return jsonify({'error':
+                            f'Você já enviou {ja} emails hoje, o limite do '
+                            f'remetente compartilhado. Configure o email da '
+                            f'sua empresa em Configurações para enviar sem '
+                            f'esse teto — ele existe para proteger a entrega '
+                            f'de todos os clientes.'}), 429
+        if len(leads) > se_restam:
+            cortados = len(leads) - se_restam
+            leads = leads[:se_restam]
+        else:
+            cortados = 0
+    else:
+        cortados = 0
+
     empresa_nome = user['empresa_nome'] if user else ''
     base_url = os.environ.get('BASE_URL', request.host_url.rstrip('/')).replace('http://', 'https://')
     enviados = erros = 0
@@ -4422,7 +4570,13 @@ def api_send_emails(bot):
         except Exception as e:
             logger.error(f'send-emails erro lead {lead["id"]}: {e}')
             erros += 1
-    return jsonify({'ok': True, 'enviados': enviados, 'erros': erros})
+    resp = {'ok': True, 'enviados': enviados, 'erros': erros}
+    if cortados:
+        resp['aviso'] = (
+            f'{cortados} lead(s) ficaram para amanhã: você atingiu o limite '
+            f'diário do remetente compartilhado. Configure o email da sua '
+            f'empresa em Configurações para enviar sem esse teto.')
+    return jsonify(resp)
 
 
 @app.route('/api/<bot>/email/campanha', methods=['POST'])
