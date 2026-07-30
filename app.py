@@ -491,6 +491,7 @@ def _init_user_schema(schema: str):
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_port INTEGER DEFAULT 587",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_user TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_verificado BOOLEAN DEFAULT FALSE",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS serper_api_key TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS brave_api_key TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS google_cse_key TEXT",
@@ -3844,7 +3845,11 @@ def _get_email_config(schema: str) -> dict:
     client_email = cfg.get('email_remetente') or ''
     client_password = cfg.get('smtp_password') or ''
     client_resend = cfg.get('resend_api_key') or ''
-    has_client_smtp = bool(client_email and client_password)
+    # Só usa SMTP do cliente se o teste de envio passou. Muitos hosts
+    # (Railway incluso) bloqueiam saída SMTP — sem essa trava as campanhas
+    # falhariam silenciosamente em vez de cair no remetente global.
+    has_client_smtp = bool(client_email and client_password
+                           and cfg.get('smtp_verificado'))
     if has_client_smtp:
         smtp_host, smtp_port = _detect_smtp(client_email)
         return {
@@ -4185,23 +4190,67 @@ def api_test_email(bot):
     if not email or not password:
         return jsonify({'ok': False, 'error': 'Preencha email e senha'}), 400
     smtp_host, smtp_port = _detect_smtp(email)
+    import smtplib
     try:
-        import smtplib
         from email.mime.text import MIMEText
         msg = MIMEText('Este é um email de teste do TurboVenda. Se você recebeu, a configuração está correta!', 'plain', 'utf-8')
         msg['From'] = f'TurboVenda Teste <{email}>'
         msg['To'] = email
         msg['Subject'] = 'TurboVenda — Teste de email OK'
-        server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
+        server = smtplib.SMTP(smtp_host, smtp_port, timeout=8)
         server.starttls()
         server.login(email, password)
         server.sendmail(email, [email], msg.as_string())
         server.quit()
-        return jsonify({'ok': True, 'msg': f'Email de teste enviado para {email}', 'smtp_host': smtp_host})
+        _set_smtp_verificado(schema, True)
+        return jsonify({'ok': True,
+                        'msg': f'Email de teste enviado para {email}',
+                        'smtp_host': smtp_host})
     except smtplib.SMTPAuthenticationError:
-        return jsonify({'ok': False, 'error': 'Senha incorreta ou acesso não autorizado. Para Gmail, use uma Senha de App.'}), 400
+        _set_smtp_verificado(schema, False)
+        return jsonify({'ok': False, 'bloqueado': False, 'error':
+                        'Senha incorreta ou acesso não autorizado. '
+                        'Para Gmail, use uma Senha de App.'}), 400
     except Exception as e:
-        return jsonify({'ok': False, 'error': f'Erro de conexão SMTP ({smtp_host}:{smtp_port}): {str(e)}'}), 400
+        _set_smtp_verificado(schema, False)
+        bloqueado = _smtp_bloqueado(smtp_host)
+        if bloqueado:
+            logger.warning('SMTP bloqueado pelo host (%s): %s', smtp_host, e)
+            return jsonify({
+                'ok': False, 'bloqueado': True, 'error':
+                'Nosso servidor não consegue enviar direto pelo seu provedor '
+                '(a hospedagem bloqueia esse tipo de conexão). Sem problema: '
+                'suas campanhas saem pelo TurboVenda com o seu nome, e as '
+                'respostas chegam normalmente no seu email.'}), 200
+        return jsonify({'ok': False, 'bloqueado': False, 'error':
+                        f'Não consegui conectar em {smtp_host}:{smtp_port}. '
+                        f'Confira o email e a senha. ({e})'}), 400
+
+
+def _set_smtp_verificado(schema, valor):
+    """Marca se o SMTP do cliente foi testado com sucesso."""
+    if not schema:
+        return
+    try:
+        with _conn(schema) as conn:
+            with conn.cursor() as c:
+                c.execute('UPDATE bot_config SET smtp_verificado = %s',
+                          (valor,))
+            conn.commit()
+    except Exception:
+        logger.exception('falha ao gravar smtp_verificado')
+
+
+def _smtp_bloqueado(host, portas=(587, 465, 25), timeout=4):
+    """True se nenhuma porta SMTP abre — indica bloqueio da hospedagem."""
+    import socket
+    for porta in portas:
+        try:
+            with socket.create_connection((host, porta), timeout):
+                return False
+        except OSError:
+            continue
+    return True
 
 
 @app.route('/api/<bot>/config', methods=['POST'])
@@ -4258,6 +4307,7 @@ def api_save_config(bot):
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_port INTEGER DEFAULT 587",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_user TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_verificado BOOLEAN DEFAULT FALSE",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS serper_api_key TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS brave_api_key TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS google_cse_key TEXT",
@@ -4298,6 +4348,7 @@ def api_save_config(bot):
                          resend_api_key=%s,
                          smtp_host=%s, smtp_port=%s,
                          smtp_user=%s, smtp_password=%s,
+                         smtp_verificado=%s,
                          serper_api_key=%s, brave_api_key=%s,
                          google_cse_key=%s, google_cse_cx=%s,
                          atualizado_em=NOW()"""
@@ -4316,6 +4367,10 @@ def api_save_config(bot):
                       smtp_port or exists.get('smtp_port') or 587,
                       smtp_user or exists.get('smtp_user'),
                       _encrypt_field(smtp_password) if smtp_password else exists.get('smtp_password'),
+                      # trocou email ou senha -> precisa testar de novo
+                      (bool(exists.get('smtp_verificado'))
+                       and not smtp_password
+                       and (email_remetente or None) == exists.get('email_remetente')),
                       _encrypt_field(serper_api_key) if serper_api_key else exists.get('serper_api_key'),
                       _encrypt_field(brave_api_key) if brave_api_key else exists.get('brave_api_key'),
                       _encrypt_field(google_cse_key) if google_cse_key else exists.get('google_cse_key'),

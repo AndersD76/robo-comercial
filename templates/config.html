@@ -777,20 +777,28 @@ async function testEmail(){
   btn.disabled=true
   btn.innerHTML='<i class="fa fa-spinner fa-spin"></i> Testando...'
   res.textContent=''
+  const ctrl=new AbortController()
+  const kill=setTimeout(()=>ctrl.abort(),20000)
   try{
     const r=await fetch(`/api/${BOT}/config/test-email`,{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({email,password:pass})
+      body:JSON.stringify({email,password:pass}),signal:ctrl.signal
     })
     const d=await r.json()
     if(d.ok){
       res.innerHTML='<span style="color:#22c55e"><i class="fa fa-check-circle"></i> '+d.msg+'</span>'
+    }else if(d.bloqueado){
+      res.innerHTML='<span style="color:#fbbf24;line-height:1.6;display:block;margin-top:6px"><i class="fa fa-circle-info"></i> '+d.error+'</span>'
     }else{
       res.innerHTML='<span style="color:#f87171"><i class="fa fa-xmark-circle"></i> '+d.error+'</span>'
     }
-  }catch(e){res.innerHTML='<span style="color:#f87171">Erro de conexão</span>'}
-  btn.disabled=false
-  btn.innerHTML='<i class="fa fa-paper-plane"></i> Testar envio'
+  }catch(e){
+    res.innerHTML='<span style="color:#f87171">'+(e.name==='AbortError'?'O teste demorou demais. Suas campanhas seguem saindo pelo TurboVenda normalmente.':'Erro de conexão')+'</span>'
+  }finally{
+    clearTimeout(kill)
+    btn.disabled=false
+    btn.innerHTML='<i class="fa fa-paper-plane"></i> Testar envio'
+  }
 }
 
 // === SETUP ALL (onboarding) ===
