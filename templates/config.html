@@ -358,8 +358,10 @@
       {% else %}
         <span style="color:#60a5fa"><i class="fa fa-circle-info"></i></span>
         Hoje suas campanhas saem como <code>Seu Nome &lt;contato@turbovenda.com.br&gt;</code>,
-        com as respostas chegando no seu email. Funciona bem — conecte sua conta abaixo
-        para enviar do seu próprio endereço.
+        com as respostas chegando no seu email — você recebe e responde normalmente.
+        {% if oauth_google or oauth_microsoft or dominio_ativo %}
+          Para enviar do seu próprio endereço, conecte sua conta abaixo.
+        {% endif %}
       {% endif %}
     </div>
 
