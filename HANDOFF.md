@@ -133,6 +133,20 @@ N/A — sem mudancas. API keys preservadas no save_config (nao mais sobrescritas
 - [x] Logging estruturado: JSON format, `print()` convertido para `logger.*`
 - [x] Monitoramento: Sentry SDK integrado (definir `SENTRY_DSN` para ativar)
 
+## Geracao de copy por IA (Claude)
+
+O WhatsApp, o email e as palavras-chave do ICP passaram a ser gerados pela API
+da Anthropic. Sem a chave o app **nao quebra** — cai no gerador heuristico.
+
+| Variavel | Valor / Acao | Status |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Chave da API em console.anthropic.com > API Keys. Aceita tambem os nomes `CLAUDE_API_KEY` ou `ANTHROPIC_KEY`. | Ja configurado |
+| `AI_MODEL` | Opcional. Default `claude-sonnet-5`. Se o modelo falhar, cai automaticamente para `claude-haiku-4-5-20251001`. | Opcional |
+
+Para conferir se a IA esta ativa: as respostas de `/config/generate-msg` e
+`/config/generate-email` trazem `"ia": true`. Se vier `false`, o log mostra o
+motivo (`IA desativada`, `IA falhou`, `IA nao devolveu JSON`).
+
 ## Unico item pendente
 
 | Item | Acao | Quem |

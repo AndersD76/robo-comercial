@@ -21,7 +21,7 @@ import psycopg2
 import psycopg2.extras
 import psycopg2.pool
 from psycopg2 import sql as psql
-from functools import wraps
+from functools import lru_cache, wraps
 import logging
 from flask import (Flask, abort, jsonify, make_response, redirect,
                    render_template, request, send_file, session, url_for)
@@ -4378,6 +4378,130 @@ def api_save_config(bot):
                 pass
 
 
+# =============================================================================
+# GERACAO POR IA (Claude) — copy de prospeccao e ICP
+# =============================================================================
+
+_AI_KEY = (os.environ.get('ANTHROPIC_API_KEY', '')
+           or os.environ.get('CLAUDE_API_KEY', '')
+           or os.environ.get('ANTHROPIC_KEY', ''))
+_AI_MODEL = os.environ.get('AI_MODEL', 'claude-sonnet-5')
+_AI_FALLBACK = 'claude-haiku-4-5-20251001'
+
+
+def _ai_json(prompt: str, max_tokens: int = 1000):
+    """Chama Claude e devolve o JSON da resposta. None se indisponivel."""
+    if not _AI_KEY:
+        logger.info('IA desativada: nenhuma API key da Anthropic definida')
+        return None
+    modelos = [_AI_MODEL] + ([_AI_FALLBACK] if _AI_MODEL != _AI_FALLBACK
+                             else [])
+    for modelo in modelos:
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=_AI_KEY, timeout=30.0)
+            resp = client.messages.create(
+                model=modelo, max_tokens=max_tokens,
+                messages=[{'role': 'user', 'content': prompt}])
+            txt = ''.join(b.text for b in resp.content
+                          if getattr(b, 'type', '') == 'text').strip()
+            m = re.search(r'\{.*\}', txt, re.S)
+            if m:
+                return json.loads(m.group(0))
+            logger.warning('IA (%s) nao devolveu JSON', modelo)
+        except Exception as e:
+            logger.warning('IA falhou (%s): %s', modelo, e)
+    return None
+
+
+_REGRAS_COPY = """Regras de escrita:
+- Portugues do Brasil, tom profissional, direto e humano.
+- Frases curtas e SEMPRE completas — nunca corte uma frase no meio.
+- PROIBIDO: "revolucionario", "inovador", "solucao completa", "parceiro
+  estrategico", "alavancar", "potencializar", "sinergia", "excelencia".
+- Nunca invente fato que nao esteja na descricao. Sem promessa vaga.
+- Se a descricao citar numero, norma ou certificacao concreta, use."""
+
+
+def _ai_copy(empresa: str, descricao: str, website: str = '') -> dict:
+    """Gera copy de prospeccao. Dict vazio se IA indisponivel."""
+    return dict(_ai_copy_cached(empresa.strip(), descricao.strip(),
+                                (website or '').strip()))
+
+
+@lru_cache(maxsize=128)
+def _ai_copy_cached(empresa: str, descricao: str, website: str = '') -> tuple:
+    """Cache do copy — onboarding chama generate-msg e generate-email."""
+    return tuple(_ai_copy_uncached(empresa, descricao, website).items())
+
+
+def _ai_copy_uncached(empresa: str, descricao: str, website: str = '') -> dict:
+    if not descricao.strip():
+        return {}
+    prompt = f"""Voce e copywriter B2B senior. Escreva copy de prospeccao fria.
+
+EMPRESA REMETENTE: {empresa}
+O QUE ELA FAZ (descricao escrita pelo proprio dono):
+{descricao}
+SITE: {website or 'nao informado'}
+
+{_REGRAS_COPY}
+
+A variavel {{{{nome}}}} e o nome da empresa QUE VAI RECEBER a mensagem.
+
+Responda SO com este JSON, sem texto antes ou depois:
+{{
+  "pitch": "1 frase completa, ate 130 caracteres, dizendo o que a {empresa} faz e o ganho concreto pro cliente. NAO cite o nome da {empresa}. Nao termine com virgula.",
+  "whatsapp": "WhatsApp de primeiro contato, ate 320 caracteres. Comece com 'Oi {{{{nome}}}}, tudo bem?'. Diga que voce e da {empresa}, o que ela faz, e termine perguntando se pode mostrar em 15 min. Sem link. No maximo 1 emoji.",
+  "whatsapp_followup": "Follow-up curto, ate 220 caracteres, com {{{{nome}}}}. Retoma o contato anterior sem cobrar. Sem link.",
+  "assunto": "Assunto de email, ate 55 caracteres, contendo {{{{nome}}}}. Especifico, sem clickbait.",
+  "email_intro": "1 frase de abertura do email, vem logo apos 'Ola {{{{nome}}}},'. Ate 150 caracteres. Diz quem voce e e por que escreveu. NAO use as variaveis segmento nem cidade."
+}}"""
+    d = _ai_json(prompt, max_tokens=900) or {}
+    out = {}
+    for k in ('pitch', 'whatsapp', 'whatsapp_followup',
+              'assunto', 'email_intro'):
+        v = d.get(k)
+        if isinstance(v, str) and v.strip():
+            out[k] = v.strip().rstrip(' ,;:')
+    return out
+
+
+def _ai_icp(empresa: str, descricao: str) -> dict:
+    """Gera segmentos-alvo e cargos do ICP. Dict vazio se IA indisponivel."""
+    if not descricao.strip():
+        return {}
+    prompt = f"""Voce e especialista em prospeccao B2B no Brasil.
+
+EMPRESA: {empresa}
+O QUE ELA VENDE:
+{descricao}
+
+Liste o ICP dela — que TIPOS DE EMPRESA ela deve prospectar como cliente.
+
+Regras para "segmentos":
+- Sao termos que aparecem no nome ou na descricao de empresas reais no Google.
+- Substantivo do tipo de empresa, minusculo, SEM cidade e SEM estado.
+- Bons: "construtora", "industria metalurgica", "cooperativa agricola",
+  "frigorifico", "usina de acucar", "fabrica de embalagens".
+- Ruins: "empresas de medio porte", "clientes do Sul", "industria em geral".
+- De 8 a 14 itens, do mais provavel para o menos provavel.
+
+Regras para "cargos": 6 a 10 cargos de quem decide a compra, sem acento.
+
+Responda SO com este JSON:
+{{"segmentos": ["..."], "cargos": ["..."]}}"""
+    d = _ai_json(prompt, max_tokens=700) or {}
+    segs = [s.strip().lower() for s in (d.get('segmentos') or [])
+            if isinstance(s, str) and 3 < len(s.strip()) < 40]
+    cargos = [c.strip().title() for c in (d.get('cargos') or [])
+              if isinstance(c, str) and 3 < len(c.strip()) < 40]
+    if not segs:
+        return {}
+    return {'segmentos': list(dict.fromkeys(segs)),
+            'cargos': list(dict.fromkeys(cargos))}
+
+
 @app.route('/api/<bot>/config/generate-terms', methods=['POST'])
 @login_required
 def api_generate_terms(bot):
@@ -4687,6 +4811,19 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str, estados_selec
         'Gerente Comercial', 'Gerente de Operacoes',
     ]
     cargos = list(dict.fromkeys(cargos + cargos_base))
+
+    # ── 3.5 IA: substitui segmentos/cargos heuristicos quando disponivel ──
+    _icp = _ai_icp(empresa_nome, descricao)
+    if _icp.get('segmentos'):
+        segmentos = _icp['segmentos']
+    if _icp.get('cargos'):
+        cargos = list(dict.fromkeys(_icp['cargos'] + cargos_base))
+
+    if not segmentos:
+        segmentos = ['industria', 'distribuidora', 'construtora',
+                     'cooperativa', 'transportadora']
+    if not cidades:
+        cidades = ['Brasil']
 
     # ── 4. Gerar termos ──
     PADROES = [
@@ -4998,7 +5135,6 @@ def api_generate_msg(bot):
     if not descricao:
         return jsonify({'error': 'Preencha a descrição da empresa'}), 400
 
-    pitch = _extrair_pitch(descricao, empresa, max_chars=100)
     tipo = data.get('tipo', 'whatsapp')
 
     site_link = ''
@@ -5006,22 +5142,31 @@ def api_generate_msg(bot):
         url = website if website.startswith('http') else f'https://{website}'
         site_link = '\n\n🔗 ' + url
 
-    if tipo == 'followup':
-        mensagem = (
-            "{{nome}}, tudo bem? Te mandei uma mensagem recentemente.\n\n"
-            "Sou da " + empresa + ". " + pitch + ".\n\n"
-            "Teria 15 min para uma conversa rápida?\n"
-            "{{link_agenda}}" + site_link
-        )
-    else:
-        mensagem = (
-            "Oi {{nome}}, tudo bem? 👋\n\n"
-            "Sou da " + empresa + ". " + pitch + ".\n\n"
-            "Posso te mostrar em 15 min como funciona na prática?\n"
-            "{{cal_link}}" + site_link
-        )
+    ia = _ai_copy(empresa, descricao, website)
+    link_var = '{{link_agenda}}' if tipo == 'followup' else '{{cal_link}}'
+    texto_ia = ia.get('whatsapp_followup' if tipo == 'followup'
+                      else 'whatsapp')
 
-    return jsonify({'ok': True, 'mensagem': mensagem})
+    if texto_ia:
+        mensagem = texto_ia + '\n\n' + link_var + site_link
+    else:
+        pitch = _extrair_pitch(descricao, empresa, max_chars=100)
+        if tipo == 'followup':
+            mensagem = (
+                "{{nome}}, tudo bem? Te mandei uma mensagem recentemente.\n\n"
+                "Sou da " + empresa + ". " + pitch + ".\n\n"
+                "Teria 15 min para uma conversa rápida?\n"
+                + link_var + site_link
+            )
+        else:
+            mensagem = (
+                "Oi {{nome}}, tudo bem? 👋\n\n"
+                "Sou da " + empresa + ". " + pitch + ".\n\n"
+                "Posso te mostrar em 15 min como funciona na prática?\n"
+                + link_var + site_link
+            )
+
+    return jsonify({'ok': True, 'mensagem': mensagem, 'ia': bool(texto_ia)})
 
 
 @app.route('/api/<bot>/config/generate-email', methods=['POST'])
@@ -5034,7 +5179,8 @@ def api_generate_email(bot):
     if not descricao:
         return jsonify({'error': 'Preencha a descrição da empresa'}), 400
 
-    pitch = _extrair_pitch(descricao, empresa, max_chars=150)
+    ia = _ai_copy(empresa, descricao, website)
+    pitch = ia.get('pitch') or _extrair_pitch(descricao, empresa, max_chars=150)
     cor_header = data.get('cor_header') or '#1a2332'
     cor_btn = data.get('cor_botao') or '#2563eb'
     cor_texto = data.get('cor_texto') or '#ffffff'
@@ -5062,20 +5208,30 @@ def api_generate_email(bot):
             + '" style="color:#6b7280;text-decoration:none;border-bottom:1px solid #d1d5db;">'
             + site_limpo + '</a>')
 
+    intro = ia.get('email_intro') or ''
     html = _build_email_html(
         empresa=empresa, pitch=pitch, cor_header=cor_header,
         cor_btn=cor_btn, cor_texto=cor_texto,
         site_link_inline=site_link_inline, site_footer=site_footer,
-        site_url=site_url)
+        site_url=site_url, intro=intro)
 
-    assunto = '{{nome}}, posso te mostrar algo?'
-    return jsonify({'ok': True, 'html': html, 'assunto': assunto})
+    assunto = ia.get('assunto') or '{{nome}}, posso te mostrar algo?'
+    return jsonify({'ok': True, 'html': html, 'assunto': assunto,
+                    'ia': bool(ia)})
 
 
 def _build_email_html(*, empresa, pitch, cor_header, cor_btn, cor_texto,
-                      site_link_inline, site_footer, site_url):
+                      site_link_inline, site_footer, site_url, intro=''):
     """Monta o HTML profissional do email de prospecção."""
     site_display = site_url.replace("https://", "").replace("http://", "").rstrip("/") if site_url else ''
+
+    if intro:
+        intro_txt = (intro.replace('&', '&amp;').replace('<', '&lt;')
+                     .replace('>', '&gt;'))
+    else:
+        intro_txt = ('Sou da <strong>' + empresa + '</strong>' + site_link_inline
+                     + ' e estou entrando em contato para apresentar '
+                     'rapidamente o que fazemos.')
 
     header_site_row = ''
     if site_display:
@@ -5145,8 +5301,7 @@ Olá <strong>{{{{nome}}}}</strong>,
 <!-- INTRO -->
 <tr><td style="background-color:#ffffff;padding:20px 48px 0;">
 <p style="margin:0;font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.75;color:#374151;">
-Sou da <strong>{empresa}</strong>{site_link_inline} e notei que vocês atuam no segmento de
-<strong>{{{{segmento}}}}</strong> em <strong>{{{{cidade}}}}</strong>.
+{intro_txt}
 </p>
 </td></tr>
 
@@ -5208,6 +5363,50 @@ Teria <strong>15 minutos</strong> para uma conversa rápida? Posso te mostrar co
 </html>'''
 
 
+def _polir_final(t):
+    """Remove sobra pendurada no fim da frase (infinitivo, preposição)."""
+    ant = None
+    while t != ant:
+        ant = t
+        t = t.strip().rstrip(' ,;:.')
+        # "...construtoras a implantar" -> "...construtoras"
+        t = re.sub(r'\s+(?:a|para|de|em|com)\s+\w+(?:ar|er|ir)$', '', t,
+                   flags=re.IGNORECASE)
+        # preposição/conjunção solta no fim
+        t = re.sub(r'\s+(?:e|ou|de|da|do|das|dos|em|para|a|o|que|com|'
+                   r'na|no|nas|nos)$', '', t, flags=re.IGNORECASE)
+    return t
+
+
+def _cortar_frase(p, limite):
+    """Corta em fronteira de oração — nunca no meio de uma ideia."""
+    p = p.strip().rstrip(' ,;:.')
+    if len(p) <= limite:
+        return _polir_final(p) if p.endswith((' a', ' de', ' e')) else p
+    corte = p[:limite]
+    minimo = limite * 0.35
+
+    cand = ''
+    if ',' in corte:
+        c = corte.rsplit(',', 1)[0].strip()
+        if len(c) >= minimo:
+            cand = c
+
+    if not cand:
+        melhor = -1
+        for con in (' que ', ' para ', ' com ', ' e ', ' a '):
+            idx = corte.rfind(con)
+            if idx > melhor:
+                melhor = idx
+        if melhor >= minimo:
+            cand = corte[:melhor]
+
+    if not cand:
+        cand = corte.rsplit(' ', 1)[0]
+
+    return _polir_final(cand)
+
+
 def _extrair_pitch(descricao, empresa_nome='', max_chars=150):
     """Extrai a frase de PRODUTO/SERVIÇO da descrição para usar em mensagens."""
     _REJEITAR = [
@@ -5236,12 +5435,14 @@ def _extrair_pitch(descricao, empresa_nome='', max_chars=150):
 
     def _limpar(frase):
         p = frase
-        p = re.sub(r'^(?:O|A)\s+\S+\s+(?:é|permite|ajuda|oferece)\s+(?:uma?\s+)?',
+        # "A AndersTech é uma consultoria..." -> "consultoria..."
+        # exige artigo depois do verbo, pra não confundir "é" com "e" conjunção
+        p = re.sub(r'^(?:O|A)\s+(?:\S+\s+){1,3}?(?:é|e|eh)\s+(?:um|uma)\s+',
                     '', p, flags=re.IGNORECASE)
-        if empresa_nome:
-            nome_sem = empresa_nome.replace(' ', '')
-            p = re.sub(rf'^(?:O|A)\s+{re.escape(nome_sem)}\s+(?:é|permite|ajuda|oferece)\s+(?:uma?\s+)?',
-                        '', p, flags=re.IGNORECASE)
+        # "A AndersTech ajuda ..." -> "ajuda ..." (verbo sem ambiguidade)
+        p = re.sub(r'^(?:O|A)\s+(?:\S+\s+){1,3}?'
+                    r'(?:é|permite|ajuda|oferece|fornece|atua|desenvolve)\s+',
+                    '', p, flags=re.IGNORECASE)
         p = re.sub(r'^(?:O objetivo [eé]|A meta [eé]|O foco [eé]|Nosso objetivo [eé]|Nós)\s+',
                     '', p, flags=re.IGNORECASE)
         p = re.sub(r'^O sistema\s+', '', p, flags=re.IGNORECASE)
@@ -5250,11 +5451,7 @@ def _extrair_pitch(descricao, empresa_nome='', max_chars=150):
         p = re.sub(r'^Somos\s+(?:uma?\s+)?', '', p, flags=re.IGNORECASE)
         if p:
             p = p[0].upper() + p[1:]
-        if len(p) > max_chars:
-            p = p[:max_chars].rsplit(' ', 1)[0]
-            p = re.sub(r'\s+(?:e|ou|de|da|do|das|dos|em|para|a|o|que|com|na|no|nas|nos)$',
-                        '', p, flags=re.IGNORECASE)
-        return p
+        return _cortar_frase(p, max_chars)
 
     def _rejeitada(frase):
         fl = frase.lower()
