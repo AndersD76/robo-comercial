@@ -147,6 +147,26 @@ Para conferir se a IA esta ativa: as respostas de `/config/generate-msg` e
 `/config/generate-email` trazem `"ia": true`. Se vier `false`, o log mostra o
 motivo (`IA desativada`, `IA falhou`, `IA nao devolveu JSON`).
 
+## CONFIRMADO: o Railway bloqueia saida SMTP
+
+Medido de dentro do proprio container em 2026-07-30, via
+`/api/<bot>/config/smtp-diag` contra `smtp-mail.outlook.com`:
+
+| Porta | IPv4 |
+|---|---|
+| 587 | TimeoutError |
+| 465 | TimeoutError |
+| 25  | TimeoutError |
+
+Os 8 enderecos IPv4 resolvem normalmente — o pacote sai e nada volta.
+Isso e firewall descartando em silencio, nao problema de rota nem de IPv6.
+
+**Consequencia:** email+senha do cliente NUNCA vai funcionar enquanto o app
+estiver no Railway. Nao adianta tentar outra porta nem outro provedor.
+Restam OAuth (envia pela caixa do cliente, por HTTPS) e dominio proprio
+(SPF/DKIM). O codigo de SMTP continua no lugar e passa a funcionar sozinho
+se um dia o app mudar de hospedagem.
+
 ## Envio pelo email do proprio cliente
 
 O Railway bloqueia saida SMTP, entao o cliente nao consegue usar email+senha.

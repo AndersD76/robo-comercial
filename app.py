@@ -4856,13 +4856,24 @@ def api_smtp_diag(bot):
     for porta in (587, 465, 25):
         r = {}
         for fam, chave in ((socket.AF_INET, 'v4'), (socket.AF_INET6, 'v6')):
+            sock = None
             try:
                 infos = socket.getaddrinfo(host, porta, fam,
                                            socket.SOCK_STREAM)
-                with socket.create_connection(infos[0][4], 4):
-                    r[chave] = 'abriu'
+                # create_connection só aceita (host, port); o sockaddr de
+                # IPv6 tem 4 elementos, então conectamos pelo socket cru
+                sock = socket.socket(fam, socket.SOCK_STREAM)
+                sock.settimeout(4)
+                sock.connect(infos[0][4])
+                r[chave] = 'abriu'
             except Exception as e:
                 r[chave] = f'{type(e).__name__}: {e}'
+            finally:
+                if sock is not None:
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
         out['portas'][porta] = r
     abriu_v4 = any(v.get('v4') == 'abriu' for v in out['portas'].values())
     out['veredito'] = ('SMTP funciona por IPv4 — o erro anterior era IPv6'
