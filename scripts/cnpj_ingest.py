@@ -200,7 +200,13 @@ class PgDB:
                 self._extras.execute_values(
                     c,
                     'INSERT INTO empresas_publicas (cnpj_basico, razao_social, nome_fantasia, municipio, uf, bairro, cnae_principal, porte, data_abertura, situacao, telefone, telefone2, email) '
-                    'VALUES %s ON CONFLICT (cnpj_basico) DO NOTHING',
+                    'VALUES %s ON CONFLICT (cnpj_basico) DO UPDATE SET '
+                    # DO NOTHING pularia as ~700 mil linhas ja ingeridas antes
+                    # de existirem estas colunas, e o contato nunca chegaria.
+                    # COALESCE preenche o que falta sem apagar o que ja ha.
+                    'telefone = COALESCE(EXCLUDED.telefone, empresas_publicas.telefone), '
+                    'telefone2 = COALESCE(EXCLUDED.telefone2, empresas_publicas.telefone2), '
+                    'email = COALESCE(EXCLUDED.email, empresas_publicas.email)',
                     rows)
             self.conn.commit()
         self._exec_with_retry(_do)
