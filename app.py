@@ -4283,13 +4283,17 @@ def api_unipile_conectar(bot):
         + f'{_dt.datetime.now(_dt.timezone.utc).microsecond // 1000:03d}Z'
     payload = {
         'type': 'create',
-        'providers': ['GOOGLE', 'MICROSOFT', 'IMAP'],
+        # o enum da API e GOOGLE|OUTLOOK|MAIL (nao MICROSOFT|IMAP, que a
+        # doc em prosa cita); '*:MAILING' cobre todos os de email de uma vez
+        'providers': '*:MAILING',
         'api_url': _UNIPILE_DSN,
         'expiresOn': expira,
         'name': schema,                     # volta no webhook
         'notify_url': f'{base}/webhook/unipile',
         'success_redirect_url': f'{base}/configurar?email_ok=conectado',
         'failure_redirect_url': f'{base}/configurar?email_erro=negado',
+        'bypass_success_screen': True,      # volta direto pro app
+        'single_use': True,                 # link so serve pra este cliente
     }
     logger.info('Unipile link payload: %s', json.dumps(payload))
     corpo, erro = _unipile('POST', '/hosted/accounts/link', json=payload)
