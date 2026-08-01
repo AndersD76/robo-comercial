@@ -55,11 +55,39 @@ E_CNAE_PRINCIPAL = 11
 E_BAIRRO = 17
 E_UF = 19
 E_MUNICIPIO_COD = 20      # código TOM -> Municipios.zip
+E_DDD_1 = 21              # conferido em Estabelecimentos1.zip
+E_TELEFONE_1 = 22
+E_DDD_2 = 23
+E_TELEFONE_2 = 24
+E_EMAIL = 27
 
 # Posições no CSV Empresas
 EMP_CNPJ_BASICO = 0
 EMP_RAZAO_SOCIAL = 1
 EMP_PORTE = 5             # 00/01/03/05
+
+
+def limpar_telefone(ddd, numero):
+    """Junta DDD + numero. Descarta o que nao tem cara de telefone."""
+    ddd = re.sub(r'\D', '', ddd or '')
+    numero = re.sub(r'\D', '', numero or '')
+    if not numero or len(numero) < 8 or len(numero) > 9:
+        return None
+    if len(ddd) != 2:
+        return None
+    if numero == numero[0] * len(numero):      # 00000000, 99999999
+        return None
+    return f'({ddd}) {numero}'
+
+
+def limpar_email(valor):
+    """A Receita traz lixo e endereco de contador; filtra o obvio."""
+    e = (valor or '').strip().lower()
+    if not e or '@' not in e or ' ' in e:
+        return None
+    if not re.fullmatch(r"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}", e):
+        return None
+    return e[:120]
 
 
 # ---------------------------------------------------------------------------
@@ -77,14 +105,27 @@ CREATE TABLE IF NOT EXISTS empresas_publicas (
     cnae_principal TEXT,
     porte          TEXT,
     data_abertura  DATE,
-    situacao       TEXT
+    situacao       TEXT,
+    telefone       TEXT,
+    telefone2      TEXT,
+    email          TEXT
 )"""
+
+# quem ja rodou a ingestao antes nao tem essas colunas
+MIGRACOES = [
+    'ALTER TABLE empresas_publicas ADD COLUMN IF NOT EXISTS telefone TEXT',
+    'ALTER TABLE empresas_publicas ADD COLUMN IF NOT EXISTS telefone2 TEXT',
+    'ALTER TABLE empresas_publicas ADD COLUMN IF NOT EXISTS email TEXT',
+]
 
 DDL_SQLITE = DDL_PG.replace('DATE', 'TEXT')
 
 INDEXES = [
     'CREATE INDEX IF NOT EXISTS idx_emp_pub_cnae_uf_mun ON empresas_publicas (cnae_principal, uf, municipio)',
     'CREATE INDEX IF NOT EXISTS idx_emp_pub_uf_mun ON empresas_publicas (uf, municipio)',
+    # o robo busca por CNAE+UF entre quem tem contato
+    'CREATE INDEX IF NOT EXISTS idx_emp_pub_contato ON empresas_publicas (uf, cnae_principal) '
+    'WHERE telefone IS NOT NULL OR email IS NOT NULL',
 ]
 
 
@@ -125,6 +166,11 @@ class PgDB:
         def _do():
             with self.conn.cursor() as c:
                 c.execute(DDL_PG)
+                for mig in MIGRACOES:
+                    try:
+                        c.execute(mig)
+                    except Exception:
+                        self.conn.rollback()
                 for idx in INDEXES:
                     c.execute(idx)
             self.conn.commit()
@@ -137,8 +183,7 @@ class PgDB:
             with self.conn.cursor() as c:
                 self._extras.execute_values(
                     c,
-                    'INSERT INTO empresas_publicas (cnpj_basico, razao_social, nome_fantasia, '
-                    'municipio, uf, bairro, cnae_principal, porte, data_abertura, situacao) '
+                    'INSERT INTO empresas_publicas (cnpj_basico, razao_social, nome_fantasia, municipio, uf, bairro, cnae_principal, porte, data_abertura, situacao, telefone, telefone2, email) '
                     'VALUES %s ON CONFLICT (cnpj_basico) DO NOTHING',
                     rows)
             self.conn.commit()
@@ -175,6 +220,12 @@ class SqliteDB:
 
     def ensure_schema(self):
         self.conn.execute(DDL_SQLITE)
+        for col in ('telefone', 'telefone2', 'email'):
+            try:
+                self.conn.execute(
+                    f'ALTER TABLE empresas_publicas ADD COLUMN {col} TEXT')
+            except Exception:
+                pass
         for idx in INDEXES:
             self.conn.execute(idx)
         self.conn.commit()
@@ -183,7 +234,8 @@ class SqliteDB:
         self.conn.executemany(
             'INSERT OR IGNORE INTO empresas_publicas (cnpj_basico, razao_social, '
             'nome_fantasia, municipio, uf, bairro, cnae_principal, porte, '
-            'data_abertura, situacao) VALUES (?,?,?,?,?,?,?,?,?,?)', rows)
+            'data_abertura, situacao, telefone, telefone2, email) '
+            'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)', rows)
         self.conn.commit()
 
     def update_razao_batch(self, rows):
@@ -350,6 +402,13 @@ def run_real(db, args):
                 None,                                   # porte no pass 2
                 parse_data_abertura(row[E_DATA_INICIO]),
                 row[E_SITUACAO].strip(),
+                limpar_telefone(row[E_DDD_1] if len(row) > E_DDD_1 else '',
+                                row[E_TELEFONE_1]
+                                if len(row) > E_TELEFONE_1 else ''),
+                limpar_telefone(row[E_DDD_2] if len(row) > E_DDD_2 else '',
+                                row[E_TELEFONE_2]
+                                if len(row) > E_TELEFONE_2 else ''),
+                limpar_email(row[E_EMAIL] if len(row) > E_EMAIL else ''),
             ))
             cnpjs.add(cb)
             if len(batch) >= BATCH:
@@ -436,6 +495,13 @@ def run_sample(db):
                     random.choice(['01', '01', '03', '05', '00']),
                     f'{ano}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}',
                     '02',
+                    # cobertura parcial de propósito: na base real ~65% tem
+                    # telefone e ~49% email, e o robô precisa lidar com isso
+                    limpar_telefone('54', f'3{random.randint(1000000, 9999999)}')
+                    if k % 3 else None,
+                    None,
+                    (f'contato{seq}@exemplo{k}.com.br'
+                     if k % 2 else None),
                 ))
     db.insert_batch(rows)
     print(f'[sample] {len(rows)} empresas sintéticas inseridas '
