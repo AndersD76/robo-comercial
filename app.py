@@ -4217,13 +4217,29 @@ def _unipile(metodo, caminho, **kw):
             headers={'X-API-KEY': _UNIPILE_KEY,
                      'accept': 'application/json'},
             timeout=25, **kw)
-        corpo = r.json() if r.content else {}
+        try:
+            corpo = r.json() if r.content else {}
+        except ValueError:
+            corpo = {}
         if r.status_code in (200, 201, 202):
             return corpo, None
-        logger.error('Unipile %s %s -> %s: %s', metodo, caminho,
-                     r.status_code, str(corpo)[:300])
-        return None, (corpo.get('message') if isinstance(corpo, dict)
-                      else None) or f'erro {r.status_code}'
+        # A mensagem deles muda de formato por endpoint; sem varrer as
+        # chaves o erro virava só "erro 400" e não dava para agir.
+        detalhe = ''
+        if isinstance(corpo, dict):
+            for chave in ('detail', 'message', 'title', 'error',
+                          'error_description', 'type'):
+                v = corpo.get(chave)
+                if isinstance(v, str) and v.strip():
+                    detalhe = v.strip()
+                    break
+            if not detalhe and corpo:
+                detalhe = json.dumps(corpo)[:200]
+        if not detalhe:
+            detalhe = (r.text or '')[:200]
+        logger.error('Unipile %s %s -> %s | %s', metodo, caminho,
+                     r.status_code, str(corpo or r.text)[:500])
+        return None, f'{r.status_code}: {detalhe or "sem detalhe"}'
     except Exception:
         logger.exception('Unipile %s %s falhou', metodo, caminho)
         return None, 'Não consegui falar com o serviço de email'
@@ -4260,9 +4276,12 @@ def api_unipile_conectar(bot):
                         'error': 'Conexão de email indisponível'}), 503
     base = os.environ.get('BASE_URL', '').rstrip('/') or \
         request.host_url.rstrip('/').replace('http://', 'https://')
+    # a doc usa milissegundos (2024-12-22T12:00:00.701Z); o isoformat do
+    # Python devolve microssegundos e o parser deles recusa
     expira = (_dt.datetime.now(_dt.timezone.utc)
-              + _dt.timedelta(hours=1)).isoformat().replace('+00:00', 'Z')
-    corpo, erro = _unipile('POST', '/hosted/accounts/link', json={
+              + _dt.timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%S.') \
+        + f'{_dt.datetime.now(_dt.timezone.utc).microsecond // 1000:03d}Z'
+    payload = {
         'type': 'create',
         'providers': ['GOOGLE', 'MICROSOFT', 'IMAP'],
         'api_url': _UNIPILE_DSN,
@@ -4271,7 +4290,9 @@ def api_unipile_conectar(bot):
         'notify_url': f'{base}/webhook/unipile',
         'success_redirect_url': f'{base}/configurar?email_ok=conectado',
         'failure_redirect_url': f'{base}/configurar?email_erro=negado',
-    })
+    }
+    logger.info('Unipile link payload: %s', json.dumps(payload))
+    corpo, erro = _unipile('POST', '/hosted/accounts/link', json=payload)
     if erro:
         return jsonify({'ok': False, 'error': erro}), 502
     return jsonify({'ok': True, 'url': (corpo or {}).get('url')})
