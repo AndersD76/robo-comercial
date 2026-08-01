@@ -245,6 +245,73 @@ dominios (plano pago acima de 1 dominio).
 | `BASE_URL` | Montar o redirect_uri do OAuth | Sim, se usar OAuth |
 | `RESEND_API_KEY` | Remetente global + dominio proprio | Ja configurada |
 
+## Base da Receita (CNPJ) — rodar no terminal
+
+O robo prospecta na web e depois CRUZA o lead com a tabela
+`public.empresas_publicas` para validar e corrigir: razao social no lugar
+do titulo da pagina, CNPJ oficial no lugar do que estava no rodape, UF e
+municipio reais. O casamento e por TELEFONE (mais confiavel que nome).
+
+### Estado do banco em 2026-08-01
+
+| | |
+|---|---|
+| `public.empresas_publicas` | 699.827 empresas (PR 270k, SC 215k, RS 214k), 158 MB |
+| Colunas `telefone` / `email` | **ausentes** — e o que falta para o cruzamento funcionar |
+| Banco inteiro | 192 MB |
+
+Tambem existem tabelas `empresas_publicas` VAZIAS nos schemas `emp_4` e
+`emp_10`, criadas por acidente quando o DDL rodou com o search_path de um
+usuario. Nao atrapalham; podem ser removidas.
+
+### Comandos (os zips ja estao em E:\cnpj)
+
+```bash
+export DATABASE_URL='postgresql://...'
+
+# 1) preenche telefone/email nas 699 mil que ja existem
+python scripts/cnpj_ingest.py --offline --dir E:/cnpj --keep \
+    --todos-cnaes --so-com-contato
+
+# 2) so depois, se o plano do Neon aguentar, amplia para o Brasil
+python scripts/cnpj_ingest.py --offline --dir E:/cnpj --keep \
+    --ufs '*' --todos-cnaes --so-com-contato
+```
+
+`--offline` usa so os zips do disco (nao baixa nada). E idempotente: se
+cair no meio, rode de novo.
+
+### Tamanhos medidos (base 2026-06)
+
+| Filtro | Linhas | Tamanho |
+|---|---|---|
+| 3 UF, 54 CNAE (atual) | 261 mil | ~0,3 GB |
+| Brasil, 54 CNAE | 930 mil | ~0,9 GB |
+| Brasil, todos CNAE | 8,1 mi | ~8,1 GB |
+| Brasil, todos CNAE, com contato | 5,3 mi | **~5,3 GB** |
+
+**Confira o limite do plano no Neon antes do passo 2.**
+
+### O que esperar no log
+
+```
+[offline] 21 zips em E:/cnpj
+[mun] 5572 municipios carregados
+[filtro] UFs: ... | CNAEs: todos | so quem tem telefone ou email
+[est] EstabelecimentosN.zip: ... inseridos acumulados
+[done] inseridos=... razoes_atualizadas=... total_tabela=...
+```
+
+Depois de terminar, confira a cobertura:
+
+```sql
+SELECT COUNT(*) total, COUNT(telefone) com_tel, COUNT(email) com_email
+FROM public.empresas_publicas;
+```
+
+Enquanto isso nao roda, o robo funciona normalmente — so nao corrige os
+dados, porque o cruzamento nao acha nada.
+
 ## Unico item pendente
 
 | Item | Acao | Quem |
