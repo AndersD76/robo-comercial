@@ -293,6 +293,28 @@
 <div class="toast" id="toast"></div>
 
 <script>
+// Todo POST/PUT/DELETE nosso leva o token CSRF. Antes isso dependia de
+// cada chamada lembrar de mandar Content-Type: application/json — quando
+// esquecia, o _check_csrf devolvia 403 e o front so dizia "erro de
+// conexao". Centralizar aqui impede que o bug volte em chamada nova.
+(function(){
+  var _fetch = window.fetch;
+  var TOKEN = '{{ csrf_token() }}';
+  window.fetch = function(url, opts){
+    opts = opts || {};
+    var metodo = (opts.method || 'GET').toUpperCase();
+    var externa = typeof url === 'string' && /^https?:\/\//i.test(url);
+    if (!externa && metodo !== 'GET' && metodo !== 'HEAD') {
+      if (opts.headers instanceof Headers) {
+        opts.headers.set('X-CSRF-Token', TOKEN);
+      } else {
+        opts.headers = Object.assign({}, opts.headers || {},
+                                     {'X-CSRF-Token': TOKEN});
+      }
+    }
+    return _fetch.call(this, url, opts);
+  };
+})();
 let allUsers = [];
 
 // ── Tabs ──

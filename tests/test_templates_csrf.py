@@ -68,6 +68,20 @@ def test_fetch_post_declara_json(nome, caminho):
         f"Adicione headers:{{'Content-Type':'application/json'}}.")
 
 
+@pytest.mark.parametrize('nome', ['config.html', 'dashboard.html',
+                                  'admin.html'])
+def test_wrapper_de_csrf_presente(nome):
+    """Rede de seguranca: todo POST leva X-CSRF-Token mesmo se a chamada
+    esquecer o Content-Type."""
+    with open(os.path.join(TEMPLATES, nome), encoding='utf-8') as f:
+        conteudo = f.read()
+    assert 'X-CSRF-Token' in conteudo, (
+        f'{nome}: sem o wrapper de fetch, qualquer POST novo que esqueca '
+        f'o Content-Type volta a tomar 403 em silencio.')
+    assert '{{ csrf_token() }}' in conteudo, (
+        f'{nome}: o wrapper existe mas nao injeta o token real.')
+
+
 def test_webhook_e_isento_de_csrf():
     """O webhook da Unipile chega de fora, sem sessao nem token."""
     with open(os.path.join(RAIZ, 'app.py'), encoding='utf-8') as f:
