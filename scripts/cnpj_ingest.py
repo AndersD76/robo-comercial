@@ -15,18 +15,29 @@ Fonte: https://arquivos.receitafederal.gov.br/dados/cnpj/dados_abertos_cnpj/
 
 Filtros aplicados:
   - situação cadastral ativa (02)
-  - UF em RS, SC, PR
-  - CNAE principal na lista CNAE_B2B (~50 CNAEs, ver pseo_data.py)
   - apenas matriz (identificador 1) — evita duplicar filiais por cnpj_basico
+  - UF: default RS,SC,PR — use --ufs '*' para o Brasil inteiro
+  - CNAE: default os 54 B2B — use --todos-cnaes para qualquer atividade
+  - --so-com-contato descarta quem não tem telefone nem email
+
+Tamanho estimado (medido na base real de 2026-06):
+  3 UF, 54 CNAE                    ~261 mil linhas   ~0,3 GB
+  Brasil, 54 CNAE                  ~930 mil linhas   ~0,9 GB
+  Brasil, todos CNAE               ~8,1 mi linhas    ~8,1 GB
+  Brasil, todos CNAE, com contato  ~5,3 mi linhas    ~5,3 GB  <- recomendado
+
+O robô cruza o lead da web com esta tabela pelo TELEFONE, então linha sem
+contato nenhum nunca casa — daí o --so-com-contato cortar ~41% sem perda.
 
 Uso:
   # Teste local end-to-end com ~200 empresas sintéticas (sem download):
   python scripts/cnpj_ingest.py --sample
   #   -> usa DATABASE_URL se definido; senão cria pseo_dev.sqlite (só p/ teste)
 
-  # Ingestão real (ATENÇÃO: download de ~6-8 GB, horas de execução):
-  DATABASE_URL=postgresql://... python scripts/cnpj_ingest.py
-  python scripts/cnpj_ingest.py --month 2026-06 --dir /tmp/cnpj --keep
+  # Ingestão real (ATENÇÃO: horas de execução; o gargalo é a subida)
+  # Usa os zips que já estão em --dir; só baixa o que faltar.
+  DATABASE_URL=postgresql://... python scripts/cnpj_ingest.py \
+      --dir E:/cnpj --keep --ufs '*' --todos-cnaes --so-com-contato
 
 Idempotente: INSERT ... ON CONFLICT (cnpj_basico) DO NOTHING.
 """
@@ -373,6 +384,15 @@ def run_real(db, args):
 
     municipios = load_municipios(session, month, args.dir, args.keep)
     ufs = set(u.strip().upper() for u in args.ufs.split(','))
+    todas_ufs = '*' in ufs or 'BR' in ufs
+    if todas_ufs:
+        print('[filtro] Brasil inteiro')
+    else:
+        print(f'[filtro] UFs: {", ".join(sorted(ufs))}')
+    print(f'[filtro] CNAEs: '
+          f'{"todos" if args.todos_cnaes else f"{len(CNAE_CODIGOS)} B2B"}')
+    if args.so_com_contato:
+        print('[filtro] so quem tem telefone ou email')
 
     # Pass 1 — Estabelecimentos: filtra e insere (razão social vem depois)
     inseridos = 0
@@ -387,12 +407,21 @@ def run_real(db, args):
                 continue
             if row[E_SITUACAO].strip() != '02':
                 continue
-            if row[E_UF].strip().upper() not in ufs:
+            if not todas_ufs and row[E_UF].strip().upper() not in ufs:
                 continue
             cnae = row[E_CNAE_PRINCIPAL].strip()
-            if cnae not in CNAE_CODIGOS:
+            if not args.todos_cnaes and cnae not in CNAE_CODIGOS:
                 continue
             if row[E_MATRIZ_FILIAL].strip() != '1':   # só matriz
+                continue
+            tel1 = limpar_telefone(
+                row[E_DDD_1] if len(row) > E_DDD_1 else '',
+                row[E_TELEFONE_1] if len(row) > E_TELEFONE_1 else '')
+            tel2 = limpar_telefone(
+                row[E_DDD_2] if len(row) > E_DDD_2 else '',
+                row[E_TELEFONE_2] if len(row) > E_TELEFONE_2 else '')
+            mail = limpar_email(row[E_EMAIL] if len(row) > E_EMAIL else '')
+            if args.so_com_contato and not (tel1 or tel2 or mail):
                 continue
             cb = row[E_CNPJ_BASICO].strip()
             batch.append((
@@ -407,13 +436,7 @@ def run_real(db, args):
                 None,                                   # porte no pass 2
                 parse_data_abertura(row[E_DATA_INICIO]),
                 row[E_SITUACAO].strip(),
-                limpar_telefone(row[E_DDD_1] if len(row) > E_DDD_1 else '',
-                                row[E_TELEFONE_1]
-                                if len(row) > E_TELEFONE_1 else ''),
-                limpar_telefone(row[E_DDD_2] if len(row) > E_DDD_2 else '',
-                                row[E_TELEFONE_2]
-                                if len(row) > E_TELEFONE_2 else ''),
-                limpar_email(row[E_EMAIL] if len(row) > E_EMAIL else ''),
+                tel1, tel2, mail,
             ))
             cnpjs.add(cb)
             if len(batch) >= BATCH:
@@ -521,7 +544,16 @@ def main():
     ap.add_argument('--dir', default=os.path.join(os.path.expanduser('~'), 'cnpj_dados'),
                     help='diretório de download dos zips')
     ap.add_argument('--keep', action='store_true', help='não apagar os zips após processar')
-    ap.add_argument('--ufs', default=','.join(UFS_INGEST), help='UFs (default RS,SC,PR)')
+    ap.add_argument('--ufs', default=','.join(UFS_INGEST),
+                    help="UFs separadas por virgula, ou '*' para o Brasil "
+                         "inteiro (default RS,SC,PR)")
+    ap.add_argument('--todos-cnaes', action='store_true',
+                    help='ignora a lista de 54 CNAEs B2B e aceita qualquer '
+                         'atividade (a base fica ~9x maior)')
+    ap.add_argument('--so-com-contato', action='store_true',
+                    help='descarta quem nao tem telefone nem email; o '
+                         'cruzamento casa por telefone, entao o resto e '
+                         'peso morto (corta ~35%%)')
     ap.add_argument('--sqlite', help='caminho do SQLite (só com --sample, sem DATABASE_URL)')
     args = ap.parse_args()
 
