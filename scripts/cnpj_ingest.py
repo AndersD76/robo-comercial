@@ -463,6 +463,10 @@ def run_real(db, args):
                 db.insert_batch(batch)
                 inseridos += len(batch)
                 batch = []
+                # Estabelecimentos0.zip tem 29 milhoes de linhas: sem sinal
+                # de vida durante a varredura, parece que travou
+                print(f'[est] {name}: {lidos:,} linhas lidas, '
+                      f'{inseridos:,} inseridos...', flush=True)
         db.insert_batch(batch)
         inseridos += len(batch)
         print(f'[est] {name}: {lidos} linhas lidas, {inseridos} inseridos acumulados')
