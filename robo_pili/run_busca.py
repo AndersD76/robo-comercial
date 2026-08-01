@@ -191,6 +191,51 @@ def _gerar_palavras_concorrente(descricao: str) -> list:
     return unicas
 
 
+def get_estados_atuacao(schema: str) -> list:
+    """UFs que o cliente marcou. Vazio = Brasil todo."""
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute('SELECT estados_atuacao FROM bot_config '
+                  'ORDER BY id DESC LIMIT 1')
+        row = c.fetchone()
+        conn.close()
+        if row and row['estados_atuacao']:
+            ufs = row['estados_atuacao']
+            if isinstance(ufs, str):
+                ufs = json.loads(ufs)
+            return [str(u).upper().strip() for u in ufs if str(u).strip()]
+    except Exception as e:
+        print(f'[run_busca] erro ao ler estados_atuacao: {e}', flush=True)
+    return []
+
+
+def get_exigir_cnpj(schema: str) -> bool:
+    """Cliente pediu para so aceitar lead com CNPJ identificado."""
+    try:
+        conn = _conn(schema)
+        c = conn.cursor()
+        c.execute('SELECT exigir_cnpj FROM bot_config '
+                  'ORDER BY id DESC LIMIT 1')
+        row = c.fetchone()
+        conn.close()
+        return bool(row and row.get('exigir_cnpj'))
+    except Exception:
+        return False
+
+
+def _fora_dos_estados(lead, estados):
+    """True se o lead e de um estado que o cliente nao escolheu.
+
+    So descarta quando a UF foi realmente detectada — sem UF nao da para
+    provar que esta fora, e descartar mataria metade dos leads bons.
+    """
+    if not estados:
+        return False
+    uf = (lead.get('estado') or '').upper().strip()
+    return bool(uf) and uf not in estados
+
+
 def get_evitar(schema: str) -> list:
     """Palavras que denunciam concorrente do cliente, não lead."""
     try:
@@ -833,7 +878,8 @@ def _resultado_para_empresa(r):
 
 async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
                       palavras_concorrente: list = None,
-                      evitar: list = None) -> tuple:
+                      evitar: list = None, estados: list = None,
+                      exigir_cnpj: bool = False) -> tuple:
     """Um ciclo de busca. Retorna (qtd_leads_salvos, termo_usado)."""
 
     termo = random.choice(termos)
@@ -888,6 +934,14 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
         if _e_concorrente(lead, evitar,
                           r.get('titulo', '') + ' ' + r.get('snippet', '')):
             print(f'[{schema}]   ✗ Skip (mesmo ramo do cliente): '
+                  f'{lead.get("nome_fantasia", dominio)}', flush=True)
+            continue
+
+        # Antes so os termos citavam as cidades escolhidas; nada impedia o
+        # buscador de devolver empresa de outro estado.
+        if _fora_dos_estados(lead, estados):
+            print(f'[{schema}]   ✗ Skip ({lead.get("estado")} fora dos '
+                  f'estados escolhidos): '
                   f'{lead.get("nome_fantasia", dominio)}', flush=True)
             continue
 
@@ -954,12 +1008,15 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
             print(f'[{schema}]   ⚠ Erro scrape {lead["website"]}: {e}', flush=True)
 
         # EXIGE telefone E email — sem os dois não serve
-        if not lead.get('telefone') or not lead.get('email'):
+        if (not lead.get('telefone') or not lead.get('email')
+                or (exigir_cnpj and not lead.get('cnpj'))):
             falta = []
             if not lead.get('telefone'):
                 falta.append('tel')
             if not lead.get('email'):
                 falta.append('email')
+            if exigir_cnpj and not lead.get('cnpj'):
+                falta.append('CNPJ')
             print(f'[{schema}]   ✗ Descartado (sem {"+".join(falta)}): {lead.get("nome_fantasia", "")}', flush=True)
             continue
 
@@ -1071,6 +1128,13 @@ async def main_loop(schema: str):
     palavras_conc = _gerar_palavras_concorrente(descricao)
     if palavras_conc:
         print(f'[{schema}] Filtro concorrentes: {len(palavras_conc)} palavras-chave do produto', flush=True)
+    estados_ok = get_estados_atuacao(schema)
+    if estados_ok:
+        print(f'[{schema}] Estados escolhidos: {", ".join(estados_ok)}',
+              flush=True)
+    exigir_cnpj = get_exigir_cnpj(schema)
+    if exigir_cnpj:
+        print(f'[{schema}] So aceita lead com CNPJ identificado', flush=True)
     evitar = get_evitar(schema)
     if evitar:
         print(f'[{schema}] Ramo do cliente (nao prospectar): '
@@ -1114,7 +1178,8 @@ async def main_loop(schema: str):
         termo_usado = None
         try:
             resultado = await ciclo_busca(schema, buscador, termos_ativos,
-                                          palavras_conc, evitar)
+                                          palavras_conc, evitar, estados_ok,
+                                          exigir_cnpj)
             if isinstance(resultado, tuple):
                 salvos, termo_usado = resultado
             else:

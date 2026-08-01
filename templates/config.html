@@ -221,6 +221,12 @@
       <button class="btn-gen" style="font-size:11px;padding:5px 10px" onclick="toggleAllEstados(true)">Selecionar todos</button>
       <button class="btn-gen" style="font-size:11px;padding:5px 10px" onclick="toggleAllEstados(false)">Limpar</button>
     </div>
+    <label class="uf-check" style="display:inline-flex;margin-bottom:14px">
+      <input type="checkbox" id="exigir_cnpj" {% if cfg.exigir_cnpj %}checked{% endif %}>
+      Só aceitar leads com CNPJ identificado
+    </label>
+    <div style="display:none">
+    </div>
     <div class="estados-grid" id="estados-grid">
       <div class="regiao-group">
         <div class="regiao-label" onclick="toggleRegiao('sul')">Sul</div>
@@ -718,6 +724,7 @@ async function saveConfig(redirect) {
       descricao: document.getElementById('descricao').value,
       termos_busca: Array.isArray(terms) ? terms.filter(Boolean) : [],
       estados_atuacao: getEstadosSelecionados(),
+      exigir_cnpj: (document.getElementById("exigir_cnpj")||{}).checked||false,
       msg_inicial: document.getElementById('msg_inicial').value,
       email_assunto_padrao: document.getElementById('email_assunto_padrao').value,
       email_html_template: document.getElementById('email_html_template').value,

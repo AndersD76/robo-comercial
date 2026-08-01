@@ -282,10 +282,32 @@ _init_public_schema_safe()
 # DB HELPERS
 # =============================================================================
 
+try:
+    from zoneinfo import ZoneInfo as _ZoneInfo
+    _TZ_BR = _ZoneInfo('America/Sao_Paulo')
+except Exception:                       # tzdata ausente no container
+    _TZ_BR = _dt.timezone(_dt.timedelta(hours=-3))
+
+
+def _para_horario_brasil(v):
+    """O servidor roda em UTC; a tela mostrava 3h a mais que o relogio.
+
+    As colunas sao TIMESTAMP sem fuso e o NOW() grava UTC, entao aqui o
+    valor e lido como UTC e convertido para o horario de Brasilia.
+    """
+    if v.tzinfo is None:
+        v = v.replace(tzinfo=_dt.timezone.utc)
+    return v.astimezone(_TZ_BR).strftime('%Y-%m-%d %H:%M:%S')
+
+
 def _serialize_row(row: dict) -> dict:
     """Converte datetime e outros tipos não-serializáveis para string."""
     for k, v in row.items():
-        if v is not None and not isinstance(v, (str, int, float, bool, list, dict)):
+        if v is None:
+            continue
+        if isinstance(v, _dt.datetime):
+            row[k] = _para_horario_brasil(v)
+        elif not isinstance(v, (str, int, float, bool, list, dict)):
             row[k] = str(v)
     return row
 
@@ -493,6 +515,7 @@ def _init_user_schema(schema: str):
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_verificado BOOLEAN DEFAULT FALSE",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS segmentos_evitar JSONB DEFAULT '[]'",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS exigir_cnpj BOOLEAN DEFAULT FALSE",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS unipile_account_id TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS unipile_email TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_metodo TEXT DEFAULT 'global'",
@@ -5099,6 +5122,7 @@ def api_save_config(bot):
     descricao = data.get('descricao', '')
     termos = data.get('termos_busca') or None  # None = não alterar
     estados_atuacao = data.get('estados_atuacao') or []
+    exigir_cnpj = bool(data.get('exigir_cnpj'))
     li_email = data.get('linkedin_email', '')
     li_password = data.get('linkedin_password', '')
     li_cargos = data.get('linkedin_cargos') or []
@@ -5145,6 +5169,7 @@ def api_save_config(bot):
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_password TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS smtp_verificado BOOLEAN DEFAULT FALSE",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS segmentos_evitar JSONB DEFAULT '[]'",
+            "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS exigir_cnpj BOOLEAN DEFAULT FALSE",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS unipile_account_id TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS unipile_email TEXT",
             "ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_metodo TEXT DEFAULT 'global'",
@@ -5194,6 +5219,7 @@ def api_save_config(bot):
                          resend_api_key=%s,
                          smtp_host=%s, smtp_port=%s,
                          smtp_user=%s, smtp_password=%s,
+                         exigir_cnpj=%s,
                          smtp_verificado=%s,
                          serper_api_key=%s, brave_api_key=%s,
                          google_cse_key=%s, google_cse_cx=%s,
@@ -5213,6 +5239,7 @@ def api_save_config(bot):
                       smtp_port or exists.get('smtp_port') or 587,
                       smtp_user or exists.get('smtp_user'),
                       _encrypt_field(smtp_password) if smtp_password else exists.get('smtp_password'),
+                      exigir_cnpj,
                       # trocou email ou senha -> precisa testar de novo
                       (bool(exists.get('smtp_verificado'))
                        and not smtp_password
@@ -5738,10 +5765,46 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str, estados_selec
             estados.extend(ESTADOS_POR_REGIAO.get(reg, []))
         estados = list(dict.fromkeys(estados))
 
+    # Cidade -> UF. Sem isso, escolher só PR trazia cidade de SC e RS,
+    # porque as cidades vinham da REGIÃO inteira e não dos estados marcados.
+    CIDADE_UF = {
+        'Curitiba': 'PR', 'Londrina': 'PR', 'Maringa': 'PR',
+        'Cascavel': 'PR', 'Ponta Grossa': 'PR', 'Guarapuava': 'PR',
+        'Toledo': 'PR', 'Francisco Beltrao': 'PR',
+        'Florianopolis': 'SC', 'Chapeco': 'SC', 'Joinville': 'SC',
+        'Blumenau': 'SC',
+        'Porto Alegre': 'RS', 'Caxias do Sul': 'RS', 'Passo Fundo': 'RS',
+        'Novo Hamburgo': 'RS', 'Santa Maria': 'RS', 'Pelotas': 'RS',
+        'Goiania': 'GO', 'Anapolis': 'GO', 'Rio Verde': 'GO',
+        'Itumbiara': 'GO', 'Brasilia': 'DF',
+        'Campo Grande': 'MS', 'Dourados': 'MS',
+        'Cuiaba': 'MT', 'Rondonopolis': 'MT', 'Sinop': 'MT',
+        'Lucas do Rio Verde': 'MT', 'Sorriso': 'MT',
+        'Primavera do Leste': 'MT',
+        'Sao Paulo': 'SP', 'Campinas': 'SP', 'Ribeirao Preto': 'SP',
+        'Sorocaba': 'SP', 'Sao Jose dos Campos': 'SP', 'Piracicaba': 'SP',
+        'Jundiai': 'SP', 'Bauru': 'SP', 'Franca': 'SP',
+        'Belo Horizonte': 'MG', 'Uberlandia': 'MG', 'Uberaba': 'MG',
+        'Juiz de Fora': 'MG',
+        'Rio de Janeiro': 'RJ', 'Vitoria': 'ES',
+        'Salvador': 'BA', 'Feira de Santana': 'BA', 'Barreiras': 'BA',
+        'Recife': 'PE', 'Petrolina': 'PE', 'Fortaleza': 'CE',
+        'Sao Luis': 'MA', 'Natal': 'RN', 'Joao Pessoa': 'PB',
+        'Aracaju': 'SE', 'Maceio': 'AL', 'Teresina': 'PI',
+        'Manaus': 'AM', 'Belem': 'PA', 'Porto Velho': 'RO',
+        'Palmas': 'TO', 'Macapa': 'AP',
+    }
+
     cidades = []
     for reg in regioes_match:
         cidades.extend(TODAS_CIDADES.get(reg, []))
     cidades = list(dict.fromkeys(cidades))
+    if estados_selecionados:
+        ufs_alvo = set(estados_selecionados)
+        cidades = [c for c in cidades if CIDADE_UF.get(c) in ufs_alvo]
+    # a UF entra no termo: "autopecas Curitiba PR" acha menos empresa de fora
+    cidades = [f'{c} {CIDADE_UF[c]}' if c in CIDADE_UF else c
+               for c in cidades]
 
     # ── 3. Extrair CARGOS ──
     cargos = []
