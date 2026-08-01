@@ -2944,7 +2944,7 @@ async function enriquecerTodos(){
   for(let i=0;i<leads.length;i++){
     btn.innerHTML=`<i class="fa fa-spinner fa-spin"></i> ${i+1}/${leads.length}`;
     try{
-      const r=await fetch(`/api/${BOT}/lead/${leads[i].id}/enriquecer`,{method:'POST'});
+      const r=await fetch(`/api/${BOT}/lead/${leads[i].id}/enriquecer`,{method:'POST',headers:{'Content-Type':'application/json'}});
       const d=await r.json();
       if(d.ok) ok++; else err++;
     }catch(e){err++;}
@@ -2966,7 +2966,7 @@ async function requalificarTodos(){
   for(let i=0;i<alvo.length;i++){
     btn.innerHTML=`<i class="fa fa-spinner fa-spin"></i> ${i+1}/${alvo.length}`;
     try{
-      const r=await fetch(`/api/${BOT}/lead/${alvo[i].id}/requalificar`,{method:'POST'});
+      const r=await fetch(`/api/${BOT}/lead/${alvo[i].id}/requalificar`,{method:'POST',headers:{'Content-Type':'application/json'}});
       const d=await r.json();
       const p=d.passos||{};
       if(p.enriquecimento&&p.enriquecimento.ok) enriquecidos++;
@@ -2986,7 +2986,7 @@ async function requalificarLead(id){
   const btn=event.target.closest('button');
   btn.disabled=true;btn.innerHTML='<i class="fa fa-spinner fa-spin"></i> Requalificando...';
   try{
-    const r=await fetch(`/api/${BOT}/lead/${id}/requalificar`,{method:'POST'});
+    const r=await fetch(`/api/${BOT}/lead/${id}/requalificar`,{method:'POST',headers:{'Content-Type':'application/json'}});
     const d=await r.json();
     const lr=await fetch(`/api/${BOT}/leads`);
     _waAllLeads=await lr.json();
@@ -3005,7 +3005,7 @@ async function buscarRedesDecisor(id){
   const btn=event.target.closest('button');
   btn.disabled=true;btn.innerHTML='<i class="fa fa-spinner fa-spin"></i> Buscando...';
   try{
-    const r=await fetch(`/api/${BOT}/lead/${id}/redes-decisor`,{method:'POST'});
+    const r=await fetch(`/api/${BOT}/lead/${id}/redes-decisor`,{method:'POST',headers:{'Content-Type':'application/json'}});
     const d=await r.json();
     if(d.ok){
       const lr=await fetch(`/api/${BOT}/leads`);
@@ -3020,7 +3020,7 @@ async function enriquecerLead(id){
   const btn=event.target.closest('button');
   btn.disabled=true;btn.innerHTML='<i class="fa fa-spinner fa-spin"></i>';
   try{
-    const r=await fetch(`/api/${BOT}/lead/${id}/enriquecer`,{method:'POST'});
+    const r=await fetch(`/api/${BOT}/lead/${id}/enriquecer`,{method:'POST',headers:{'Content-Type':'application/json'}});
     const d=await r.json();
     if(d.ok){
       btn.innerHTML='<i class="fa fa-check"></i> Enriquecido';

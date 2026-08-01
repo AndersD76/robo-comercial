@@ -852,7 +852,7 @@ async function configurarEmail(){
     // (Hostinger, Locaweb, servidor proprio) — sem DNS e sem senha aqui.
     if(UNIPILE){
       box.innerHTML='<div class="info-box"><i class="fa fa-spinner fa-spin"></i> Abrindo a conexão segura...</div>'
-      const rc=await fetch(`/api/${BOT}/config/email/conectar`,{method:'POST'})
+      const rc=await fetch(`/api/${BOT}/config/email/conectar`,{method:'POST',headers:{'Content-Type':'application/json'}})
       const dc=await rc.json()
       if(dc.ok&&dc.url){location.href=dc.url;return}
       box.innerHTML='<div class="info-box"><span style="color:#fbbf24">'
@@ -912,7 +912,7 @@ async function configurarEmail(){
 async function desconectarEmail(){
   if(!confirm('Desconectar sua conta? As campanhas voltam a sair pelo TurboVenda com as respostas indo para o seu email.'))return
   try{
-    const r=await fetch(`/api/${BOT}/config/email/desconectar`,{method:'POST'})
+    const r=await fetch(`/api/${BOT}/config/email/desconectar`,{method:'POST',headers:{'Content-Type':'application/json'}})
     const d=await r.json()
     if(d.ok){location.reload()}else{showToast(d.error||'Erro ao desconectar',false)}
   }catch(e){showToast('Erro de conexão',false)}
@@ -923,7 +923,7 @@ async function verificarDominio(){
   const st=document.getElementById('dns-status')
   if(st)st.innerHTML='<i class="fa fa-spinner fa-spin"></i> verificando...'
   try{
-    const r=await fetch(`/api/${BOT}/config/dominio/verificar`,{method:'POST'})
+    const r=await fetch(`/api/${BOT}/config/dominio/verificar`,{method:'POST',headers:{'Content-Type':'application/json'}})
     const d=await r.json()
     if(d.ok&&d.verificado){
       if(st)st.innerHTML='<span style="color:#22c55e"><i class="fa fa-circle-check"></i> Verificado! Suas campanhas já saem do seu domínio.</span>'

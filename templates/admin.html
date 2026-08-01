@@ -417,7 +417,7 @@ async function toggleAtivo(id, current) {
   const action = current ? 'desativar' : 'ativar';
   if (!confirm(`Deseja ${action} o usuário #${id}?`)) return;
   try {
-    const r = await fetch(`/admin/api/users/${id}/toggle`, {method:'POST'});
+    const r = await fetch(`/admin/api/users/${id}/toggle`, {method:'POST',headers:{'Content-Type':'application/json'}});
     const d = await r.json();
     if (d.ok) { toast(`Usuário ${action}do com sucesso`); loadUsers(); loadStats(); }
     else toast(d.error || 'Erro', 'error');
@@ -487,7 +487,7 @@ function showUserDetails(id) {
 async function impersonate(id) {
   if (!confirm(`Logar como usuário #${id}? Você será redirecionado ao dashboard dele.`)) return;
   try {
-    const r = await fetch(`/admin/api/users/${id}/impersonate`, {method:'POST'});
+    const r = await fetch(`/admin/api/users/${id}/impersonate`, {method:'POST',headers:{'Content-Type':'application/json'}});
     const d = await r.json();
     if (d.ok) window.location.href = '/dashboard';
     else toast(d.error || 'Erro', 'error');
