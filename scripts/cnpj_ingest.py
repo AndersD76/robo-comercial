@@ -126,6 +126,11 @@ INDEXES = [
     # o robo busca por CNAE+UF entre quem tem contato
     'CREATE INDEX IF NOT EXISTS idx_emp_pub_contato ON empresas_publicas (uf, cnae_principal) '
     'WHERE telefone IS NOT NULL OR email IS NOT NULL',
+    # o cruzamento do robo casa o lead da web pelo telefone
+    'CREATE INDEX IF NOT EXISTS idx_emp_pub_tel ON empresas_publicas (telefone) '
+    'WHERE telefone IS NOT NULL',
+    'CREATE INDEX IF NOT EXISTS idx_emp_pub_tel2 ON empresas_publicas (telefone2) '
+    'WHERE telefone2 IS NOT NULL',
 ]
 
 

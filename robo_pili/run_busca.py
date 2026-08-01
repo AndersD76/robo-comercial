@@ -210,6 +210,92 @@ def get_estados_atuacao(schema: str) -> list:
     return []
 
 
+def _tel_canonico(valor):
+    """Mesmo formato que a ingestao grava: (DD) NNNNNNNN."""
+    d = re.sub(r'\D', '', str(valor or ''))
+    if d.startswith('55') and len(d) > 11:
+        d = d[2:]
+    if len(d) == 11 and d[2] == '9':      # celular: a base costuma ter 8
+        return [f'({d[:2]}) {d[2:]}', f'({d[:2]}) {d[3:]}']
+    if len(d) in (10, 11):
+        return [f'({d[:2]}) {d[2:]}']
+    return []
+
+
+def validar_na_receita(lead):
+    """Cruza o lead achado na web com a base da Receita.
+
+    A web descobre a empresa, mas o nome vem do titulo da pagina e o CNPJ
+    pode ser qualquer numero no rodape. Aqui trocamos isso por dado
+    oficial: razao social, CNPJ valido, UF, municipio e CNAE.
+
+    Casa por CNPJ, senao por telefone (chave bem mais confiavel que nome).
+    Devolve dict com o que achou, ou {} se nao identificou.
+    """
+    try:
+        conn = psycopg2.connect(
+            DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+    except Exception as e:
+        print(f'[receita] sem conexao: {e}', flush=True)
+        return {}
+    try:
+        c = conn.cursor()
+        row = None
+
+        cnpj_d = re.sub(r'\D', '', lead.get('cnpj') or '')
+        if len(cnpj_d) == 14:
+            c.execute('SELECT * FROM public.empresas_publicas '
+                      'WHERE cnpj_basico = %s', (cnpj_d[:8],))
+            row = c.fetchone()
+
+        if not row:
+            variantes = []
+            for campo in ('telefone', 'whatsapp'):
+                variantes.extend(_tel_canonico(lead.get(campo)))
+            if variantes:
+                c.execute(
+                    'SELECT * FROM public.empresas_publicas '
+                    'WHERE telefone = ANY(%s) OR telefone2 = ANY(%s) '
+                    'LIMIT 1', (variantes, variantes))
+                row = c.fetchone()
+        return dict(row) if row else {}
+    except Exception as e:
+        print(f'[receita] erro na consulta: {e}', flush=True)
+        return {}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def aplicar_dados_receita(lead, oficial):
+    """Sobrepoe o que veio da web com o dado oficial."""
+    if not oficial:
+        return lead, False
+    cb = (oficial.get('cnpj_basico') or '').strip()
+    if cb and len(cb) == 8 and not lead.get('cnpj'):
+        # a Receita indexa por raiz; a ordem/DV ficam para o enriquecimento
+        lead['cnpj_raiz'] = cb
+    nome_oficial = (oficial.get('nome_fantasia')
+                    or oficial.get('razao_social') or '').strip()
+    if nome_oficial:
+        lead['razao_social'] = (oficial.get('razao_social') or '').strip()
+        # o nome da web vem do <title>; o oficial e melhor
+        lead['nome_fantasia'] = nome_oficial.title()
+    for origem, destino in (('uf', 'estado'), ('municipio', 'cidade')):
+        v = (oficial.get(origem) or '').strip()
+        if v:
+            lead[destino] = v
+    if oficial.get('cnae_principal'):
+        lead['segmento'] = str(oficial['cnae_principal']).strip()
+    if not lead.get('email') and oficial.get('email'):
+        lead['email'] = oficial['email']
+    if not lead.get('telefone') and oficial.get('telefone'):
+        lead['telefone'] = oficial['telefone']
+    return lead, True
+
+
 def get_exigir_cnpj(schema: str) -> bool:
     """Cliente pediu para so aceitar lead com CNPJ identificado."""
     try:
@@ -1006,6 +1092,22 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
             contatos = {'telefones': [], 'emails': [], 'cnpj': None, 'decisores': []}
         except Exception as e:
             print(f'[{schema}]   ⚠ Erro scrape {lead["website"]}: {e}', flush=True)
+
+        # Cruza com a Receita: a web descobriu a empresa, aqui o dado vira
+        # oficial (razao social no lugar do titulo da pagina, CNPJ valido,
+        # UF e municipio reais). Roda antes do filtro de estado para que
+        # ele decida sobre a UF verdadeira, nao sobre a adivinhada.
+        oficial = validar_na_receita(lead)
+        lead, casou = aplicar_dados_receita(lead, oficial)
+        if casou:
+            print(f'[{schema}]   ✓ Receita: {lead.get("nome_fantasia")} '
+                  f'({lead.get("estado")}/{lead.get("cidade")})', flush=True)
+
+        if _fora_dos_estados(lead, estados):
+            print(f'[{schema}]   ✗ Skip ({lead.get("estado")} fora dos '
+                  f'estados, confirmado na Receita): '
+                  f'{lead.get("nome_fantasia")}', flush=True)
+            continue
 
         # EXIGE telefone E email — sem os dois não serve
         if (not lead.get('telefone') or not lead.get('email')
