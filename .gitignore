@@ -36,3 +36,7 @@ _ul-*
 
 # pSEO dev (SQLite de teste local)
 pseo_dev.sqlite
+
+# ensaio local da ingestao
+ensaio_cnpj.sqlite
+pseo_dev.sqlite

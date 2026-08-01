@@ -276,7 +276,9 @@ def _open_db(args):
     if dsn:
         print('[db] Postgres via DATABASE_URL')
         return PgDB(dsn)
-    if args.sample:
+    if args.sample or args.sqlite:
+        # --sqlite explicito tambem serve para ensaiar a ingestao real contra
+        # os zips locais, sem tocar no banco de producao
         path = args.sqlite or os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'pseo_dev.sqlite')
         print(f'[db] DATABASE_URL ausente — fallback SQLite (SÓ TESTE): {path}')
@@ -374,11 +376,23 @@ def load_municipios(session, month, dest_dir, keep):
 
 def run_real(db, args):
     session = _http()
-    month = args.month or latest_month_folder(session)
+    if args.offline:
+        month = args.month or 'local'
+        zips_locais = sorted(n for n in os.listdir(args.dir)
+                             if n.endswith('.zip'))
+        if not zips_locais:
+            raise SystemExit(f'Nenhum .zip encontrado em {args.dir}')
+        print(f'[offline] {len(zips_locais)} zips em {args.dir}')
+    else:
+        month = args.month or latest_month_folder(session)
     print(f'[ingest] pasta do mês: {month}')
-    zips = list_zip_names(session, month)
+    zips = zips_locais if args.offline else list_zip_names(session, month)
     est_zips = [z for z in zips if z.startswith('Estabelecimentos')]
     emp_zips = [z for z in zips if z.startswith('Empresas')]
+    if args.max_zips:
+        est_zips = est_zips[:args.max_zips]
+        emp_zips = emp_zips[:args.max_zips]
+        print(f'[ensaio] limitado a {args.max_zips} zip(s) de cada tipo')
     if not est_zips or not emp_zips:
         raise RuntimeError(f'Zips não encontrados em {month}: {zips[:10]}')
 
@@ -547,6 +561,13 @@ def main():
     ap.add_argument('--ufs', default=','.join(UFS_INGEST),
                     help="UFs separadas por virgula, ou '*' para o Brasil "
                          "inteiro (default RS,SC,PR)")
+    ap.add_argument('--max-zips', type=int, default=0,
+                    help='processa so os N primeiros zips de cada tipo; '
+                         'serve para ensaiar o pipeline inteiro sem varrer '
+                         'os 20 GB descompactados')
+    ap.add_argument('--offline', action='store_true',
+                    help='usa so os zips ja presentes em --dir, sem consultar '
+                         'o site da Receita (util quando ja se baixou tudo)')
     ap.add_argument('--todos-cnaes', action='store_true',
                     help='ignora a lista de 54 CNAEs B2B e aceita qualquer '
                          'atividade (a base fica ~9x maior)')
