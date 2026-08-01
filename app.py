@@ -4177,9 +4177,29 @@ def _resend_admin():
 # exigir app OAuth nosso e sem depender de porta SMTP, que o Railway bloqueia.
 # =============================================================================
 
-_UNIPILE_KEY = os.environ.get('UNIPILE_API_KEY', '')
-# a Unipile da um host proprio por conta, ex: https://api8.unipile.com:13843
-_UNIPILE_DSN = os.environ.get('UNIPILE_DSN', '').rstrip('/')
+_UNIPILE_KEY = os.environ.get('UNIPILE_API_KEY', '').strip()
+
+
+def _normalizar_dsn(valor):
+    """Reduz o DSN a esquema://host:porta.
+
+    O painel mostra o host sem esquema (api16.unipile.com:14622) e a
+    documentacao mostra URLs completas, entao o valor colado costuma vir
+    com caminho junto — o que gerava /api/v1/accounts/api/v1/hosted/...
+    """
+    valor = (valor or '').strip().rstrip('/')
+    if not valor:
+        return ''
+    if '//' not in valor:
+        valor = 'https://' + valor
+    p = _urlparse(valor)
+    if not p.netloc:
+        return ''
+    return f'{p.scheme or "https"}://{p.netloc}'
+
+
+# a Unipile da um host proprio por conta, ex: https://api16.unipile.com:14622
+_UNIPILE_DSN = _normalizar_dsn(os.environ.get('UNIPILE_DSN', ''))
 
 
 def _unipile_ativo():
