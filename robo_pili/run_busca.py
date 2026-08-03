@@ -1203,11 +1203,14 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
                         'SELECT 1 FROM contatos WHERE empresa_id=%s '
                         'AND decisor=1 LIMIT 1', (empresa_id,))
                     if not _k.fetchone():
+                        # sem a coluna "fonte": ela veio de migracao e
+                        # falta em 6 dos 11 schemas, e o INSERT quebraria
+                        # so para esses clientes, sem ninguem perceber
                         _k.execute(
                             'INSERT INTO contatos (empresa_id, nome, cargo, '
-                            'decisor, fonte) VALUES (%s,%s,%s,1,%s)',
+                            'decisor) VALUES (%s,%s,%s,1)',
                             (empresa_id, lead['decisor_nome'],
-                             lead.get('decisor_cargo') or 'Sócio', 'receita'))
+                             lead.get('decisor_cargo') or 'Sócio'))
                         _c.commit()
                         print(f'[{schema}]     👤 {lead["decisor_nome"]} — '
                               f'{lead.get("decisor_cargo")} (Receita)',
