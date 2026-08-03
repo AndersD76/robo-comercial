@@ -72,6 +72,25 @@ E_DDD_2 = 23
 E_TELEFONE_2 = 24
 E_EMAIL = 27
 
+# Posições no CSV Socios (layout oficial). ATENCAO: nao conferido contra
+# arquivo real ainda — o usuario nao baixou Socios*.zip. Validar na
+# primeira ingestao (o script imprime uma amostra).
+S_CNPJ_BASICO = 0
+S_IDENTIFICADOR = 1       # 1=PJ 2=PF 3=estrangeiro
+S_NOME = 2
+S_QUALIFICACAO = 4        # 49=socio-administrador, 05=administrador...
+
+# Quem decide a compra, do mais senior para o menos
+QUALIFICACAO_PRIORIDADE = {
+    '16': (1, 'Presidente'),
+    '10': (2, 'Diretor'),
+    '05': (3, 'Administrador'),
+    '49': (4, 'Socio-Administrador'),
+    '08': (5, 'Conselheiro de Administracao'),
+    '22': (6, 'Socio'),
+    '65': (7, 'Titular'),
+}
+
 # Posições no CSV Empresas
 EMP_CNPJ_BASICO = 0
 EMP_RAZAO_SOCIAL = 1
@@ -119,7 +138,9 @@ CREATE TABLE IF NOT EXISTS empresas_publicas (
     situacao       TEXT,
     telefone       TEXT,
     telefone2      TEXT,
-    email          TEXT
+    email          TEXT,
+    socio_nome     TEXT,
+    socio_cargo    TEXT
 )"""
 
 # quem ja rodou a ingestao antes nao tem essas colunas
@@ -127,6 +148,8 @@ MIGRACOES = [
     'ALTER TABLE empresas_publicas ADD COLUMN IF NOT EXISTS telefone TEXT',
     'ALTER TABLE empresas_publicas ADD COLUMN IF NOT EXISTS telefone2 TEXT',
     'ALTER TABLE empresas_publicas ADD COLUMN IF NOT EXISTS email TEXT',
+    'ALTER TABLE empresas_publicas ADD COLUMN IF NOT EXISTS socio_nome TEXT',
+    'ALTER TABLE empresas_publicas ADD COLUMN IF NOT EXISTS socio_cargo TEXT',
 ]
 
 DDL_SQLITE = DDL_PG.replace('DATE', 'TEXT')
@@ -224,6 +247,23 @@ class PgDB:
             self.conn.commit()
         self._exec_with_retry(_do)
 
+    def update_socio_batch(self, rows):
+        """rows: (cnpj_basico, nome, cargo). So grava se estiver vazio ou
+        se o novo cargo for mais senior — a ordem dos arquivos e arbitraria."""
+        if not rows:
+            return
+        def _do():
+            with self.conn.cursor() as c:
+                self._extras.execute_values(
+                    c,
+                    'UPDATE empresas_publicas AS e '
+                    'SET socio_nome = v.nome, socio_cargo = v.cargo '
+                    'FROM (VALUES %s) AS v(cb, nome, cargo) '
+                    'WHERE e.cnpj_basico = v.cb AND e.socio_nome IS NULL',
+                    rows)
+            self.conn.commit()
+        self._exec_with_retry(_do)
+
     def count(self):
         def _do():
             with self.conn.cursor() as c:
@@ -258,6 +298,13 @@ class SqliteDB:
             'nome_fantasia, municipio, uf, bairro, cnae_principal, porte, '
             'data_abertura, situacao, telefone, telefone2, email) '
             'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)', rows)
+        self.conn.commit()
+
+    def update_socio_batch(self, rows):
+        self.conn.executemany(
+            'UPDATE empresas_publicas SET socio_nome=?, socio_cargo=? '
+            'WHERE cnpj_basico=? AND socio_nome IS NULL',
+            [(n, q, cb) for cb, n, q in rows])
         self.conn.commit()
 
     def update_razao_batch(self, rows):
@@ -395,9 +442,11 @@ def run_real(db, args):
     zips = zips_locais if args.offline else list_zip_names(session, month)
     est_zips = [z for z in zips if z.startswith('Estabelecimentos')]
     emp_zips = [z for z in zips if z.startswith('Empresas')]
+    soc_zips = [z for z in zips if z.startswith('Socios')]
     if args.max_zips:
         est_zips = est_zips[:args.max_zips]
         emp_zips = emp_zips[:args.max_zips]
+        soc_zips = soc_zips[:args.max_zips]
         print(f'[ensaio] limitado a {args.max_zips} zip(s) de cada tipo')
     if not est_zips or not emp_zips:
         raise RuntimeError(f'Zips não encontrados em {month}: {zips[:10]}')
@@ -496,8 +545,47 @@ def run_real(db, args):
         if not args.keep:
             os.remove(path)
 
+    # Pass 3 — Socios: nome de quem decide a compra
+    socios_ok = 0
+    if not soc_zips:
+        print('[soc] Socios*.zip ausente — sem nome de decisor. '
+              'Baixe os arquivos Socios0..9.zip para preencher.')
+    for name in soc_zips:
+        path = download(session, month, name, args.dir)
+        batch = []
+        melhor = {}          # cnpj_basico -> (prioridade, nome, cargo)
+        amostra = 0
+        for row in iter_csv_rows(path):
+            if len(row) <= S_QUALIFICACAO:
+                continue
+            cb = row[S_CNPJ_BASICO].strip()
+            if cb not in cnpjs:
+                continue
+            if row[S_IDENTIFICADOR].strip() != '2':   # so pessoa fisica
+                continue
+            nome = row[S_NOME].strip().title()
+            if not nome or len(nome) < 5:
+                continue
+            qual = row[S_QUALIFICACAO].strip().zfill(2)
+            prio, cargo = QUALIFICACAO_PRIORIDADE.get(qual, (99, 'Socio'))
+            if prio == 99:
+                continue
+            if amostra < 3:
+                print(f'[soc] amostra: {nome} | qualificacao={qual} -> {cargo}')
+                amostra += 1
+            atual = melhor.get(cb)
+            if not atual or prio < atual[0]:
+                melhor[cb] = (prio, nome, cargo)
+        batch = [(cb, v[1], v[2]) for cb, v in melhor.items()]
+        for i in range(0, len(batch), BATCH):
+            db.update_socio_batch(batch[i:i + BATCH])
+        socios_ok += len(batch)
+        print(f'[soc] {name}: {socios_ok} decisores acumulados')
+        if not args.keep:
+            os.remove(path)
+
     print(f'[done] inseridos={inseridos} razoes_atualizadas={atualizados} '
-          f'total_tabela={db.count()}')
+          f'socios={socios_ok} total_tabela={db.count()}')
 
 
 # ---------------------------------------------------------------------------

@@ -222,6 +222,53 @@ def _tel_canonico(valor):
     return []
 
 
+# Palavras que nao identificam empresa nenhuma: termo societario, generico
+# de ramo, e o lixo de titulo de pagina ("Termos de Uso", "Fale Conosco").
+_PALAVRAS_VAZIAS = (
+    'ltda', 'epp', 'eireli', 'mei', 'cia', 'sociedade', 'individual',
+    'associacao', 'servicos', 'servico', 'comercio', 'industria',
+    'transportes', 'consultoria', 'assessoria', 'empresa', 'empresas',
+    'grupo', 'centro', 'brasil', 'brasileira', 'nacional',
+    'termos', 'termo', 'privacidade', 'politica', 'home', 'inicial',
+    'inicio', 'contato', 'contatos', 'fale', 'conosco', 'quem', 'somos',
+    'sobre', 'institucional', 'produtos', 'solucoes', 'blog', 'noticias',
+    'trabalhe', 'localizacao', 'cookies', 'login', 'orcamento',
+    'atendimento', 'pagina', 'site', 'oficial', 'bem', 'vindo',
+)
+
+
+def _tokens_nome(valor):
+    """Palavras significativas do nome, sem acento nem termo societario."""
+    t = _sem_acento(str(valor or '')).lower()
+    t = re.sub(r'&[a-z]+;', ' ', t)          # &gt; e afins vindos do HTML
+    t = re.sub(r'[^a-z0-9 ]', ' ', t)
+    return {p for p in t.split()
+            if len(p) >= 4 and p not in _PALAVRAS_VAZIAS}
+
+
+def _nome_confere(nome_web, oficial):
+    """O nome oficial tem a ver com o que a web trouxe?
+
+    O telefone acha o candidato, mas sozinho ja colocou
+    "Signo Assessoria Contabil" como "Trma Manutencao". Exigir uma palavra
+    significativa em comum barra esse tipo de troca. Quando o nome da web
+    e so lixo ("Termos de Uso"), nao ha o que conferir e aceitamos — e
+    justamente o caso em que mais precisamos do dado oficial.
+    """
+    web = _tokens_nome(nome_web)
+    if not web:
+        return True
+    alvo = _tokens_nome(oficial.get('razao_social')) | \
+        _tokens_nome(oficial.get('nome_fantasia'))
+    if not alvo:
+        return True
+    if web & alvo:
+        return True
+    # "AndersTech" x "ANDERS CONSULTORIA": uma comeca com a outra
+    return any(a.startswith(w) or w.startswith(a)
+               for w in web for a in alvo if min(len(w), len(a)) >= 5)
+
+
 def validar_na_receita(lead):
     """Cruza o lead achado na web com a base da Receita.
 
@@ -253,11 +300,27 @@ def validar_na_receita(lead):
             for campo in ('telefone', 'whatsapp'):
                 variantes.extend(_tel_canonico(lead.get(campo)))
             if variantes:
+                # Busca DUAS: 23% dos telefones da Receita sao de contador
+                # ou despachante e aparecem em varias empresas (um deles em
+                # 8.783). Nesse caso o numero nao identifica ninguem, e
+                # aceitar a primeira sobrescreveria um lead bom com dado de
+                # outra empresa. So vale quando o telefone e unico.
                 c.execute(
                     'SELECT * FROM public.empresas_publicas '
                     'WHERE telefone = ANY(%s) OR telefone2 = ANY(%s) '
-                    'LIMIT 1', (variantes, variantes))
-                row = c.fetchone()
+                    'LIMIT 2', (variantes, variantes))
+                achados = c.fetchall()
+                if len(achados) == 1:
+                    cand = dict(achados[0])
+                    if _nome_confere(lead.get('nome_fantasia'), cand):
+                        row = cand
+                    else:
+                        print('[receita] nome nao confere, ignorando: '
+                              f'{lead.get("nome_fantasia")} x '
+                              f'{cand.get("razao_social")}', flush=True)
+                elif len(achados) > 1:
+                    print('[receita] telefone compartilhado, ignorando: '
+                          f'{lead.get("nome_fantasia")}', flush=True)
         return dict(row) if row else {}
     except Exception as e:
         print(f'[receita] erro na consulta: {e}', flush=True)
@@ -289,6 +352,11 @@ def aplicar_dados_receita(lead, oficial):
             lead[destino] = v
     if oficial.get('cnae_principal'):
         lead['segmento'] = str(oficial['cnae_principal']).strip()
+    # Decisor oficial: o socio-administrador vale mais que qualquer nome
+    # raspado do site, porque e quem assina a compra.
+    if oficial.get('socio_nome'):
+        lead['decisor_nome'] = oficial['socio_nome']
+        lead['decisor_cargo'] = oficial.get('socio_cargo') or 'Sócio'
     if not lead.get('email') and oficial.get('email'):
         lead['email'] = oficial['email']
     if not lead.get('telefone') and oficial.get('telefone'):
@@ -1125,6 +1193,28 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
         empresa_id = salvar_empresa(schema, lead)
         if empresa_id:
             salvos += 1
+            # Socio da Receita entra como decisor: e quem assina a compra,
+            # e vale mais que qualquer nome raspado da pagina "Equipe".
+            if lead.get('decisor_nome'):
+                try:
+                    _c = _conn(schema)
+                    _k = _c.cursor()
+                    _k.execute(
+                        'SELECT 1 FROM contatos WHERE empresa_id=%s '
+                        'AND decisor=1 LIMIT 1', (empresa_id,))
+                    if not _k.fetchone():
+                        _k.execute(
+                            'INSERT INTO contatos (empresa_id, nome, cargo, '
+                            'decisor, fonte) VALUES (%s,%s,%s,1,%s)',
+                            (empresa_id, lead['decisor_nome'],
+                             lead.get('decisor_cargo') or 'Sócio', 'receita'))
+                        _c.commit()
+                        print(f'[{schema}]     👤 {lead["decisor_nome"]} — '
+                              f'{lead.get("decisor_cargo")} (Receita)',
+                              flush=True)
+                    _c.close()
+                except Exception as e:
+                    print(f'[{schema}]     ⚠ decisor: {e}', flush=True)
             nome = lead.get('nome_fantasia') or lead.get('website') or 'Lead'
             score = lead.get('score', 0)
             partes = ['TEL', 'EMAIL']
