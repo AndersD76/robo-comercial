@@ -611,6 +611,25 @@
 
     </div>
 
+    {% if worker_receita and not worker_receita.ativo %}
+    <div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);
+                border-radius:12px;padding:14px 18px;margin-bottom:16px;
+                font-size:13px;line-height:1.6;color:#fcd34d">
+      <i class="fa fa-triangle-exclamation"></i>
+      <strong>Enriquecimento pela Receita Federal está parado.</strong>
+      {% if worker_receita.nunca_rodou %}
+        O programa que completa CNPJ, razão social e nome do sócio nunca foi executado.
+      {% else %}
+        Sem sinal há {{ worker_receita.horas }}h.
+        {% if worker_receita.erro %}Último erro: <code>{{ worker_receita.erro }}</code>{% endif %}
+      {% endif %}
+      <div style="margin-top:6px;color:#94a3b8">
+        Os leads continuam sendo encontrados normalmente — apenas não recebem
+        os dados oficiais. Verifique se o computador com a base está ligado.
+      </div>
+    </div>
+    {% endif %}
+
     <div class="kpi-row">
       <div class="kpi-box">
         <div class="kpi-n" id="kpi-leads">{{ stats.total_leads }}</div>

@@ -2711,6 +2711,7 @@ def dashboard():
     schema = user['schema_name']
     stats = get_stats(schema)
     return render_template('dashboard.html',
+                           worker_receita=_status_worker_receita(),
                            bot=schema,
                            user=user,
                            stats=stats,
@@ -3878,6 +3879,40 @@ def _detect_smtp(email: str) -> tuple:
     if 'google' in domain:
         return ('smtp.gmail.com', 587)
     return (f'smtp.{domain}', 587)
+
+
+def _status_worker_receita():
+    """O worker que enriquece com a Receita deu sinal de vida?
+
+    Ele roda no PC do operador (a base do Brasil inteiro nao cabe no Neon
+    de forma economica). Se parar, ninguem percebe — os leads so deixam
+    silenciosamente de ganhar CNPJ e decisor. Daí o aviso na tela.
+    """
+    try:
+        with _conn() as conn:
+            with conn.cursor() as c:
+                c.execute("SELECT to_regclass('public.worker_receita') t")
+                if not c.fetchone()['t']:
+                    return {'ativo': False, 'nunca_rodou': True}
+                c.execute("""SELECT ultima_execucao, leads_enriquecidos,
+                                    indice_linhas, detalhe,
+                                    EXTRACT(EPOCH FROM (NOW() - ultima_execucao))/3600 AS horas
+                             FROM public.worker_receita WHERE id = 1""")
+                r = c.fetchone()
+        if not r or not r['ultima_execucao']:
+            return {'ativo': False, 'nunca_rodou': True}
+        horas = float(r['horas'] or 0)
+        return {
+            'ativo': horas < 6,            # roda a cada 15 min; 6h é folga
+            'nunca_rodou': False,
+            'horas': int(horas),
+            'enriquecidos': r['leads_enriquecidos'] or 0,
+            'indice_linhas': r['indice_linhas'] or 0,
+            'erro': (r['detalhe'] or '')[:200],
+        }
+    except Exception:
+        logger.exception('falha ao ler status do worker')
+        return {'ativo': False, 'nunca_rodou': True}
 
 
 def _get_email_config(schema: str) -> dict:
