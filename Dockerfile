@@ -7,9 +7,10 @@ WORKDIR /app
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Xvfb (display virtual) + x11vnc + noVNC + nginx (reverse proxy)
+# tini como PID 1: recolhe os processos dos robôs que morrem (o sh não recolhe)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        xvfb x11vnc novnc websockify nginx && \
+        xvfb x11vnc novnc websockify nginx tini && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Instala dependências Python
@@ -33,4 +34,5 @@ RUN chmod +x /app/start.sh
 
 EXPOSE 8080
 
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/app/start.sh"]

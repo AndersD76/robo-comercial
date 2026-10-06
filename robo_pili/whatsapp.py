@@ -217,12 +217,15 @@ class WhatsAppBot:
         return False
 
     async def fechar(self):
-        """Fecha browser"""
+        """Fecha browser (iniciar() reabre com a sessão salva)"""
         self.conectado = False
-        if self.context:
-            await self.context.close()
-        if self._pw:
-            await self._pw.stop()
+        try:
+            if self.context:
+                await self.context.close()
+            if self._pw:
+                await self._pw.stop()
+        finally:
+            self.context = self.page = self._pw = None
 
     # =========================================================================
     # ENVIO DE MENSAGEM

@@ -518,6 +518,24 @@ def _check_lead_limit_busca(schema: str) -> bool:
         return True
 
 
+def plano_vencido(schema: str) -> bool:
+    """Mesma regra do app: plano vencido não prospecta. Sem isso o robô de
+    um trial vencido rodava para sempre, gastando RAM e créditos do Serper."""
+    try:
+        conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+        try:
+            c = conn.cursor()
+            c.execute('SELECT plano_expira < NOW() AS vencido '
+                      'FROM public.users WHERE id = %s',
+                      (schema.replace('emp_', ''),))
+            row = c.fetchone()
+        finally:
+            conn.close()
+        return bool(row and row['vencido'])
+    except Exception:
+        return False
+
+
 def salvar_empresa(schema: str, dados: dict):
     # Verificar limite do plano
     if not _check_lead_limit_busca(schema):
@@ -1306,12 +1324,9 @@ async def main_loop(schema: str):
     print(f'[TurboVenda] Iniciando bot de busca — schema: {schema}', flush=True)
     print(f'{"="*60}\n', flush=True)
 
+    # Sem Chromium de saída: a busca usa Serper/HTTP e o buscador só abre o
+    # navegador quando eles falham (fechado de novo ao fim de cada ciclo)
     buscador = Buscador()
-    try:
-        await buscador.iniciar()
-    except Exception as e:
-        print(f'[{schema}] Erro ao iniciar navegador: {e}', flush=True)
-        print(f'[{schema}] Tentando modo HTTP...', flush=True)
 
     # Carrega Serper API key do banco
     if load_serper_key(schema):
@@ -1345,6 +1360,11 @@ async def main_loop(schema: str):
 
     while True:
         ciclo += 1
+        if plano_vencido(schema):
+            print(f'[{schema}] ⚠ Plano vencido. Robô encerrado — renove e inicie de novo.', flush=True)
+            log_db(schema, 'limite', 'Plano vencido: robô de busca encerrado')
+            await buscador.fechar()
+            return
         termos = get_termos(schema)
         if not termos:
             print(f'[{schema}] Nenhum termo configurado. Configure em /configurar', flush=True)
@@ -1383,6 +1403,12 @@ async def main_loop(schema: str):
             print(f'[{schema}] Erro no ciclo: {e}', flush=True)
             log_db(schema, 'erro', str(e))
             salvos = 0
+        finally:
+            # Não deixa o Chromium parado na RAM durante a espera
+            try:
+                await buscador.fechar()
+            except Exception:
+                pass
 
         if salvos == 0 and termo_usado:
             termo_sem_novos[termo_usado] = termo_sem_novos.get(termo_usado, 0) + 1

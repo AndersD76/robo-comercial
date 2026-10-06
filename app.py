@@ -12,8 +12,10 @@ import os
 import random
 import re
 import secrets
+import signal
 import subprocess
 import sys
+import time
 from urllib.parse import quote as _urlquote, urlparse as _urlparse
 import bcrypt
 from cryptography.fernet import Fernet, InvalidToken
@@ -182,6 +184,163 @@ except Exception as _pool_err:
 
 # Processos em background: {schema: {'busca': Popen, 'linkedin': Popen}}
 _procs: dict = {}
+_BOT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'robo_pili')
+_BOT_SCRIPTS = {'busca': 'run_busca.py', 'linkedin': 'run_linkedin.py',
+                'wa': 'run_full.py'}
+
+
+# _procs some quando o worker do gunicorn reinicia, mas os robôs continuam
+# rodando. O PID fica também em arquivo: sem isso o painel mostrava "parado",
+# o cliente clicava em iniciar de novo e um segundo Chromium ficava na RAM.
+def _bot_pid_path(schema: str, canal: str) -> str:
+    return os.path.join(_BOT_DIR, 'pids',
+                        f'{re.sub(r"[^A-Za-z0-9_]", "_", schema)}_{canal}.pid')
+
+
+def _estado_pid(pid: int):
+    """Estado do processo em /proc ('R', 'S', 'Z'...) ou None se não existe."""
+    try:
+        with open(f'/proc/{pid}/stat') as f:
+            return f.read().rsplit(')', 1)[1].split()[0]
+    except (OSError, IndexError):
+        return None
+
+
+def _bot_pid(schema: str, canal: str):
+    """PID do robô vivo, mesmo que outro worker o tenha iniciado."""
+    p = _procs.get(schema, {}).get(canal)
+    if p is not None:
+        return p.pid if p.poll() is None else None
+    try:
+        with open(_bot_pid_path(schema, canal)) as f:
+            pid = int(f.read().strip())
+        with open(f'/proc/{pid}/cmdline', 'rb') as f:
+            cmd = f.read().split(b'\0')
+    except (OSError, ValueError):
+        return None
+    # PID reaproveitado por outro processo, ou robô já morto (zumbi)
+    if (_BOT_SCRIPTS[canal].encode() not in cmd
+            or schema.encode() not in cmd
+            or _estado_pid(pid) in (None, 'Z')):
+        return None
+    return pid
+
+
+def _matar_chromium_orfao() -> int:
+    """O Playwright abre o Chromium num grupo de processos próprio. Se o
+    driver morre sem fechá-lo, o navegador fica pendurado no PID 1 segurando
+    centenas de MB de RAM — cobrados no Railway. Mata esses órfãos."""
+    if not os.path.isdir('/proc'):
+        return 0
+    mortos = 0
+    for d in os.listdir('/proc'):
+        if not d.isdigit():
+            continue
+        try:
+            with open(f'/proc/{d}/stat') as f:
+                ppid = int(f.read().rsplit(')', 1)[1].split()[1])
+            with open(f'/proc/{d}/cmdline', 'rb') as f:
+                exe = os.path.basename(f.read().split(b'\0')[0])
+        except (OSError, ValueError, IndexError):
+            continue
+        if ppid != 1 or exe not in (b'chrome', b'chromium', b'headless_shell'):
+            continue
+        for matar in (os.killpg, os.kill):
+            try:
+                matar(int(d), signal.SIGKILL)
+            except OSError:
+                pass
+        mortos += 1
+    if mortos:
+        logger.warning(f'{mortos} Chromium órfão(s) encerrado(s)')
+    return mortos
+
+
+_ultima_varredura = 0.0
+
+
+def _varrer_orfaos(intervalo: int = 600):
+    global _ultima_varredura
+    if time.time() - _ultima_varredura >= intervalo:
+        _ultima_varredura = time.time()
+        _matar_chromium_orfao()
+
+
+def _parar_bot(schema: str, canal: str) -> bool:
+    """Encerra o robô junto com o driver do Playwright e o x11vnc que ele
+    abriu (mesmo grupo de processos). Retorna se havia robô rodando."""
+    pid = _bot_pid(schema, canal)
+    proc = _procs.get(schema, {}).get(canal)
+    _procs.setdefault(schema, {})[canal] = None
+    try:
+        os.remove(_bot_pid_path(schema, canal))
+    except OSError:
+        pass
+    if pid is None:
+        return False
+    if not hasattr(os, 'killpg'):  # Windows (dev local)
+        if proc is not None:
+            proc.terminate()
+        return True
+    try:
+        os.killpg(pid, signal.SIGTERM)
+    except OSError:
+        pass
+    # Dá tempo do driver do Playwright fechar o Chromium direito
+    for _ in range(50):
+        if proc is not None:
+            if proc.poll() is not None:
+                break
+        elif _estado_pid(pid) in (None, 'Z'):
+            break
+        time.sleep(0.2)
+    try:
+        os.killpg(pid, signal.SIGKILL)
+    except OSError:
+        pass
+    if proc is not None:
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            pass
+    time.sleep(0.5)
+    _matar_chromium_orfao()
+    return True
+
+
+def _cortar_log(path: str, limite: int = 5 * 1024 * 1024,
+                manter: int = 1024 * 1024):
+    """Os logs dos robôs só crescem; acima do limite mantém só o final.
+    O robô escreve em modo append, então segue gravando no fim novo."""
+    try:
+        if os.path.getsize(path) <= limite:
+            return
+        with open(path, 'rb') as f:
+            f.seek(-manter, os.SEEK_END)
+            fim = f.read()
+        with open(path, 'wb') as f:
+            f.write(fim[fim.find(b'\n') + 1:])
+    except OSError:
+        pass
+
+
+def _ultimas_linhas(path: str, n: int) -> list:
+    """Últimas n linhas sem carregar o arquivo inteiro na memória."""
+    with open(path, 'rb') as f:
+        pos = f.seek(0, os.SEEK_END)
+        bloco = b''
+        while pos > 0 and bloco.count(b'\n') <= n:
+            passo = min(64 * 1024, pos)
+            pos -= passo
+            f.seek(pos)
+            bloco = f.read(passo) + bloco
+    return bloco.decode('utf-8', errors='replace').splitlines()[-n:]
+
+
+# Worker novo (deploy ou restart do gunicorn): limpa navegadores sem dono.
+# Só no Railway — em teste/dev local não mexe nos processos da máquina.
+if os.environ.get('RAILWAY_ENVIRONMENT_ID'):
+    _matar_chromium_orfao()
 
 # Inicializa tabelas globais ao importar (gunicorn não chama __main__)
 def _init_public_schema_safe():
@@ -996,8 +1155,7 @@ def _get_schema():
 
 
 def _proc_running(schema: str, canal: str) -> bool:
-    p = _procs.get(schema, {}).get(canal)
-    return p is not None and p.poll() is None
+    return _bot_pid(schema, canal) is not None
 
 
 # =============================================================================
@@ -2821,12 +2979,13 @@ def api_logs(bot):
 @login_required
 def api_bot_status(bot):
     schema = _get_schema()
+    _varrer_orfaos()
     wa_proc = _procs.get(schema, {}).get('wa')
-    wa_running = wa_proc is not None and wa_proc.poll() is None
     wa_exit = None
     if wa_proc is not None and wa_proc.poll() is not None:
         wa_exit = wa_proc.returncode
         _procs.setdefault(schema, {})['wa'] = None
+    wa_running = _proc_running(schema, 'wa')
     # Estado real do WhatsApp (não só se o processo está vivo)
     wa_real_status = None
     wa_detail = None
@@ -2881,22 +3040,29 @@ def api_bot_start(bot):
     if _proc_running(schema, canal):
         return jsonify({'status': 'already_running'})
 
-    base = os.path.dirname(os.path.abspath(__file__))
-    bot_dir = os.path.join(base, 'robo_pili')
-    scripts = {'busca': 'run_busca.py', 'linkedin': 'run_linkedin.py', 'wa': 'run_full.py'}
-    script = scripts[canal]
-    log_path = os.path.join(bot_dir, f'{canal}.log')
+    _matar_chromium_orfao()
+    log_path = os.path.join(_BOT_DIR, f'{canal}.log')
+    _cortar_log(log_path)
     log_file = open(log_path, 'a', encoding='utf-8')
     try:
         proc = subprocess.Popen(
-            [sys.executable, '-u', script, '--schema', schema],
-            cwd=bot_dir, stdout=log_file, stderr=subprocess.STDOUT,
+            [sys.executable, '-u', _BOT_SCRIPTS[canal], '--schema', schema],
+            cwd=_BOT_DIR, stdout=log_file, stderr=subprocess.STDOUT,
+            # Grupo próprio: o /stop derruba o robô e tudo o que ele abriu
+            start_new_session=True,
         )
     except Exception as e:
-        log_file.close()
         logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
+    finally:
+        log_file.close()  # o robô herdou o descritor; o worker não precisa
     _procs.setdefault(schema, {})
     _procs[schema][canal] = proc
+    try:
+        os.makedirs(os.path.dirname(_bot_pid_path(schema, canal)), exist_ok=True)
+        with open(_bot_pid_path(schema, canal), 'w') as f:
+            f.write(str(proc.pid))
+    except OSError:
+        logger.warning(f'Não gravou o PID do robô {canal} de {schema}')
     return jsonify({'status': 'started', 'pid': proc.pid, 'canal': canal})
 
 
@@ -2906,16 +3072,9 @@ def api_bot_stop(bot):
     schema = _get_schema()
     data = request.get_json(silent=True) or {}
     canal = data.get('canal', 'busca')
-    proc = _procs.get(schema, {}).get(canal)
-    was_running = False
-    if proc and proc.poll() is None:
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except Exception:
-            proc.kill()
-        was_running = True
-    _procs.setdefault(schema, {})[canal] = None
+    if canal not in _BOT_SCRIPTS:
+        return jsonify({'error': 'canal inválido (busca|linkedin|wa)'}), 400
+    was_running = _parar_bot(schema, canal)
     return jsonify({'status': 'stopped', 'canal': canal, 'was_running': was_running})
 
 
@@ -2923,13 +3082,13 @@ def api_bot_stop(bot):
 @login_required
 def api_bot_console(bot):
     canal = request.args.get('canal', 'busca')
-    n = request.args.get('n', 60, type=int)
-    base = os.path.dirname(os.path.abspath(__file__))
-    log_path = os.path.join(base, 'robo_pili', f'{canal}.log')
+    if canal not in _BOT_SCRIPTS:
+        return jsonify({'lines': []})
+    n = max(1, min(request.args.get('n', 60, type=int) or 60, 1000))
+    log_path = os.path.join(_BOT_DIR, f'{canal}.log')
     try:
-        with open(log_path, 'r', encoding='utf-8', errors='replace') as f:
-            lines = f.readlines()
-        return jsonify({'lines': [ln.rstrip('\n') for ln in lines[-n:]]})
+        _cortar_log(log_path)
+        return jsonify({'lines': _ultimas_linhas(log_path, n)})
     except FileNotFoundError:
         return jsonify({'lines': []})
     except Exception as e:

@@ -78,11 +78,14 @@ class Buscador:
         print("  [OK] Browser iniciado (Chrome)")
 
     async def fechar(self):
-        """Fecha browser"""
-        if self.browser:
-            await self.browser.close()
-        if self._pw:
-            await self._pw.stop()
+        """Fecha browser (buscar_leads reabre sozinho se precisar)"""
+        try:
+            if self.browser:
+                await self.browser.close()
+            if self._pw:
+                await self._pw.stop()
+        finally:
+            self.browser = self.context = self.page = self._pw = None
 
     # =========================================================================
     # BUSCA BING (motor principal)
@@ -828,6 +831,14 @@ class Buscador:
                     print(f"  [ERRO] {nome_motor}: {e}")
 
         # === FASE 3: Playwright se HTTP insuficiente ===
+        # O Chromium só abre aqui: aberto ele segura centenas de MB de RAM,
+        # e quem chama fecha com fechar() ao fim do ciclo.
+        if len(resultados) < 3 and not self.page:
+            try:
+                await self.iniciar()
+            except Exception as e:
+                print(f"  [ERRO] Playwright: {e}")
+                await self.fechar()
         if len(resultados) < 3 and self.page:
             print("  HTTP insuficiente - Playwright...")
 

@@ -2218,6 +2218,13 @@ function loadWaStats(){
         actionSt.textContent=d.wa_detail||'WhatsApp conectado';
         actionSt.style.color='#22c55e';
         stopQrPolling();
+      } else if(rs==='pausado'){
+        st.innerHTML='<i class="fa fa-moon" style="color:#94a3b8"></i> Pausado fora do horário';
+        st.style.color='#94a3b8';
+        btnStart.innerHTML='<i class="fab fa-whatsapp"></i> Pausado';
+        actionSt.textContent=d.wa_detail||'Reabre no próximo expediente';
+        actionSt.style.color='#94a3b8';
+        stopQrPolling();
       } else if(rs==='aguardando_qr'){
         st.innerHTML='<i class="fa fa-qrcode" style="color:#fbbf24"></i> Aguardando QR Code';
         st.style.color='#fbbf24';
@@ -2300,7 +2307,7 @@ function _checkWaAlive(btn){
       loadWaStats();
       // Se ainda não conectou de verdade, verificar de novo em 5s
       const rs=d.wa_status||'iniciando';
-      if(rs!=='conectado'){
+      if(rs!=='conectado'&&rs!=='pausado'){
         setTimeout(()=>_checkWaAlive(btn),5000);
       }
     }

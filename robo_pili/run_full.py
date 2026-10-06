@@ -14,6 +14,7 @@ import os
 import random
 import re
 import sys
+import time
 from datetime import datetime, timezone, timedelta
 
 if sys.platform == 'win32':
@@ -404,11 +405,13 @@ async def main(schema: str):
     print(f'[{schema}] ✓ WhatsApp conectado!', flush=True)
     log_acao('info', f'[{schema}] Bot iniciado')
 
-    # 7. Buscador
+    # 7. Buscador (só abre o Chromium quando Serper/HTTP falham)
     from buscador import Buscador
+    from run_busca import ciclo_busca, plano_vencido
+    from whatsapp import _write_wa_status
     buscador = Buscador()
-    buscador_pronto = False
     ciclo_num = 0
+    reabrir_wa_em = 0.0  # time.monotonic() da próxima tentativa de reabrir
 
     def _horario_comercial():
         agora = _agora()
@@ -421,17 +424,36 @@ async def main(schema: str):
             ciclo_num += 1
             comercial = _horario_comercial()
 
+            if ciclo_num % 12 == 1 and plano_vencido(schema):
+                print(f'[{schema} {_ts()}] ⚠ Plano vencido. Bot encerrado — renove e inicie de novo.', flush=True)
+                log_acao('erro', f'[{schema}] Plano vencido: bot encerrado')
+                break
+
+            # Fora do horário o WhatsApp não envia nada: fecha o navegador
+            # (centenas de MB de RAM) e reabre com a sessão salva no expediente
+            if not comercial and bot.conectado:
+                print(f'[{schema} {_ts()}] ℹ Fora do horário — WhatsApp fechado até o próximo expediente', flush=True)
+                await bot.fechar()
+                _write_wa_status('pausado', f'Fora do horário — reabre às {_cfg.HORARIO_INICIO}h do próximo dia útil')
+            elif comercial and not bot.conectado and time.monotonic() >= reabrir_wa_em:
+                print(f'[{schema} {_ts()}] ℹ Expediente começou — reabrindo WhatsApp', flush=True)
+                try:
+                    reaberto = await bot.iniciar()
+                except Exception as e:
+                    print(f'[{schema} {_ts()}] ✗ Reabrir WhatsApp: {e}', flush=True)
+                    reaberto = False
+                if not reaberto:
+                    await bot.fechar()
+                    reabrir_wa_em = time.monotonic() + 1800
+                    print(f'[{schema} {_ts()}] ⚠ WhatsApp não reconectou; nova tentativa em 30 min', flush=True)
+
             msgs_hoje = bot.msgs_enviadas_hoje if hasattr(bot, 'msgs_enviadas_hoje') else 0
             print(f'\n[{schema} {_ts()}] ━━━ Ciclo #{ciclo_num} | msgs hoje: {msgs_hoje} | comercial: {"sim" if comercial else "não"} ━━━', flush=True)
 
             # ── Prospecção (a cada 3 ciclos, 24/7) ──
             if ciclo_num % 3 == 1:
                 try:
-                    if not buscador_pronto:
-                        await buscador.iniciar()
-                        buscador_pronto = True
                     # Usa termos do usuário
-                    from run_busca import ciclo_busca
                     await asyncio.wait_for(
                         ciclo_busca(schema, buscador, _cfg.TERMOS_BUSCA),
                         timeout=480
@@ -440,9 +462,14 @@ async def main(schema: str):
                     print(f'[{schema} {_ts()}] ⚠ ciclo_busca timeout', flush=True)
                 except Exception as e:
                     print(f'[{schema} {_ts()}] ✗ ciclo_busca: {e}', flush=True)
+                finally:
+                    try:
+                        await buscador.fechar()
+                    except Exception:
+                        pass
 
-            # ── Mensagens WA (só horário comercial) ──
-            if comercial:
+            # ── Mensagens WA (só horário comercial, com WhatsApp aberto) ──
+            if comercial and bot.conectado:
                 # Respostas
                 try:
                     await asyncio.wait_for(
@@ -483,6 +510,8 @@ async def main(schema: str):
                     print(f'[{schema} {_ts()}] ⚠ ciclo_followup timeout', flush=True)
                 except Exception as e:
                     print(f'[{schema} {_ts()}] ✗ ciclo_followup: {e}', flush=True)
+            elif comercial:
+                print(f'[{schema} {_ts()}] ⚠ WhatsApp desconectado — só prospecção', flush=True)
             else:
                 print(f'[{schema} {_ts()}] ℹ Fora do horário ({_cfg.HORARIO_INICIO}h-{_cfg.HORARIO_FIM}h seg-sex) — só prospecção', flush=True)
 
@@ -496,8 +525,7 @@ async def main(schema: str):
         log_acao('erro', f'Erro fatal: {e}')
     finally:
         log_acao('info', f'[{schema}] Bot encerrado')
-        if buscador_pronto:
-            await buscador.fechar()
+        await buscador.fechar()
         await bot.fechar()
 
 
