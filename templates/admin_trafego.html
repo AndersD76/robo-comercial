@@ -80,7 +80,7 @@
     <div>
       <h2>Páginas mais vistas</h2>
       {% if d.paginas %}<table><thead><tr><th>Página</th><th style="text-align:right">Vistas</th><th style="text-align:right">Entradas</th></tr></thead><tbody>
-        {% for r in d.paginas %}<tr><td><a href="{{ r.path }}" target="_blank">{{ r.path }}</a></td><td class="n">{{ r.visitas }}</td><td class="n">{{ r.entradas }}</td></tr>{% endfor %}
+        {% for r in d.paginas %}<tr><td><a href="{{ r.path }}" target="_blank" rel="noopener">{{ r.path }}</a></td><td class="n">{{ r.visitas }}</td><td class="n">{{ r.entradas }}</td></tr>{% endfor %}
       </tbody></table>{% else %}<p class="vazio">Sem dados.</p>{% endif %}
     </div>
   </div>
