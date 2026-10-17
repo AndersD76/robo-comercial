@@ -57,6 +57,49 @@ UF_NOMES = {
 }
 
 
+# Artigo do nome do estado: "no Paraná", "na Bahia", "em Santa Catarina"
+_UF_ARTIGO = {'BA': 'a', 'PB': 'a', 'SC': '', 'SP': '', 'MG': '', 'PE': '',
+              'GO': '', 'AL': '', 'RO': '', 'RR': '', 'SE': ''}
+
+
+def no_uf(uf):
+    """'RS' -> 'no Rio Grande do Sul'; 'SC' -> 'em Santa Catarina'."""
+    art = _UF_ARTIGO.get(uf, 'o')
+    return f"{({'o': 'no', 'a': 'na'}.get(art, 'em'))} {UF_NOMES.get(uf, uf)}"
+
+
+def do_uf(uf):
+    """'RS' -> 'do Rio Grande do Sul'; 'SC' -> 'de Santa Catarina'."""
+    art = _UF_ARTIGO.get(uf, 'o')
+    return f"{({'o': 'do', 'a': 'da'}.get(art, 'de'))} {UF_NOMES.get(uf, uf)}"
+
+
+_MUNICIPIOS_IBGE = None
+_MINUSCULAS = {'da', 'das', 'de', 'do', 'dos', 'e', "d'"}
+
+
+def nome_municipio(municipio, uf):
+    """Nome para exibição. A Receita grava sem acento ("Jaragua Do Sul");
+    usa o nome oficial do IBGE (municipios_ibge.json) e, se não achar,
+    só corrige as preposições. Consultas ao banco usam o nome original."""
+    global _MUNICIPIOS_IBGE
+    if _MUNICIPIOS_IBGE is None:
+        import json
+        import os
+        caminho = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               'municipios_ibge.json')
+        try:
+            with open(caminho, encoding='utf-8') as f:
+                _MUNICIPIOS_IBGE = json.load(f)
+        except (OSError, ValueError):
+            _MUNICIPIOS_IBGE = {}
+    oficial = _MUNICIPIOS_IBGE.get(slugify(f'{municipio}-{uf}'))
+    if oficial:
+        return oficial
+    return ' '.join(p.lower() if i and p.lower() in _MINUSCULAS else p
+                    for i, p in enumerate(str(municipio).split()))
+
+
 # UFs cobertas na primeira fase da ingestão
 UFS_INGEST = ('RS', 'SC', 'PR')
 

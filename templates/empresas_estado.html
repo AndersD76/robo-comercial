@@ -2,7 +2,7 @@
 {% block conteudo %}
   <div class="crumbs"><a href="/">Home</a> › <a href="/empresas">Empresas</a> ›
     <a href="/empresas/{{ seg.slug }}">{{ seg.label }}</a> › {{ uf_nome }}</div>
-  <h1>{{ seg.label }} no {{ uf_nome }}: {{ destaques[0][0] }} empresas ativas</h1>
+  <h1>{{ seg.label }} {{ no_uf(uf) }}: {{ destaques[0][0] }} empresas ativas</h1>
   <p class="meta-line">Empresas de {{ seg.nome }} · CNAE {{ cnae_fmt }} · Fonte: dados abertos do CNPJ (Receita Federal)</p>
 
   <div class="destaques">
@@ -18,10 +18,10 @@
   <div class="cta-box">
     <p><strong>Quer os contatos dessas empresas?</strong><br>
        A IA do TurboVenda encontra telefone, e-mail e site e escreve a primeira mensagem.</p>
-    <a href="{{ cta_url }}" class="cta-btn" data-cta="pseo-estado">Prospectar no {{ uf }} — grátis</a>
+    <a href="{{ cta_url }}" class="cta-btn" data-cta="pseo-estado">Prospectar {{ no_uf(uf) }} — grátis</a>
   </div>
 
-  <h2>Ranking de cidades do {{ uf_nome }} <small>· {{ cidades|length }} municípios</small></h2>
+  <h2>Ranking de cidades {{ do_uf(uf) }} <small>· {{ cidades|length }} municípios</small></h2>
   <table class="dados">
     <thead><tr><th>#</th><th>Cidade</th><th style="text-align:right">Empresas</th></tr></thead>
     <tbody>
@@ -55,7 +55,7 @@
   {% endif %}
 
   {% if outros_segmentos %}
-  <h2>Outros segmentos no {{ uf_nome }}</h2>
+  <h2>Outros segmentos {{ no_uf(uf) }}</h2>
   <div class="grid">
     {% for o in outros_segmentos %}
     <a href="/empresas/{{ o.seg.slug }}/estado/{{ uf|lower }}"><span class="nome">{{ o.seg.label }}</span><span class="qtd">{{ o.total }}</span></a>

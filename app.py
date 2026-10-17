@@ -40,7 +40,8 @@ except ImportError:
     pass
 
 from pseo_data import (CNAE_B2B, CNAE_POR_CODIGO, CNAE_POR_SLUG,
-                       PORTE_LABELS, UF_NOMES, cnae_formatado, slugify)
+                       PORTE_LABELS, UF_NOMES, cnae_formatado, do_uf,
+                       no_uf, nome_municipio, slugify)
 
 app = Flask(__name__)
 logging.basicConfig(
@@ -129,6 +130,8 @@ def _check_csrf():
 
 
 app.jinja_env.globals['csrf_token'] = _csrf_token
+app.jinja_env.globals['no_uf'] = no_uf
+app.jinja_env.globals['do_uf'] = do_uf
 
 
 @app.before_request
@@ -2252,6 +2255,10 @@ def _static_sitemap_urls():
             f"https://www.turbovenda.com.br/para/{s['slug']}",
             rev, 'monthly', '0.8'
         ))
+    urls.append(('https://www.turbovenda.com.br/ferramentas', rev, 'monthly', '0.9'))
+    for f in FERRAMENTAS:
+        urls.append((f"https://www.turbovenda.com.br/ferramentas/{f['slug']}",
+                     rev, 'monthly', '0.9'))
     return urls
 
 
@@ -2592,11 +2599,14 @@ def _pseo_montar(rows, cidades_rows):
         if not info or not r['municipio'] or not r['uf']:
             continue
         mun_slug = slugify(f"{r['municipio']}-{r['uf']}")
+        # 'municipio' é o nome de exibição (com acento); consultas ao banco
+        # usam 'municipio_db', gravado como veio da Receita
         combo = {'cnae_slug': info['slug'], 'cnae': str(r['cnae']),
-                 'municipio': r['municipio'], 'uf': r['uf'],
+                 'municipio': nome_municipio(r['municipio'], r['uf']),
+                 'municipio_db': r['municipio'], 'uf': r['uf'],
                  'mun_slug': mun_slug, 'n': int(r['n'])}
         combos[(info['slug'], mun_slug)] = combo
-        cid = cidades.setdefault(mun_slug, {'municipio': r['municipio'],
+        cid = cidades.setdefault(mun_slug, {'municipio': combo['municipio'],
                                             'uf': r['uf'], 'total': 0})
         cid['total'] += combo['n']
         pc = por_cnae.setdefault(info['slug'], {'total': 0, 'cidades': []})
@@ -2704,12 +2714,11 @@ def _pseo_texto(seg, combo, stats, vizinhos):
         f"{seg['slug']}|{combo['mun_slug']}".encode()).hexdigest(), 16)
     mun, uf, n = combo['municipio'], combo['uf'], combo['n']
     nome, label = seg['nome'], seg['label']
-    uf_nome = UF_NOMES.get(uf, uf)
 
     intro = [
-        f"{mun} - {uf} concentra {n} empresas ativas de {nome}, segundo os dados abertos do CNPJ da Receita Federal. É um dos mercados mapeados pelo TurboVenda no {uf_nome} para quem vende produtos ou serviços a esse segmento e precisa de uma lista confiável para começar a prospectar.",
+        f"{mun} - {uf} concentra {n} empresas ativas de {nome}, segundo os dados abertos do CNPJ da Receita Federal. É um dos mercados mapeados pelo TurboVenda {no_uf(uf)} para quem vende produtos ou serviços a esse segmento e precisa de uma lista confiável para começar a prospectar.",
         f"Segundo os dados abertos do CNPJ da Receita Federal, existem {n} empresas ativas de {nome} em {mun} - {uf}. A lista completa abaixo vem da base oficial de CNPJs e traz razão social, bairro, porte e ano de abertura de cada uma delas.",
-        f"O mercado de {nome} em {mun} - {uf} soma {n} CNPJs ativos na base oficial da Receita Federal. Para quem prospecta {label.lower()}, é um território do {uf_nome} que merece entrar no radar do time comercial — a relação completa está na tabela abaixo.",
+        f"O mercado de {nome} em {mun} - {uf} soma {n} CNPJs ativos na base oficial da Receita Federal. Para quem prospecta {label.lower()}, é um território {do_uf(uf)} que merece entrar no radar do time comercial — a relação completa está na tabela abaixo.",
         f"Quem vende para {label.lower()} encontra em {mun} - {uf} um mercado com {n} empresas ativas, conforme os dados públicos do CNPJ da Receita Federal consolidados pelo TurboVenda — cada uma listada abaixo com bairro, porte e ano de abertura.",
     ]
     porte_txts = []
@@ -2852,6 +2861,7 @@ def pseo_cidade(cnae_slug, mun_slug):
         return _pseo_404()
     n = combo['n']
     mun, uf = combo['municipio'], combo['uf']
+    mun_db = combo['municipio_db']
     try:
         pagina = max(1, int(request.args.get('pagina', 1)))
     except (TypeError, ValueError):
@@ -2866,7 +2876,7 @@ def pseo_cidade(cnae_slug, mun_slug):
         "AND uf = %s AND situacao = '02' "
         "ORDER BY COALESCE(razao_social, nome_fantasia, cnpj_basico) "
         "LIMIT %s OFFSET %s",
-        (combo['cnae'], mun, uf, PSEO_PAGE_SIZE,
+        (combo['cnae'], mun_db, uf, PSEO_PAGE_SIZE,
          (pagina - 1) * PSEO_PAGE_SIZE))
     empresas = []
     for r in rows:
@@ -2879,7 +2889,7 @@ def pseo_cidade(cnae_slug, mun_slug):
             'ano': str(r['data_abertura'])[:4] if r['data_abertura'] else '—',
         })
 
-    stats = _pseo_stats(combo['cnae'], mun, uf)
+    stats = _pseo_stats(combo['cnae'], mun_db, uf)
     vizinhos = [c for c in agg['por_cnae'][cnae_slug]['cidades']
                 if c['mun_slug'] != mun_slug and c['uf'] == uf][:2]
     if len(vizinhos) < 2:
@@ -3052,7 +3062,7 @@ def pseo_estado(cnae_slug, uf):
     cnae_fmt = cnae_formatado(seg['codigo'])
 
     texto = [
-        f"O {uf_nome} tem {_fmt_n(n)} empresas ativas de {nome} (CNAE {cnae_fmt}), "
+        f"{no_uf(UF)[0].upper() + no_uf(UF)[1:]} há {_fmt_n(n)} empresas ativas de {nome} (CNAE {cnae_fmt}), "
         f"espalhadas por {len(cidades)} municípios, segundo os dados abertos do CNPJ "
         f"da Receita Federal. É o {rank}º estado do país nesse segmento, com "
         f"{_pct(n, total_br)}% das {_fmt_n(total_br)} empresas ativas do Brasil.",
@@ -3061,17 +3071,17 @@ def pseo_estado(cnae_slug, uf):
         + f": juntas, essas cidades somam {_pct(n_top3, n)}% do segmento no estado. "
         f"{len(com_pagina)} municípios têm 8 ou mais empresas e ganharam página "
         f"própria com a lista completa (razão social, bairro, porte e ano de abertura).",
-        f"Para prospectar {label.lower()} no {uf_nome}, comece pelas cidades do topo "
+        f"Para prospectar {label.lower()} {no_uf(UF)}, comece pelas cidades do topo "
         f"do ranking — mais empresas por visita e por campanha — e amplie o raio para "
         f"as vizinhas quando a lista esgotar. O TurboVenda transforma esses CNPJs em "
         f"leads com telefone, e-mail e site encontrados em fontes públicas.",
     ]
     faq = [
-        (f"Quantas empresas de {nome} existem no {uf_nome}?",
+        (f"Quantas empresas de {nome} existem {no_uf(UF)}?",
          f"Segundo os dados abertos do CNPJ da Receita Federal, são {_fmt_n(n)} "
          f"empresas ativas de {nome} (CNAE {cnae_fmt}) em {len(cidades)} municípios "
-         f"do {uf_nome}."),
-        (f"Qual cidade do {uf_nome} tem mais empresas de {nome}?",
+         f"{do_uf(UF)}."),
+        (f"Qual cidade {do_uf(UF)} tem mais empresas de {nome}?",
          f"{top3[0]['municipio']}, com {_fmt_n(top3[0]['n'])} empresas ativas"
          + (f", seguida de {top3[1]['municipio']} ({_fmt_n(top3[1]['n'])})"
             if len(top3) > 1 else '') + "."),
@@ -3102,8 +3112,8 @@ def pseo_estado(cnae_slug, uf):
                    (f'{_pct(n, total_br)}%', 'do total nacional')],
         outros_estados=outros_estados, outros_segmentos=outros_segmentos[:12],
         pseo_min=PSEO_MIN_EMPRESAS,
-        titulo=f"{label} no {uf_nome}: {_fmt_n(n)} empresas ativas | TurboVenda",
-        descricao=(f"{_fmt_n(n)} empresas ativas de {nome} no {uf_nome}, em "
+        titulo=f"{label} {no_uf(UF)}: {_fmt_n(n)} empresas ativas | TurboVenda",
+        descricao=(f"{_fmt_n(n)} empresas ativas de {nome} {no_uf(UF)}, em "
                    f"{len(cidades)} cidades. Ranking por município com dados "
                    f"abertos do CNPJ. Prospecte com IA grátis."),
         canonical=canonical,
@@ -3139,7 +3149,7 @@ def pseo_cidade_hub(mun_slug):
         texto.append(
             f"{mun} - {UF} tem {_fmt_n(total)} CNPJs ativos somando todas as "
             f"atividades, segundo os dados abertos da Receita Federal — é a "
-            f"{rank}ª cidade do {uf_nome} em número de empresas, entre "
+            f"{rank}ª cidade {do_uf(UF)} em número de empresas, entre "
             f"{len(ranking)} municípios.")
     texto.append(
         f"Nos segmentos B2B mapeados pelo TurboVenda, a cidade soma {_fmt_n(b2b)} "
@@ -3200,6 +3210,328 @@ def pseo_cidade_hub(mun_slug):
             (f"{mun} - {UF}", canonical)]), _ld_faq(faq)],
         cta_url=(f"/cadastro?utm_source=pseo&utm_medium=organic"
                  f"&utm_campaign=cidade-{mun_slug}"),
+        ga_id=GA_MEASUREMENT_ID)
+
+
+# =============================================================================
+# Ferramentas gratuitas (sem login) — porta de entrada de tráfego
+# =============================================================================
+
+def _ip_cliente():
+    """IP do visitante para limite de uso. Atrás do Railway + nginx o
+    remote_addr é o do proxy (todos os visitantes dividiriam o mesmo
+    limite); o IP real é o penúltimo do X-Forwarded-For — o último é o
+    do proxy do Railway, e os primeiros o próprio cliente pode forjar."""
+    xff = [p.strip() for p in request.headers.get('X-Forwarded-For', '').split(',')
+           if p.strip()]
+    return xff[-2] if len(xff) >= 2 else (request.remote_addr or 'local')
+
+
+FERRAMENTAS = [
+    {'slug': 'lista-de-empresas', 'nome': 'Lista de empresas por cidade e segmento',
+     'resumo': 'Quantas empresas de um segmento existem numa cidade ou estado, o porte, '
+               'a idade, os bairros e 10 nomes de exemplo — direto da base da Receita.'},
+    {'slug': 'gerador-de-mensagem-de-prospeccao', 'nome': 'Gerador de mensagem de prospecção',
+     'resumo': 'Descreva o que você vende e para quem: a IA escreve a primeira mensagem '
+               'de WhatsApp ou e-mail para abordar o cliente.'},
+    {'slug': 'calculadora-de-leads', 'nome': 'Calculadora de leads para bater a meta',
+     'resumo': 'Da meta de faturamento até quantos leads e contatos por dia você precisa, '
+               'com as suas próprias taxas de conversão.'},
+]
+
+
+def _ld_ferramenta(nome, url, desc):
+    return _ld({"@context": "https://schema.org", "@type": "WebApplication",
+                "name": nome, "url": url, "description": desc,
+                "applicationCategory": "BusinessApplication",
+                "operatingSystem": "Web", "inLanguage": "pt-BR",
+                "offers": {"@type": "Offer", "price": "0", "priceCurrency": "BRL"},
+                "publisher": {"@type": "Organization", "name": "TurboVenda",
+                              "url": f"{_PSEO_BASE}/"}})
+
+
+@app.route('/ferramentas')
+def ferramentas_hub():
+    canonical = f'{_PSEO_BASE}/ferramentas'
+    return render_template(
+        'ferramentas_hub.html', ferramentas=FERRAMENTAS,
+        titulo='Ferramentas grátis de prospecção B2B | TurboVenda',
+        descricao=('Ferramentas gratuitas, sem login: lista de empresas por cidade e '
+                   'segmento com dados da Receita, gerador de mensagem de prospecção '
+                   'com IA e calculadora de leads.'),
+        canonical=canonical,
+        ld_json=[_ld_breadcrumb([("Home", f"{_PSEO_BASE}/"),
+                                 ("Ferramentas", canonical)])],
+        ga_id=GA_MEASUREMENT_ID)
+
+
+def _lista_perfil(where, params):
+    """Perfil real do recorte (só contagens) a partir de empresas_publicas."""
+    hoje = _dt.date.today()
+    cortes = [(hoje - _dt.timedelta(days=d)).isoformat() for d in (365, 1826, 3652)]
+    r = _pseo_query(
+        "SELECT COUNT(*) AS n, "
+        "COUNT(*) FILTER (WHERE COALESCE(telefone, '') <> '') AS tel, "
+        "COUNT(*) FILTER (WHERE COALESCE(email, '') <> '') AS email, "
+        "COUNT(*) FILTER (WHERE porte = '01') AS me, "
+        "COUNT(*) FILTER (WHERE porte = '03') AS epp, "
+        "COUNT(*) FILTER (WHERE porte = '05') AS demais, "
+        "COUNT(*) FILTER (WHERE data_abertura >= %s) AS a1, "
+        "COUNT(*) FILTER (WHERE data_abertura >= %s) AS a5, "
+        "COUNT(*) FILTER (WHERE data_abertura < %s) AS a10 "
+        f"FROM empresas_publicas WHERE situacao = '02' AND {where}",
+        tuple(cortes) + tuple(params))
+    return {k: int(v or 0) for k, v in r[0].items()} if r else None
+
+
+def _lista_resultado(agg, seg, UF, cidade):
+    codigo = seg['codigo']
+    res = {'seg': seg, 'uf': UF, 'uf_nome': UF_NOMES[UF]}
+    if cidade:
+        alvo = slugify(f'{cidade}-{UF}')
+        combo = agg['combos'].get((seg['slug'], alvo))
+        if not combo:
+            parcial = slugify(cidade)
+            res['sugestoes'] = [
+                c for c in agg['por_cnae'].get(seg['slug'], {}).get('cidades', [])
+                if c['uf'] == UF and c['mun_slug'].startswith(parcial)][:8]
+            res['vazio'] = f'{cidade} - {UF}'
+            return res
+        where = 'cnae_principal = %s AND uf = %s AND municipio = %s'
+        params = (codigo, UF, combo['municipio_db'])
+        res.update(escopo=f"{combo['municipio']} - {UF}", n=combo['n'],
+                   pagina=(f"/empresas/{seg['slug']}/{combo['mun_slug']}"
+                           if combo['n'] >= PSEO_MIN_EMPRESAS else None))
+        res['bairros'] = _pseo_query(
+            "SELECT bairro, COUNT(*) AS n FROM empresas_publicas "
+            f"WHERE situacao = '02' AND {where} AND COALESCE(bairro, '') <> '' "
+            "GROUP BY bairro ORDER BY n DESC LIMIT 5", params)
+    else:
+        est = next((e for e in _pseo_estados_do_cnae(agg, seg['slug'])
+                    if e['uf'] == UF), None)
+        if not est:
+            res['vazio'] = UF_NOMES[UF]
+            return res
+        where = 'cnae_principal = %s AND uf = %s'
+        params = (codigo, UF)
+        res.update(escopo=UF_NOMES[UF], n=est['total'],
+                   top_cidades=est['cidades'][:10],
+                   pagina=(f"/empresas/{seg['slug']}/estado/{UF.lower()}"
+                           if _pseo_estado_ok(est) else None))
+    res['perfil'] = _lista_perfil(where, params)
+    # Nomes só onde a página pública do recorte já os mostraria (>= 8)
+    if res['n'] >= PSEO_MIN_EMPRESAS:
+        res['amostra'] = _pseo_query(
+            "SELECT razao_social, nome_fantasia, bairro, municipio, data_abertura "
+            f"FROM empresas_publicas WHERE situacao = '02' AND {where} "
+            "ORDER BY data_abertura DESC NULLS LAST LIMIT 10", params)
+        for e in res['amostra']:
+            d = str(e['data_abertura'] or '')
+            e['abertura'] = f'{d[5:7]}/{d[:4]}' if len(d) >= 7 else '—'
+    return res
+
+
+@app.route('/ferramentas/lista-de-empresas')
+@limiter.limit("40 per hour", key_func=_ip_cliente,
+               exempt_when=lambda: not request.args.get('segmento'))
+def ferramenta_lista():
+    agg = _pseo_agg()
+    seg_slug = request.args.get('segmento', '').strip()
+    UF = request.args.get('uf', '').strip().upper()
+    cidade = request.args.get('cidade', '').strip()[:60]
+    resultado, erro = None, None
+    if seg_slug:
+        seg = CNAE_POR_SLUG.get(seg_slug)
+        if not seg:
+            erro = 'Escolha um segmento da lista.'
+        elif UF not in UF_NOMES:
+            erro = 'Escolha o estado.'
+        else:
+            resultado = _lista_resultado(agg, seg, UF, cidade)
+    canonical = f'{_PSEO_BASE}/ferramentas/lista-de-empresas'
+    faq = [
+        ("De onde vêm os dados?",
+         "Dos dados abertos do CNPJ publicados pela Receita Federal: "
+         f"{_fmt_n(sum(agg['total_cidade'].values())) if agg['total_cidade'] else '6,7 milhões de'} "
+         "empresas ativas. A ferramenta mostra contagens e dados cadastrais públicos."),
+        ("A ferramenta é grátis mesmo?",
+         "Sim, sem login e sem cartão. Para receber a lista completa com telefone, "
+         "e-mail e site, e mensagens de abordagem escritas por IA, use o TurboVenda — "
+         "o plano grátis inclui 50 leads."),
+        ("Quais segmentos estão disponíveis?",
+         f"{len(CNAE_B2B)} segmentos B2B (indústria, atacado, transporte, TI, saúde, "
+         "construção e serviços), identificados pelo CNAE principal da empresa."),
+    ]
+    return render_template(
+        'ferramenta_lista.html', segmentos=sorted(CNAE_B2B, key=lambda s: s['label']),
+        ufs=sorted(UF_NOMES.items(), key=lambda kv: kv[1]),
+        sel={'segmento': seg_slug, 'uf': UF, 'cidade': cidade},
+        resultado=resultado, erro=erro, faq=faq, pct=_pct, fmt=_fmt_n,
+        porte_labels=PORTE_LABELS,
+        titulo='Lista de empresas por cidade e segmento (grátis) | TurboVenda',
+        descricao=('Consulte grátis quantas empresas de um segmento existem em uma '
+                   'cidade ou estado, com porte, idade, bairros e exemplos. Dados '
+                   'abertos do CNPJ da Receita Federal.'),
+        canonical=canonical,
+        robots_meta='noindex, follow' if request.args else 'index, follow',
+        ld_json=[_ld_ferramenta('Lista de empresas por cidade e segmento', canonical,
+                                'Consulta gratuita de empresas por CNAE, cidade e '
+                                'estado com dados abertos do CNPJ.'),
+                 _ld_breadcrumb([("Home", f"{_PSEO_BASE}/"),
+                                 ("Ferramentas", f"{_PSEO_BASE}/ferramentas"),
+                                 ("Lista de empresas", canonical)]),
+                 _ld_faq(faq)],
+        ga_id=GA_MEASUREMENT_ID)
+
+
+# Teto diário de chamadas à IA vindas da ferramenta pública (custo); acima
+# dele, e sem chave da Anthropic, entra o modelo pronto
+_GERADOR_LIMITE_DIA = int(os.environ.get('GERADOR_LIMITE_DIA', '300'))
+_gerador_uso = {'dia': None, 'n': 0}
+_gerador_lock = threading.Lock()
+
+
+def _gerador_pode_usar_ia():
+    hoje = _dt.date.today()
+    with _gerador_lock:
+        if _gerador_uso['dia'] != hoje:
+            _gerador_uso.update(dia=hoje, n=0)
+        if _gerador_uso['n'] >= _GERADOR_LIMITE_DIA:
+            return False
+        _gerador_uso['n'] += 1
+        return True
+
+
+def _gerador_modelo_pronto(f):
+    dif = f" — {f['diferencial']}" if f['diferencial'] else ''
+    if f['canal'] == 'email':
+        return {
+            'assunto': f"{f['produto'][:60]} para {f['cliente'][:50]}",
+            'mensagem': (
+                f"Olá, [Nome], tudo bem?\n\n"
+                f"Sou [Seu nome], da [Sua empresa]. Trabalhamos com {f['produto']} "
+                f"para {f['cliente']}{dif}.\n\n"
+                f"Antes de qualquer proposta, queria entender como a [Empresa] resolve "
+                f"isso hoje. Você teria 15 minutos nesta semana?\n\n"
+                f"Se não for com você, pode me indicar quem cuida disso?\n\n"
+                f"Abraço,\n[Seu nome]\n\n"
+                f"Se preferir não receber mais mensagens, é só responder \"sair\"."),
+        }
+    return {
+        'assunto': '',
+        'mensagem': (
+            f"Olá, [Nome]! Aqui é [Seu nome], da [Sua empresa]. "
+            f"Trabalhamos com {f['produto']} para {f['cliente']}{dif}. "
+            f"Faz sentido eu te mostrar em 10 minutos como funciona para a [Empresa]? "
+            f"Se não for com você, me indica quem cuida disso?"),
+    }
+
+
+def _gerador_mensagem(f):
+    """(resultado, fonte): fonte 'ia' ou 'modelo'."""
+    if _AI_KEY and _gerador_pode_usar_ia():
+        canal = 'WhatsApp' if f['canal'] == 'whatsapp' else 'e-mail'
+        limite = ('no máximo 420 caracteres, sem assunto' if f['canal'] == 'whatsapp'
+                  else 'de 80 a 130 palavras, com assunto de até 60 caracteres')
+        prompt = (
+            f"Escreva a PRIMEIRA mensagem de prospecção B2B por {canal}.\n"
+            f"Quem vende: {f['produto']}\n"
+            f"Para quem (cliente ideal): {f['cliente']}\n"
+            f"Diferencial informado: {f['diferencial'] or '(nenhum)'}\n\n"
+            f"{_REGRAS_COPY}\n"
+            "- Use os marcadores [Nome], [Empresa], [Seu nome] e [Sua empresa].\n"
+            "- Abra pelo contexto do cliente, não pelo produto. Termine com UMA "
+            "pergunta simples (conversa de 10-15 min ou indicação de quem decide).\n"
+            "- Nada de números, clientes ou resultados que não foram informados.\n"
+            f"- Tamanho: {limite}.\n"
+            + ("- Inclua no fim uma linha de opt-out (ex.: responder \"sair\").\n"
+               if f['canal'] == 'email' else '')
+            + 'Responda só com JSON: {"assunto": "...", "mensagem": "..."}')
+        r = _ai_json(prompt, max_tokens=600, modelos=[_AI_FALLBACK])
+        if r and str(r.get('mensagem', '')).strip():
+            return ({'assunto': str(r.get('assunto', '')).strip()
+                     if f['canal'] == 'email' else '',
+                     'mensagem': str(r['mensagem']).strip()}, 'ia')
+    return _gerador_modelo_pronto(f), 'modelo'
+
+
+@app.route('/ferramentas/gerador-de-mensagem-de-prospeccao', methods=['GET', 'POST'])
+@limiter.limit("8 per hour;25 per day", key_func=_ip_cliente, methods=['POST'])
+def ferramenta_gerador():
+    campos = ('produto', 'cliente', 'diferencial', 'canal')
+    form = {k: '' for k in campos}
+    form['canal'] = 'whatsapp'
+    resultado, fonte, erro = None, None, None
+    if request.method == 'POST':
+        form = {k: (request.form.get(k) or '').strip()[:240] for k in campos}
+        if form['canal'] not in ('whatsapp', 'email'):
+            form['canal'] = 'whatsapp'
+        if len(form['produto']) < 3 or len(form['cliente']) < 3:
+            erro = 'Conte o que você vende e para quem — duas ou três palavras já bastam.'
+        else:
+            resultado, fonte = _gerador_mensagem(form)
+    canonical = f'{_PSEO_BASE}/ferramentas/gerador-de-mensagem-de-prospeccao'
+    faq = [
+        ("A mensagem é escrita por IA?",
+         "Sim, pelo Claude, da Anthropic — o mesmo modelo que o TurboVenda usa para "
+         "escrever as abordagens dos clientes. Se a IA estiver indisponível, você "
+         "recebe um modelo pronto montado com as suas respostas."),
+        ("Posso usar a mensagem no WhatsApp da empresa?",
+         "Pode. Troque os marcadores [Nome] e [Empresa] e personalize com algo "
+         "específico de cada cliente — mensagem idêntica para a lista toda vira spam."),
+        ("Como mandar para muitas empresas sem fazer tudo à mão?",
+         "No TurboVenda a IA escreve uma mensagem diferente para cada lead, a partir "
+         "do que encontrou sobre a empresa, e organiza as respostas num CRM. O plano "
+         "grátis inclui 50 leads."),
+    ]
+    return render_template(
+        'ferramenta_gerador.html', form=form, resultado=resultado, fonte=fonte,
+        erro=erro, faq=faq,
+        titulo='Gerador de mensagem de prospecção com IA (grátis) | TurboVenda',
+        descricao=('Gere grátis a primeira mensagem de prospecção B2B para WhatsApp ou '
+                   'e-mail: diga o que vende e para quem, e a IA escreve a abordagem.'),
+        canonical=canonical,
+        robots_meta='noindex, follow' if request.method == 'POST' else 'index, follow',
+        ld_json=[_ld_ferramenta('Gerador de mensagem de prospecção', canonical,
+                                'Gera com IA a primeira mensagem de prospecção B2B '
+                                'para WhatsApp ou e-mail.'),
+                 _ld_breadcrumb([("Home", f"{_PSEO_BASE}/"),
+                                 ("Ferramentas", f"{_PSEO_BASE}/ferramentas"),
+                                 ("Gerador de mensagem", canonical)]),
+                 _ld_faq(faq)],
+        ga_id=GA_MEASUREMENT_ID)
+
+
+@app.route('/ferramentas/calculadora-de-leads')
+def ferramenta_calculadora():
+    canonical = f'{_PSEO_BASE}/ferramentas/calculadora-de-leads'
+    faq = [
+        ("Quais taxas de conversão devo usar?",
+         "As do seu próprio funil: conte, nos últimos 3 meses, quantos leads viraram "
+         "conversa, quantas conversas viraram reunião, quantas reuniões viraram proposta "
+         "e quantas propostas fecharam. Os valores que aparecem preenchidos são só um "
+         "exemplo para você trocar."),
+        ("E se eu não tiver histórico?",
+         "Comece com uma estimativa conservadora, prospecte por 30 dias e refaça a conta "
+         "com os números reais. O que importa é medir cada etapa."),
+        ("De onde tirar tantos leads?",
+         "De uma lista segmentada por CNAE, cidade e porte — a "
+         "<a href=\"/ferramentas/lista-de-empresas\">ferramenta de lista de empresas</a> "
+         "mostra quantas existem no seu mercado, e o TurboVenda entrega os contatos."),
+    ]
+    return render_template(
+        'ferramenta_calculadora.html', faq=faq,
+        titulo='Calculadora de leads: quantos preciso para bater a meta? | TurboVenda',
+        descricao=('Calcule grátis quantos leads, conversas, reuniões e propostas por '
+                   'mês e por dia você precisa para bater a meta de faturamento.'),
+        canonical=canonical,
+        ld_json=[_ld_ferramenta('Calculadora de leads', canonical,
+                                'Calcula o funil reverso de vendas: da meta de '
+                                'faturamento aos leads por dia.'),
+                 _ld_breadcrumb([("Home", f"{_PSEO_BASE}/"),
+                                 ("Ferramentas", f"{_PSEO_BASE}/ferramentas"),
+                                 ("Calculadora de leads", canonical)]),
+                 _ld_faq([(q, re.sub(r'<[^>]+>', '', a)) for q, a in faq])],
         ga_id=GA_MEASUREMENT_ID)
 
 
@@ -5941,13 +6273,13 @@ _AI_MODEL = os.environ.get('AI_MODEL', 'claude-sonnet-5')
 _AI_FALLBACK = 'claude-haiku-4-5-20251001'
 
 
-def _ai_json(prompt: str, max_tokens: int = 1000):
+def _ai_json(prompt: str, max_tokens: int = 1000, modelos=None):
     """Chama Claude e devolve o JSON da resposta. None se indisponivel."""
     if not _AI_KEY:
         logger.info('IA desativada: nenhuma API key da Anthropic definida')
         return None
-    modelos = [_AI_MODEL] + ([_AI_FALLBACK] if _AI_MODEL != _AI_FALLBACK
-                             else [])
+    modelos = modelos or ([_AI_MODEL] + ([_AI_FALLBACK]
+                                         if _AI_MODEL != _AI_FALLBACK else []))
     for modelo in modelos:
         try:
             import anthropic

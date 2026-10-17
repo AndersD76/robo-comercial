@@ -1,0 +1,33 @@
+{% extends '_publico_base.html' %}
+{% block estilo %}
+    .tools{display:grid;gap:14px;margin-top:20px}
+    .tool{display:block;background:#0d1526;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:22px;text-decoration:none;transition:.2s}
+    .tool:hover{border-color:rgba(99,102,241,.5);transform:translateY(-2px)}
+    .tool b{display:block;color:#fff;font-size:1.15rem;margin-bottom:6px}
+    .tool span{color:#94a3b8;font-size:14.5px}
+    .tool em{display:inline-block;margin-top:10px;color:#818cf8;font-style:normal;font-weight:700;font-size:14px}
+{% endblock %}
+{% block conteudo %}
+  <div class="crumbs"><a href="/">Home</a> › Ferramentas</div>
+  <h1>Ferramentas grátis de prospecção B2B</h1>
+  <p>Sem login, sem cartão. Tiradas do próprio TurboVenda: a mesma base de CNPJs da Receita Federal
+     e a mesma IA que escreve as abordagens dos nossos clientes.</p>
+  <div class="tools">
+    {% for f in ferramentas %}
+    <a class="tool" href="/ferramentas/{{ f.slug }}">
+      <b>{{ f.nome }}</b><span>{{ f.resumo }}</span><br><em>Usar grátis ›</em>
+    </a>
+    {% endfor %}
+  </div>
+  <div class="cta-box">
+    <p><strong>Quer tudo isso no automático?</strong><br>
+       O TurboVenda encontra as empresas, coleta os contatos e a IA escreve a abordagem de cada uma.</p>
+    <a href="/cadastro?utm_source=ferramentas&utm_medium=organic&utm_campaign=hub" class="cta-btn" data-cta="ferramentas-hub">Criar conta grátis — 50 leads</a>
+  </div>
+  <h2>Guias para usar junto</h2>
+  <ul class="lista">
+    <li><a href="/blog/lista-de-empresas-por-cidade">Lista de empresas por cidade e por CNAE: como montar a sua</a></li>
+    <li><a href="/blog/mensagem-de-prospeccao-whatsapp">Mensagem de prospecção no WhatsApp: modelos prontos</a></li>
+    <li><a href="/blog/quantos-leads-preciso-para-bater-a-meta">Quantos leads preciso para bater a meta?</a></li>
+  </ul>
+{% endblock %}

@@ -1,0 +1,84 @@
+{% extends '_publico_base.html' %}
+{% block estilo %}
+    .canais{display:flex;gap:10px;margin-top:6px}
+    .canais label{display:flex;align-items:center;gap:8px;margin:0;background:#060b18;border:1px solid rgba(255,255,255,.15);
+        border-radius:9px;padding:10px 14px;color:#e2e8f0;font-size:14px;cursor:pointer}
+    .canais input{width:auto}
+    .saida{white-space:pre-wrap;background:#060b18;border:1px solid rgba(99,102,241,.35);border-radius:12px;padding:18px;
+        color:#f1f5f9;font-size:15px;line-height:1.65;margin-top:10px}
+    .assunto{color:#a5b4fc;font-weight:700;margin-bottom:8px}
+    .acoes{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    .btn-sec{background:transparent;border:1px solid rgba(255,255,255,.2);color:#e2e8f0;padding:10px 18px;border-radius:9px;font-weight:600;cursor:pointer;font-family:inherit;font-size:14px}
+    .aviso{background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:#fde68a;border-radius:10px;padding:12px 14px;font-size:14px;margin-top:14px}
+    .fonte-ia{color:#64748b;font-size:12.5px;margin-top:8px}
+{% endblock %}
+{% block conteudo %}
+  <div class="crumbs"><a href="/">Home</a> › <a href="/ferramentas">Ferramentas</a> › Gerador de mensagem</div>
+  <h1>Gerador de mensagem de prospecção com IA</h1>
+  <p>Diga o que você vende e para quem. A IA escreve a primeira mensagem para abrir conversa com o cliente —
+     no WhatsApp ou por e-mail — curta, sem jargão e terminando com uma pergunta simples. Grátis e sem cadastro.</p>
+
+  <form class="card" method="POST" action="/ferramentas/gerador-de-mensagem-de-prospeccao">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <label for="produto">O que você vende?</label>
+    <input id="produto" name="produto" maxlength="240" required value="{{ form.produto }}"
+           placeholder="Ex.: manutenção preventiva de empilhadeiras">
+    <label for="cliente">Para quem? (seu cliente ideal)</label>
+    <input id="cliente" name="cliente" maxlength="240" required value="{{ form.cliente }}"
+           placeholder="Ex.: centros de distribuição e atacadistas do RS">
+    <label for="diferencial">Seu diferencial (opcional)</label>
+    <input id="diferencial" name="diferencial" maxlength="240" value="{{ form.diferencial }}"
+           placeholder="Ex.: atendimento em até 24 h, técnico próprio na região">
+    <label>Canal</label>
+    <div class="canais">
+      <label><input type="radio" name="canal" value="whatsapp" {% if form.canal != 'email' %}checked{% endif %}> WhatsApp</label>
+      <label><input type="radio" name="canal" value="email" {% if form.canal == 'email' %}checked{% endif %}> E-mail</label>
+    </div>
+    <button type="submit" class="cta-btn" style="margin-top:18px" data-cta="gerador-gerar">Gerar mensagem</button>
+    {% if erro %}<div class="aviso">{{ erro }}</div>{% endif %}
+  </form>
+
+  {% if resultado %}
+  <h2>Sua mensagem</h2>
+  <div class="saida" id="saida">{% if resultado.assunto %}<div class="assunto">Assunto: {{ resultado.assunto }}</div>{% endif %}{{ resultado.mensagem }}</div>
+  <p class="fonte-ia">{% if fonte == 'ia' %}Escrita pela IA (Claude, da Anthropic). Revise antes de enviar.{% else %}Modelo pronto montado com as suas respostas (a IA não está disponível agora).{% endif %}
+     Troque [Nome], [Empresa], [Seu nome] e [Sua empresa].</p>
+  <div class="acoes">
+    <button type="button" class="btn-sec" id="copiar">Copiar mensagem</button>
+    <button type="submit" form="refazer" class="btn-sec">Gerar outra versão</button>
+  </div>
+  <form id="refazer" method="POST" action="/ferramentas/gerador-de-mensagem-de-prospeccao" style="display:none">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    {% for k in ['produto','cliente','diferencial','canal'] %}<input type="hidden" name="{{ k }}" value="{{ form[k] }}">{% endfor %}
+  </form>
+  <div class="cta-box">
+    <p><strong>Uma mensagem diferente para cada empresa, no automático</strong><br>
+       No TurboVenda a IA pesquisa cada lead e personaliza a abordagem — e as respostas caem num CRM.</p>
+    <a href="/cadastro?utm_source=ferramenta&utm_medium=organic&utm_campaign=gerador-mensagem" class="cta-btn" data-cta="gerador-resultado">Criar conta grátis — 50 leads</a>
+  </div>
+  {% endif %}
+
+  <h2>O que faz uma boa mensagem de prospecção</h2>
+  <ul class="lista">
+    <li><strong>Começa pelo cliente, não pelo seu produto.</strong> Uma frase que mostre que você sabe com quem está falando vale mais que o currículo da sua empresa.</li>
+    <li><strong>É curta.</strong> No WhatsApp, cabe na tela do celular sem rolar. No e-mail, dá para ler em 20 segundos.</li>
+    <li><strong>Pede pouco.</strong> Uma conversa de 10 a 15 minutos ou a indicação de quem decide — não uma reunião de uma hora logo de cara.</li>
+    <li><strong>Não promete o que você não pode provar.</strong> Número sem fonte e "solução completa" derrubam a credibilidade.</li>
+    <li><strong>Respeita quem não quer receber.</strong> Ofereça uma saída simples (e respeite) — é boa prática e é o que a LGPD espera.</li>
+  </ul>
+  <p>Precisa de mais variações? Veja os <a href="/blog/mensagem-de-prospeccao-whatsapp">modelos prontos de mensagem de prospecção no WhatsApp</a>
+     e a cadência do <a href="/blog/follow-up-de-vendas">follow-up de vendas</a>. Para saber para quantas empresas mandar,
+     use a <a href="/ferramentas/lista-de-empresas">lista de empresas por cidade e segmento</a>.</p>
+
+  <h2>Perguntas frequentes</h2>
+  <div class="faq">
+    {% for q, a in faq %}<details{% if loop.first %} open{% endif %}><summary>{{ q }}</summary><p>{{ a }}</p></details>{% endfor %}
+  </div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){var b=document.getElementById('copiar');if(!b)return;
+b.addEventListener('click',function(){var t=document.getElementById('saida').innerText;
+navigator.clipboard.writeText(t).then(function(){b.textContent='Copiado!';setTimeout(function(){b.textContent='Copiar mensagem'},1800)})})})();
+</script>
+{% endblock %}

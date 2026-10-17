@@ -1,0 +1,140 @@
+{% extends '_publico_base.html' %}
+{% block estilo %}
+    .form-grid{display:grid;grid-template-columns:2fr 1.2fr 1.5fr;gap:12px;align-items:end}
+    .form-grid label{margin-top:0}
+    .barra{height:8px;background:rgba(255,255,255,.07);border-radius:6px;overflow:hidden;margin-top:6px}
+    .barra i{display:block;height:100%;background:linear-gradient(90deg,#6366f1,#8b5cf6)}
+    .linha-barra{margin-bottom:12px;font-size:14px;color:#cbd5e1}
+    .linha-barra b{float:right;color:#fff}
+    .resultado{margin-top:26px}
+    .aviso{background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:#fde68a;border-radius:10px;padding:12px 14px;font-size:14px;margin-top:16px}
+    @media(max-width:700px){.form-grid{grid-template-columns:1fr}}
+{% endblock %}
+{% block conteudo %}
+  <div class="crumbs"><a href="/">Home</a> › <a href="/ferramentas">Ferramentas</a> › Lista de empresas</div>
+  <h1>Lista de empresas por cidade e segmento</h1>
+  <p>Escolha o segmento e o estado (a cidade é opcional) e veja quantas empresas ativas existem, o porte,
+     há quanto tempo estão abertas, os bairros com mais empresas e 10 exemplos — direto dos dados abertos
+     do CNPJ da Receita Federal. Grátis e sem cadastro.</p>
+
+  <form class="card" method="GET" action="/ferramentas/lista-de-empresas">
+    <div class="form-grid">
+      <div>
+        <label for="segmento">Segmento (CNAE)</label>
+        <select id="segmento" name="segmento" required>
+          <option value="">Escolha…</option>
+          {% for s in segmentos %}
+          <option value="{{ s.slug }}" {% if sel.segmento == s.slug %}selected{% endif %}>{{ s.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="uf">Estado</label>
+        <select id="uf" name="uf" required>
+          <option value="">Escolha…</option>
+          {% for sigla, nome in ufs %}
+          <option value="{{ sigla }}" {% if sel.uf == sigla %}selected{% endif %}>{{ nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="cidade">Cidade (opcional)</label>
+        <input id="cidade" name="cidade" value="{{ sel.cidade }}" placeholder="Ex.: Passo Fundo">
+      </div>
+    </div>
+    <button type="submit" class="cta-btn" style="margin-top:16px" data-cta="lista-consultar">Consultar empresas</button>
+    {% if erro %}<div class="aviso">{{ erro }}</div>{% endif %}
+  </form>
+
+  {% if resultado %}
+  <div class="resultado">
+    {% if resultado.vazio %}
+      <div class="aviso">Não encontramos empresas ativas de {{ resultado.seg.nome }} em {{ resultado.vazio }}.
+        {% if resultado.sugestoes %}Você quis dizer:
+          {% for c in resultado.sugestoes %}<a href="/ferramentas/lista-de-empresas?segmento={{ resultado.seg.slug }}&uf={{ resultado.uf }}&cidade={{ c.municipio|urlencode }}" style="color:#fde68a">{{ c.municipio }}</a>{% if not loop.last %}, {% endif %}{% endfor %}?
+        {% else %}Confira a grafia ou deixe a cidade em branco para ver o estado inteiro.{% endif %}
+      </div>
+    {% else %}
+      {% set p = resultado.perfil %}
+      <h2>{{ resultado.seg.label }} em {{ resultado.escopo }}</h2>
+      <div class="destaques">
+        <div class="destaque"><b>{{ fmt(resultado.n) }}</b><span>empresas ativas</span></div>
+        {% if p %}
+        <div class="destaque"><b>{{ pct(p.tel, p.n) }}%</b><span>com telefone cadastrado na Receita</span></div>
+        <div class="destaque"><b>{{ pct(p.email, p.n) }}%</b><span>com e-mail cadastrado na Receita</span></div>
+        <div class="destaque"><b>{{ fmt(p.a1) }}</b><span>abertas nos últimos 12 meses</span></div>
+        {% endif %}
+      </div>
+
+      {% if p %}
+      <div class="card">
+        <h3 style="margin-top:0">Porte</h3>
+        {% for cod, chave in [('01','me'),('03','epp'),('05','demais')] %}
+        <div class="linha-barra">{{ porte_labels[cod] }} <b>{{ fmt(p[chave]) }} · {{ pct(p[chave], p.n) }}%</b>
+          <div class="barra"><i style="width:{{ (100 * p[chave] / p.n)|round(1) if p.n else 0 }}%"></i></div></div>
+        {% endfor %}
+        <h3>Tempo de mercado</h3>
+        <div class="linha-barra">Abertas há menos de 5 anos <b>{{ fmt(p.a5) }} · {{ pct(p.a5, p.n) }}%</b>
+          <div class="barra"><i style="width:{{ (100 * p.a5 / p.n)|round(1) if p.n else 0 }}%"></i></div></div>
+        <div class="linha-barra">Abertas há mais de 10 anos <b>{{ fmt(p.a10) }} · {{ pct(p.a10, p.n) }}%</b>
+          <div class="barra"><i style="width:{{ (100 * p.a10 / p.n)|round(1) if p.n else 0 }}%"></i></div></div>
+      </div>
+      {% endif %}
+
+      {% if resultado.bairros %}
+      <h2>Bairros com mais empresas</h2>
+      <table class="dados"><tbody>
+        {% for b in resultado.bairros %}<tr><td>{{ b.bairro|title }}</td><td class="num">{{ b.n }}</td></tr>{% endfor %}
+      </tbody></table>
+      {% endif %}
+
+      {% if resultado.top_cidades %}
+      <h2>Cidades com mais empresas {{ no_uf(resultado.uf) }}</h2>
+      <table class="dados"><tbody>
+        {% for c in resultado.top_cidades %}
+        <tr><td><a href="/ferramentas/lista-de-empresas?segmento={{ resultado.seg.slug }}&uf={{ resultado.uf }}&cidade={{ c.municipio|urlencode }}">{{ c.municipio }}</a></td><td class="num">{{ c.n }}</td></tr>
+        {% endfor %}
+      </tbody></table>
+      {% endif %}
+
+      {% if resultado.amostra %}
+      <h2>10 exemplos (as abertas mais recentemente)</h2>
+      <table class="dados">
+        <thead><tr><th>Empresa</th><th>{% if resultado.top_cidades %}Cidade{% else %}Bairro{% endif %}</th><th>Abertura</th></tr></thead>
+        <tbody>
+        {% for e in resultado.amostra %}
+        <tr><td>{{ e.razao_social or e.nome_fantasia }}</td>
+            <td>{% if resultado.top_cidades %}{{ e.municipio }}{% else %}{{ (e.bairro or '—')|title }}{% endif %}</td>
+            <td>{{ e.abertura }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      <div class="cta-box">
+        <p><strong>Receber as {{ fmt(resultado.n) }} empresas com telefone, e-mail e site</strong><br>
+           O TurboVenda monta a lista, enriquece os contatos e a IA escreve a primeira mensagem. Grátis para começar.</p>
+        <a href="/cadastro?utm_source=ferramenta&utm_medium=organic&utm_campaign=lista-{{ resultado.seg.slug }}-{{ resultado.uf|lower }}" class="cta-btn" data-cta="lista-resultado">Gerar 50 leads grátis</a>
+      </div>
+      {% if resultado.pagina %}<p><a href="{{ resultado.pagina }}">Ver a lista pública de {{ resultado.seg.label|lower }} em {{ resultado.escopo }} ›</a></p>{% endif %}
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <h2>Como usar a lista para prospectar</h2>
+  <p>Comece pelo recorte que você consegue atender bem: um segmento, uma região. O número de empresas
+     mostra o tamanho do seu mercado endereçável ali; o porte indica o tipo de conversa (micro decide rápido
+     e com o dono; média tem compras e mais de um decisor); e as empresas abertas há pouco tempo costumam
+     estar montando fornecedores agora. Para transformar a contagem em meta, use a
+     <a href="/ferramentas/calculadora-de-leads">calculadora de leads</a>, e para a primeira abordagem, o
+     <a href="/ferramentas/gerador-de-mensagem-de-prospeccao">gerador de mensagem</a>. O passo a passo completo
+     está no guia <a href="/blog/como-montar-lista-de-prospeccao">como montar uma lista de prospecção</a>.</p>
+
+  <h2>Perguntas frequentes</h2>
+  <div class="faq">
+    {% for q, a in faq %}<details{% if loop.first %} open{% endif %}><summary>{{ q }}</summary><p>{{ a }}</p></details>{% endfor %}
+  </div>
+
+  <p class="fonte">Fonte: dados abertos do CNPJ — Receita Federal do Brasil. A ferramenta exibe contagens e dados
+    cadastrais públicos; telefone e e-mail não são exibidos aqui. <a href="/empresas/sobre-os-dados">Sobre os dados e pedidos de remoção</a>.</p>
+{% endblock %}

@@ -205,7 +205,7 @@
 
   <div class="related-links" style="margin-top:14px">
     <a href="/empresas/cidade/{{ combo.mun_slug }}">Todas as empresas de {{ municipio }} por segmento</a>
-    <a href="/empresas/{{ seg.slug }}/estado/{{ uf|lower }}">{{ seg.label }} em todo o {{ uf_nome }}</a>
+    <a href="/empresas/{{ seg.slug }}/estado/{{ uf|lower }}">{{ seg.label }} {{ no_uf(uf) }}</a>
     <a href="/ferramentas/lista-de-empresas?segmento={{ seg.slug }}&cidade={{ municipio|urlencode }}&uf={{ uf }}">Perfil destas empresas (porte, abertura, bairros)</a>
   </div>
 

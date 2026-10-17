@@ -45,7 +45,7 @@
   </div>
 
   {% if vizinhas %}
-  <h2>Cidades do {{ uf_nome }} de porte parecido</h2>
+  <h2>Cidades {{ do_uf(uf) }} de porte parecido</h2>
   <div class="grid">
     {% for v in vizinhas %}
     <a href="/empresas/cidade/{{ v.mun_slug }}"><span class="nome">{{ v.municipio }}</span><span class="qtd">{{ v.total }}</span></a>
