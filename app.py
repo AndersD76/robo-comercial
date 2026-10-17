@@ -2061,6 +2061,11 @@ BLOG_POSTS = [
     },
 ]
 
+# Guias de problema/solução (out/2026) — cada um responde a uma busca do
+# ICP listada em docs/trafego/contexto.md e aponta para uma ferramenta grátis
+from conteudo_guias import GUIAS  # noqa: E402
+BLOG_POSTS += GUIAS
+
 
 @app.route('/')
 def landing():
