@@ -2128,7 +2128,7 @@ SEGMENTOS = [
             'Manter um pipeline constante de leads qualificados entre safras, quando o fluxo comercial diminui',
             'Identificar agroindústrias que estão expandindo capacidade ou abrindo novas unidades',
         ],
-        'msg_exemplo': 'Olá [Nome], vi que a [Empresa] atua com distribuição de insumos na região de [Cidade]. Trabalho com uma solução que ajuda fornecedores do agro a encontrar novas revendas e cooperativas para vender — já entregamos listas de mais de 200 compradores por mês para empresas do setor. Posso mostrar como funciona em 5 minutos?',
+        'msg_exemplo': 'Olá [Nome], vi que a [Empresa] atua com distribuição de insumos na região de [Cidade]. Trabalho com uma solução que ajuda fornecedores do agro a encontrar novas revendas e cooperativas para vender — o sistema monta a lista com o contato de quem compra. Posso mostrar como funciona em 5 minutos?',
         'faq': [
             ('Funciona para empresas que vendem para o agro?', 'Sim. O TurboVenda encontra cooperativas, revendas, distribuidores e agroindústrias a partir de buscas inteligentes com IA. Você define o perfil (ex: "distribuidores de fertilizantes no Mato Grosso") e o robô prospecta 24/7.'),
             ('Quais dados o TurboVenda extrai de empresas do agronegócio?', 'Telefone, email, CNPJ, razão social, endereço, site e nome de decisores (quando disponível publicamente). Dados de fontes públicas como Google, LinkedIn e sites institucionais.'),
@@ -2162,7 +2162,7 @@ SEGMENTOS = [
             'Mapear integradores e consultorias de TI que revendem soluções ou fazem parcerias tecnológicas',
             'Manter pipeline ativo num mercado onde decisores trocam de empresa frequentemente',
         ],
-        'msg_exemplo': 'Olá [Nome], vi que a [Empresa] é uma software house em [Cidade] focada em [nicho]. Trabalho com uma ferramenta que encontra empresas de tecnologia que estão expandindo — entrega nome, email e telefone do decisor. Já ajudamos consultorias de TI a gerar 50+ leads qualificados por semana. Quer ver como funciona?',
+        'msg_exemplo': 'Olá [Nome], vi que a [Empresa] é uma software house em [Cidade] focada em [nicho]. Trabalho com uma ferramenta que encontra empresas de tecnologia que estão expandindo — entrega nome, email e telefone do decisor. Quer ver como funciona?',
         'faq': [
             ('Funciona para vender SaaS B2B?', 'Sim. Defina o perfil (ex: "empresas de e-commerce com mais de 50 funcionários") e o TurboVenda entrega contatos com email e telefone do decisor. Ideal para SDRs de SaaS.'),
             ('Consigo encontrar startups que acabaram de receber investimento?', 'O TurboVenda busca em fontes públicas. Se a startup tem site, LinkedIn ou aparece em diretórios, ela será encontrada. Combinando termos como "startup série A fintech" você refina bastante.'),
@@ -2351,6 +2351,11 @@ def llms_txt():
         "- Preços: https://www.turbovenda.com.br/precos\n"
         "- Empresas por segmento e cidade (dados abertos CNPJ): "
         "https://www.turbovenda.com.br/empresas\n"
+        "- Ferramentas grátis sem login (lista de empresas por cidade e CNAE, "
+        "gerador de mensagem de prospecção com IA, calculadora de leads): "
+        "https://www.turbovenda.com.br/ferramentas\n"
+        "- Comparativos com Econodata, Speedio, Leads2b e Apollo: "
+        "https://www.turbovenda.com.br/alternativas\n"
     )
     return app.response_class(txt, mimetype='text/plain')
 
