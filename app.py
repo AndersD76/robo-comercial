@@ -15,6 +15,7 @@ import secrets
 import signal
 import subprocess
 import sys
+import threading
 import time
 from urllib.parse import quote as _urlquote, urlparse as _urlparse
 import bcrypt
@@ -133,6 +134,27 @@ app.jinja_env.globals['csrf_token'] = _csrf_token
 @app.before_request
 def _csrf_protect():
     _check_csrf()
+
+
+_HOST_CANONICO = 'www.turbovenda.com.br'
+_SEM_REDIRECT = ('/api/', '/webhook/', '/health', '/t/', '/oauth/')
+
+
+@app.before_request
+def _host_canonico():
+    """Um domínio só para o Google: o endereço *.up.railway.app servia as
+    mesmas páginas (conteúdo duplicado) e o domínio sem www, quando o DNS
+    apontar, deve cair no www. Webhooks e API ficam de fora."""
+    host = (request.host or '').split(':')[0].lower()
+    if host == _HOST_CANONICO or not (
+            host == 'turbovenda.com.br' or host.endswith('.up.railway.app')):
+        return None
+    if (request.method not in ('GET', 'HEAD')
+            or request.path.startswith(_SEM_REDIRECT)):
+        return None
+    qs = request.query_string.decode('utf-8', 'ignore')
+    return redirect(f'https://{_HOST_CANONICO}{request.path}'
+                    + (f'?{qs}' if qs else ''), 301)
 
 
 @app.after_request
@@ -2053,7 +2075,7 @@ def blog_index():
 def blog_post(slug):
     post = next((p for p in BLOG_POSTS if p['slug'] == slug), None)
     if not post:
-        return redirect('/blog')
+        return render_template('404.html'), 404
     return render_template('blog_post.html',
                            post=post,
                            posts=BLOG_POSTS,
@@ -2201,18 +2223,24 @@ def segmento_page(slug):
     return render_template('segmento.html', seg=seg, segmentos=SEGMENTOS, ga_id=GA_MEASUREMENT_ID)
 
 
+# Data da última revisão das páginas fixas. O lastmod era sempre "hoje", e o
+# Google passa a ignorar o lastmod de um site inteiro quando ele não bate com
+# mudanças reais. Atualize ao mexer no texto dessas páginas.
+_SITE_REVISADO_EM = '2026-10-17'
+
+
 def _static_sitemap_urls():
-    hoje = _dt.date.today().isoformat()
+    rev = _SITE_REVISADO_EM
+    ult_post = max(p['data'] for p in BLOG_POSTS)
     urls = [
-        ('https://www.turbovenda.com.br/', hoje, 'weekly', '1.0'),
-        ('https://www.turbovenda.com.br/cadastro', hoje, 'monthly', '0.8'),
-        ('https://www.turbovenda.com.br/blog', hoje, 'weekly', '0.9'),
-        ('https://www.turbovenda.com.br/login', hoje, 'monthly', '0.6'),
-        ('https://www.turbovenda.com.br/precos', hoje, 'monthly', '0.8'),
-        ('https://www.turbovenda.com.br/termos', hoje, 'yearly', '0.3'),
-        ('https://www.turbovenda.com.br/privacidade', hoje, 'yearly', '0.3'),
-        ('https://www.turbovenda.com.br/empresas', hoje, 'weekly', '0.8'),
-        ('https://www.turbovenda.com.br/empresas/sobre-os-dados', hoje, 'yearly', '0.5'),
+        ('https://www.turbovenda.com.br/', rev, 'weekly', '1.0'),
+        ('https://www.turbovenda.com.br/cadastro', rev, 'monthly', '0.8'),
+        ('https://www.turbovenda.com.br/blog', ult_post, 'weekly', '0.9'),
+        ('https://www.turbovenda.com.br/precos', rev, 'monthly', '0.8'),
+        ('https://www.turbovenda.com.br/termos', rev, 'yearly', '0.3'),
+        ('https://www.turbovenda.com.br/privacidade', rev, 'yearly', '0.3'),
+        ('https://www.turbovenda.com.br/empresas', None, 'weekly', '0.8'),
+        ('https://www.turbovenda.com.br/empresas/sobre-os-dados', rev, 'yearly', '0.5'),
     ]
     for p in BLOG_POSTS:
         urls.append((
@@ -2222,7 +2250,7 @@ def _static_sitemap_urls():
     for s in SEGMENTOS:
         urls.append((
             f"https://www.turbovenda.com.br/para/{s['slug']}",
-            hoje, 'monthly', '0.8'
+            rev, 'monthly', '0.8'
         ))
     return urls
 
@@ -2232,7 +2260,7 @@ def _render_urlset(urls):
     xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
     for loc, lastmod, freq, pri in urls:
         xml += (f'  <url>\n    <loc>{loc}</loc>\n'
-                f'    <lastmod>{lastmod}</lastmod>\n'
+                + (f'    <lastmod>{lastmod}</lastmod>\n' if lastmod else '') +
                 f'    <changefreq>{freq}</changefreq>\n'
                 f'    <priority>{pri}</priority>\n  </url>\n')
     xml += '</urlset>\n'
@@ -2245,15 +2273,14 @@ def sitemap_xml():
     pseo_urls = _pseo_sitemap_urls()
     if not pseo_urls:
         return _render_urlset(_static_sitemap_urls())
-    hoje = _dt.date.today().isoformat()
     n_chunks = (len(pseo_urls) + PSEO_SITEMAP_CHUNK - 1) // PSEO_SITEMAP_CHUNK
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
     xml += '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
     xml += ('  <sitemap>\n    <loc>https://www.turbovenda.com.br/sitemap-pages.xml</loc>\n'
-            f'    <lastmod>{hoje}</lastmod>\n  </sitemap>\n')
+            '  </sitemap>\n')
     for i in range(1, n_chunks + 1):
         xml += (f'  <sitemap>\n    <loc>https://www.turbovenda.com.br/sitemap-empresas-{i}.xml</loc>\n'
-                f'    <lastmod>{hoje}</lastmod>\n  </sitemap>\n')
+                '  </sitemap>\n')
     xml += '</sitemapindex>\n'
     return app.response_class(xml, mimetype='application/xml')
 
@@ -2270,8 +2297,9 @@ def sitemap_empresas_xml(n):
     chunk = pseo_urls[inicio:inicio + PSEO_SITEMAP_CHUNK]
     if n < 1 or not chunk:
         return render_template('404.html'), 404
-    hoje = _dt.date.today().isoformat()
-    return _render_urlset([(u, hoje, 'monthly', '0.7') for u in chunk])
+    # Sem lastmod: os dados só mudam a cada ingestão da Receita, e "hoje"
+    # em 8 mil URLs faria o Google ignorar o lastmod do site todo
+    return _render_urlset([(u, None, 'monthly', '0.7') for u in chunk])
 
 
 _INDEXNOW_KEY = 'b4f7e2a1c9d84f6e8a3b5c7d9e1f0a2b'
@@ -2316,56 +2344,88 @@ def indexnow_key():
     return app.response_class(_INDEXNOW_KEY, mimetype='text/plain')
 
 
-def _ping_indexnow(urls=None):
-    """Submit URLs to IndexNow (Bing/Yandex/etc) + ping Google sitemap."""
+def _todas_urls_sitemap():
+    """(url, lastmod) de tudo o que está nos sitemaps."""
+    urls = [(u, lm) for u, lm, _, _ in _static_sitemap_urls()]
+    urls += [(u, None) for u in _pseo_sitemap_urls()]
+    return dict(urls)
+
+
+def _indexnow_enviar(urls):
+    """Envia ao IndexNow (Bing, Yandex, Seznam...) em lotes. Devolve as URLs
+    aceitas (HTTP 200/202) e o status de cada lote."""
     import requests as http
-    if not urls:
-        urls = [
-            'https://www.turbovenda.com.br/',
-            'https://www.turbovenda.com.br/precos',
-            'https://www.turbovenda.com.br/cadastro',
-            'https://www.turbovenda.com.br/blog',
-        ]
-        for p in BLOG_POSTS:
-            urls.append(f"https://www.turbovenda.com.br/blog/{p['slug']}")
-        for s in SEGMENTOS:
-            urls.append(f"https://www.turbovenda.com.br/para/{s['slug']}")
-        # páginas pSEO indexáveis (tier >= 15 empresas, cap MAX_PSEO_PAGES)
-        urls.extend(_pseo_sitemap_urls())
-    results = {}
-    statuses = []
-    # IndexNow em lotes de 500 URLs por POST
-    for i in range(0, len(urls), 500):
+    aceitas, statuses = [], []
+    for i in range(0, len(urls), 1000):
+        lote = urls[i:i + 1000]
         payload = {
             "host": "www.turbovenda.com.br",
             "key": _INDEXNOW_KEY,
             "keyLocation": f"https://www.turbovenda.com.br/{_INDEXNOW_KEY}.txt",
-            "urlList": urls[i:i + 500]
+            "urlList": lote,
         }
         try:
             r = http.post('https://api.indexnow.org/indexnow',
-                          json=payload, timeout=10)
+                          json=payload, timeout=20)
             statuses.append(r.status_code)
+            if r.status_code in (200, 202):
+                aceitas += lote
         except Exception as e:
             statuses.append(str(e))
-    results['indexnow'] = statuses[0] if len(statuses) == 1 else statuses
-    results['urls_enviadas'] = len(urls)
+    return aceitas, statuses
+
+
+def _indexnow_deploy(forcar=False):
+    """Avisa o IndexNow das URLs novas ou com lastmod alterado desde o último
+    envio (forcar=True reenvia tudo). Roda sozinho a cada deploy; o histórico
+    em indexnow_enviados evita reenviar milhares de URLs toda vez."""
+    if not DATABASE_URL:
+        return {'erro': 'sem DATABASE_URL'}
+    atuais = _todas_urls_sitemap()
+    conn = _conn()
     try:
-        r = http.get(
-            'https://www.google.com/ping?sitemap=https://www.turbovenda.com.br/sitemap.xml',
-            timeout=10)
-        results['google_ping'] = r.status_code
+        c = conn.cursor()
+        c.execute("CREATE TABLE IF NOT EXISTS indexnow_enviados ("
+                  "url TEXT PRIMARY KEY, lastmod TEXT, "
+                  "enviado_em TIMESTAMPTZ DEFAULT now())")
+        conn.commit()
+        c.execute("SELECT url, lastmod FROM indexnow_enviados")
+        antes = {r['url']: r['lastmod'] or '' for r in c.fetchall()}
+        novas = [u for u, lm in atuais.items()
+                 if forcar or antes.get(u) != (lm or '')]
+        if not novas:
+            return {'urls_enviadas': 0}
+        aceitas, statuses = _indexnow_enviar(novas)
+        if aceitas:
+            psycopg2.extras.execute_values(
+                c, "INSERT INTO indexnow_enviados (url, lastmod) VALUES %s "
+                   "ON CONFLICT (url) DO UPDATE SET lastmod = EXCLUDED.lastmod,"
+                   " enviado_em = now()",
+                [(u, atuais[u] or '') for u in aceitas])
+            conn.commit()
+        return {'urls_enviadas': len(novas), 'aceitas': len(aceitas),
+                'indexnow': statuses}
+    finally:
+        conn.close()
+
+
+def _indexnow_no_boot():
+    time.sleep(90)  # app no ar, chave servida e contagens pSEO carregadas
+    try:
+        logger.info(f'IndexNow no deploy: {_indexnow_deploy()}')
     except Exception as e:
-        results['google_ping'] = str(e)
-    return results
+        logger.warning(f'IndexNow no deploy falhou: {e}')
+
+
+if DATABASE_URL and os.environ.get('RAILWAY_ENVIRONMENT_ID'):
+    threading.Thread(target=_indexnow_no_boot, daemon=True).start()
 
 
 @app.route('/admin/indexnow', methods=['POST'])
 def admin_indexnow():
     if not session.get('admin_auth'):
         return jsonify({'error': 'unauthorized'}), 401
-    results = _ping_indexnow()
-    return jsonify(results)
+    return jsonify(_indexnow_deploy(forcar=request.args.get('tudo') == '1'))
 
 
 # =============================================================================
@@ -2382,7 +2442,7 @@ _PSEO_SQLITE = os.environ.get('PSEO_SQLITE', '')  # SÓ dev local (fallback)
 _PSEO_BASE = 'https://www.turbovenda.com.br'
 
 
-def _pseo_query(sql, params=()):
+def _pseo_query(sql, params=(), levantar=False):
     """Consulta a empresas_publicas. Postgres em produção; SQLite só em dev
     (env PSEO_SQLITE) para rodar o app localmente sem Postgres."""
     try:
@@ -2405,22 +2465,121 @@ def _pseo_query(sql, params=()):
         finally:
             conn.close()
     except Exception as e:
+        if levantar:
+            raise
         logger.error(f'pseo query error: {e}')
         return []
 
 
+# Contar 6,7 mi de CNPJs por CNAE x cidade leva ~9 s no Neon. Feito dentro da
+# requisição (como antes), travava o site inteiro a cada 15 min — home medida
+# em 18,9 s. As contagens ficam prontas em visões materializadas, e o cache em
+# memória é recarregado em segundo plano: nenhum visitante espera a consulta.
+_PSEO_MVS = (
+    ("pseo_resumo_cnae_cidade",
+     "SELECT cnae_principal AS cnae, municipio, uf, COUNT(*)::int AS n "
+     "FROM empresas_publicas WHERE situacao = '02' "
+     "GROUP BY cnae_principal, municipio, uf",
+     ("cnae, uf, municipio", "uf, municipio")),
+    ("pseo_resumo_cidade",
+     "SELECT municipio, uf, COUNT(*)::int AS n FROM empresas_publicas "
+     "WHERE situacao = '02' GROUP BY municipio, uf",
+     ("uf, municipio",)),
+)
+_PSEO_RECARGA_S = 6 * 3600
 _pseo_cache = {'ts': 0.0, 'data': None}
+_pseo_lock = threading.Lock()
+_pseo_recarregando = threading.Event()
+
+
+def _pseo_garantir_mvs(refresh=False):
+    """Cria as visões materializadas se faltarem (1ª vez ~30 s) ou atualiza
+    (refresh=True, depois de uma nova ingestão da Receita)."""
+    if _PSEO_SQLITE or not DATABASE_URL:
+        return
+    conn = psycopg2.connect(DATABASE_URL)
+    try:
+        conn.autocommit = True
+        c = conn.cursor()
+        for nome, sql, indices in _PSEO_MVS:
+            c.execute(f"CREATE MATERIALIZED VIEW IF NOT EXISTS {nome} AS {sql}")
+            for i, cols in enumerate(indices):
+                c.execute(f"CREATE INDEX IF NOT EXISTS {nome}_i{i} "
+                          f"ON {nome} ({cols})")
+            if refresh:
+                c.execute(f"REFRESH MATERIALIZED VIEW {nome}")
+    finally:
+        conn.close()
+
+
+def _pseo_ler_contagens():
+    """(linhas CNAE x cidade dos segmentos B2B, totais por cidade)."""
+    codigos = [s['codigo'] for s in CNAE_B2B]
+    if _PSEO_SQLITE:
+        rows = [r for r in _pseo_query(
+            "SELECT cnae_principal AS cnae, municipio, uf, COUNT(*) AS n "
+            "FROM empresas_publicas WHERE situacao = '02' "
+            "GROUP BY cnae_principal, municipio, uf")
+            if str(r['cnae']) in CNAE_POR_CODIGO]
+        cidades = _pseo_query(
+            "SELECT municipio, uf, COUNT(*) AS n FROM empresas_publicas "
+            "WHERE situacao = '02' GROUP BY municipio, uf")
+        return rows, cidades
+    try:
+        rows = _pseo_query(
+            "SELECT cnae, municipio, uf, n FROM pseo_resumo_cnae_cidade "
+            "WHERE cnae = ANY(%s)", (codigos,), levantar=True)
+        cidades = _pseo_query(
+            "SELECT municipio, uf, n FROM pseo_resumo_cidade", levantar=True)
+        return rows, cidades
+    except Exception as e:
+        # Visões ainda não criadas (primeiro deploy): consulta direta, lenta
+        logger.warning(f'pseo: visões materializadas indisponíveis ({e})')
+        rows = _pseo_query(
+            "SELECT cnae_principal AS cnae, municipio, uf, COUNT(*) AS n "
+            "FROM empresas_publicas WHERE situacao = '02' "
+            "AND cnae_principal = ANY(%s) GROUP BY cnae_principal, municipio, uf",
+            (codigos,))
+        return rows, []
+
+
+def _pseo_recarregar():
+    try:
+        data = _pseo_montar(*_pseo_ler_contagens())
+        if data['combos']:
+            _pseo_cache['data'] = data
+            _pseo_cache['ts'] = time.time()
+        elif _pseo_cache['data'] is None:
+            # Banco fora do ar: serve vazio e tenta de novo em 1 min
+            _pseo_cache['data'] = data
+            _pseo_cache['ts'] = time.time() - _PSEO_RECARGA_S + 60
+    except Exception as e:
+        logger.error(f'pseo: recarga falhou: {e}')
+    finally:
+        _pseo_recarregando.clear()
+
+
+def _pseo_recarregar_async():
+    if not _pseo_recarregando.is_set():
+        _pseo_recarregando.set()
+        threading.Thread(target=_pseo_recarregar, daemon=True).start()
 
 
 def _pseo_agg():
-    """Agregação global (cacheada 15 min): contagens por CNAE x cidade."""
-    import time
-    if _pseo_cache['data'] is not None and time.time() - _pseo_cache['ts'] < 900:
-        return _pseo_cache['data']
-    rows = _pseo_query(
-        "SELECT cnae_principal AS cnae, municipio, uf, COUNT(*) AS n "
-        "FROM empresas_publicas WHERE situacao = '02' "
-        "GROUP BY cnae_principal, municipio, uf")
+    """Contagens por CNAE x cidade, sempre da memória. Só a 1ª carga do
+    processo é síncrona (lê a visão pronta, ~1 s); depois recarrega em
+    segundo plano a cada 6 h servindo o dado anterior enquanto isso."""
+    if _pseo_cache['data'] is None:
+        with _pseo_lock:
+            if _pseo_cache['data'] is None:
+                _pseo_recarregando.set()
+                _pseo_recarregar()
+    elif time.time() - _pseo_cache['ts'] > _PSEO_RECARGA_S:
+        _pseo_recarregar_async()
+    return _pseo_cache['data']
+
+
+def _pseo_montar(rows, cidades_rows):
     combos = {}      # (cnae_slug, mun_slug) -> combo
     cidades = {}     # mun_slug -> {'municipio','uf','total'}
     por_cnae = {}    # cnae_slug -> {'total', 'cidades': [combos ordenados]}
@@ -2449,25 +2608,38 @@ def _pseo_agg():
                     key=lambda c: -c['n'])
     sitemap_set = {(c['cnae_slug'], c['mun_slug'])
                    for c in ranked[:MAX_PSEO_PAGES]}
-    data = {'combos': combos, 'cidades': cidades, 'por_cnae': por_cnae,
+    # Total de CNPJs ativos da cidade em todas as atividades (não só B2B)
+    total_cidade = {slugify(f"{r['municipio']}-{r['uf']}"): int(r['n'])
+                    for r in cidades_rows if r['municipio'] and r['uf']}
+    return {'combos': combos, 'cidades': cidades, 'por_cnae': por_cnae,
             'por_cidade': por_cidade, 'ranked': ranked,
-            'sitemap_set': sitemap_set}
-    _pseo_cache['data'] = data
-    _pseo_cache['ts'] = time.time()
-    return data
+            'sitemap_set': sitemap_set, 'total_cidade': total_cidade}
 
 
 def _pseo_sitemap_urls():
-    """URLs pSEO indexáveis: hub + sobre + páginas CNAE + top cidades (cap)."""
+    """URLs pSEO indexáveis: páginas CNAE + top cidades (cap). O hub e a
+    página sobre os dados ficam no sitemap-pages."""
     agg = _pseo_agg()
     if not agg['sitemap_set']:
         return []
-    urls = [f'{_PSEO_BASE}/empresas', f'{_PSEO_BASE}/empresas/sobre-os-dados']
     cnaes_no_ar = sorted({cs for cs, _ in agg['sitemap_set']})
-    urls += [f'{_PSEO_BASE}/empresas/{cs}' for cs in cnaes_no_ar]
+    urls = [f'{_PSEO_BASE}/empresas/{cs}' for cs in cnaes_no_ar]
     urls += [f"{_PSEO_BASE}/empresas/{c['cnae_slug']}/{c['mun_slug']}"
              for c in agg['ranked'][:MAX_PSEO_PAGES]]
     return urls
+
+
+def _pseo_aquecer():
+    try:
+        _pseo_garantir_mvs()
+    except Exception as e:
+        logger.warning(f'pseo: não criou as visões materializadas: {e}')
+    _pseo_agg()
+
+
+# Boot no Railway: carrega as contagens antes da primeira visita
+if DATABASE_URL and os.environ.get('RAILWAY_ENVIRONMENT_ID'):
+    threading.Thread(target=_pseo_aquecer, daemon=True).start()
 
 
 def _pseo_stats(cnae, municipio, uf):

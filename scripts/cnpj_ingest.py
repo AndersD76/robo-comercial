@@ -682,7 +682,23 @@ def main():
         run_sample(db)
     else:
         run_real(db, args)
+    if isinstance(db, PgDB):
+        _atualizar_resumos(db.conn)
     db.close()
+
+
+def _atualizar_resumos(conn):
+    """As páginas /empresas do app leem contagens prontas destas visões
+    materializadas; sem o refresh elas seguiriam com os números da ingestão
+    anterior."""
+    conn.commit()
+    c = conn.cursor()
+    for nome in ('pseo_resumo_cnae_cidade', 'pseo_resumo_cidade'):
+        c.execute("SELECT to_regclass(%s)", (nome,))
+        if c.fetchone()[0]:
+            print(f'[db] atualizando {nome}...', flush=True)
+            c.execute(f'REFRESH MATERIALIZED VIEW {nome}')
+            conn.commit()
 
 
 if __name__ == '__main__':
