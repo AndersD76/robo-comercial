@@ -124,7 +124,8 @@
 <div class="wrap">
   <div class="crumbs">
     <a href="/">Home</a> › <a href="/empresas">Empresas</a> ›
-    <a href="/empresas/{{ seg.slug }}">{{ seg.label }}</a> › {{ municipio }} - {{ uf }}
+    <a href="/empresas/{{ seg.slug }}">{{ seg.label }}</a> ›
+    <a href="/empresas/{{ seg.slug }}/estado/{{ uf|lower }}">{{ uf_nome }}</a> › {{ municipio }}
   </div>
 
   <h1>Empresas de {{ seg.nome }} em {{ municipio }} - {{ uf }} ({{ n }} ativas)</h1>
@@ -201,6 +202,12 @@
     {% endfor %}
   </div>
   {% endif %}
+
+  <div class="related-links" style="margin-top:14px">
+    <a href="/empresas/cidade/{{ combo.mun_slug }}">Todas as empresas de {{ municipio }} por segmento</a>
+    <a href="/empresas/{{ seg.slug }}/estado/{{ uf|lower }}">{{ seg.label }} em todo o {{ uf_nome }}</a>
+    <a href="/ferramentas/lista-de-empresas?segmento={{ seg.slug }}&cidade={{ municipio|urlencode }}&uf={{ uf }}">Perfil destas empresas (porte, abertura, bairros)</a>
+  </div>
 
   <div style="margin:32px 0;padding:20px;background:rgba(99,102,241,.08);border-radius:12px;border:1px solid rgba(99,102,241,.15)">
     <h3 style="font-size:15px;margin-bottom:8px;color:#a5b4fc">Quer prospectar essas empresas automaticamente?</h3>

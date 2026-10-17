@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ titulo }}</title>
+  <meta name="description" content="{{ descricao }}">
+  <meta name="robots" content="{{ robots_meta|default('index, follow') }}">
+  <link rel="canonical" href="{{ canonical }}">
+  <meta property="og:title" content="{{ titulo }}">
+  <meta property="og:description" content="{{ descricao }}">
+  <meta property="og:url" content="{{ canonical }}">
+  <meta property="og:image" content="https://www.turbovenda.com.br/static/og-image.png">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="pt_BR">
+  <meta property="og:site_name" content="TurboVenda">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect rx='20' width='100' height='100' fill='%236366f1'/><text x='50' y='72' font-size='60' text-anchor='middle' fill='white'>⚡</text></svg>">
+  <script>
+  (function(){
+    if(localStorage.getItem('cookie_consent')==='accepted'){
+      var s=document.createElement('script');
+      s.async=true;
+      s.src='https://www.googletagmanager.com/gtag/js?id={{ ga_id }}';
+      document.head.appendChild(s);
+      window.dataLayer=window.dataLayer||[];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js',new Date());
+      gtag('config','{{ ga_id }}');
+    }
+  })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  {% for ld in ld_json|default([]) %}
+  <script type="application/ld+json">{{ ld|safe }}</script>
+  {% endfor %}
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',sans-serif;background:#060b18;color:#f1f5f9;line-height:1.6}
+    nav{position:fixed;top:0;left:0;right:0;z-index:100;height:64px;display:flex;align-items:center;
+        justify-content:space-between;padding:0 40px;backdrop-filter:blur(20px);
+        background:rgba(6,11,24,.85);border-bottom:1px solid rgba(255,255,255,.05)}
+    .nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none}
+    .nav-logo-mark{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#8b5cf6);
+        display:flex;align-items:center;justify-content:center;font-size:16px}
+    .nav-logo-text{font-size:18px;font-weight:800;color:#fff;letter-spacing:-.4px}
+    .nav-logo-text span{color:#6366f1}
+    .nav-links{display:flex;align-items:center;gap:6px}
+    .nav-links a{color:#94a3b8;text-decoration:none;font-size:14px;font-weight:500;padding:6px 14px;border-radius:8px}
+    .nav-links a:hover{color:#fff;background:rgba(255,255,255,.05)}
+    .nav-links a.btn-nav{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-weight:700;font-size:13px;padding:8px 18px}
+    .wrap{max-width:880px;margin:0 auto;padding:100px 24px 40px}
+    .crumbs{font-size:13px;color:#64748b;margin-bottom:18px}
+    .crumbs a{color:#818cf8;text-decoration:none}
+    h1{font-size:1.9rem;font-weight:900;letter-spacing:-.5px;line-height:1.2;margin-bottom:10px}
+    .meta-line{color:#64748b;font-size:13px;margin-bottom:22px}
+    h2{font-size:1.25rem;font-weight:800;margin:32px 0 12px}
+    h2 small{color:#64748b;font-weight:600;font-size:13px}
+    h3{font-size:1.05rem;font-weight:700;margin:20px 0 8px}
+    p{color:#cbd5e1;font-size:15.5px;margin-bottom:14px}
+    .texto a,.faq a,p a{color:#818cf8}
+    ul.lista{margin:0 0 14px 20px;color:#cbd5e1;font-size:15px}
+    ul.lista li{margin-bottom:6px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+    .grid a,.grid .semlink{background:#0d1526;border:1px solid rgba(255,255,255,.06);border-radius:10px;
+        padding:12px 15px;text-decoration:none;display:flex;justify-content:space-between;align-items:center;gap:8px;transition:.2s}
+    .grid a:hover{border-color:rgba(99,102,241,.4)}
+    .grid .nome{color:#e2e8f0;font-size:13.5px;font-weight:600}
+    .grid .semlink .nome{color:#64748b}
+    .grid .qtd{color:#818cf8;font-size:12.5px;font-weight:700;white-space:nowrap}
+    table.dados{width:100%;border-collapse:collapse;font-size:14px;margin:6px 0 18px}
+    table.dados th{text-align:left;color:#94a3b8;font-weight:600;font-size:12.5px;text-transform:uppercase;
+        letter-spacing:.4px;padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.1)}
+    table.dados td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.05);color:#e2e8f0}
+    table.dados td.num{text-align:right;color:#818cf8;font-weight:700;white-space:nowrap}
+    table.dados a{color:#c7d2fe;text-decoration:none}
+    table.dados a:hover{text-decoration:underline}
+    .destaques{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:8px 0 22px}
+    .destaque{background:#0d1526;border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:14px 16px}
+    .destaque b{display:block;font-size:1.45rem;font-weight:900;color:#fff}
+    .destaque span{color:#94a3b8;font-size:12.5px}
+    .cta-box{background:linear-gradient(135deg,rgba(99,102,241,.15),rgba(139,92,246,.1));border:1px solid rgba(99,102,241,.3);
+        border-radius:14px;padding:22px 24px;margin:30px 0;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+    .cta-box p{margin:0;font-size:14.5px}
+    .cta-btn{display:inline-block;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:13px 26px;
+        border-radius:10px;font-weight:700;font-size:15px;text-decoration:none;white-space:nowrap;border:0;cursor:pointer;font-family:inherit}
+    .faq details{background:#0d1526;border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:14px 16px;margin-bottom:10px}
+    .faq summary{cursor:pointer;font-weight:700;color:#e2e8f0}
+    .faq details p{margin:10px 0 0}
+    .card{background:#0d1526;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:22px}
+    label{display:block;font-size:13px;font-weight:600;color:#94a3b8;margin:12px 0 6px}
+    input,select,textarea{width:100%;background:#060b18;border:1px solid rgba(255,255,255,.15);border-radius:9px;
+        color:#f1f5f9;font-family:inherit;font-size:15px;padding:11px 12px}
+    textarea{min-height:90px;resize:vertical}
+    .fonte{color:#64748b;font-size:12.5px;line-height:1.7;margin-top:36px;border-top:1px solid rgba(255,255,255,.05);padding-top:16px}
+    .fonte a{color:#818cf8}
+    footer{padding:40px 24px;border-top:1px solid rgba(255,255,255,.05);margin-top:50px}
+    .rodape{max-width:880px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:18px}
+    .rodape b{display:block;color:#e2e8f0;font-size:13px;margin-bottom:8px}
+    .rodape a{display:block;color:#64748b;text-decoration:none;font-size:13px;margin-bottom:5px}
+    .rodape a:hover{color:#f1f5f9}
+    .copy{text-align:center;color:#475569;font-size:12.5px;margin-top:26px}
+    .skip-link{position:absolute;top:-40px;left:0;background:#6366f1;color:#fff;padding:8px 16px;z-index:10000;transition:top .2s}.skip-link:focus{top:0}
+    @media(max-width:768px){nav{padding:0 16px}.nav-links a:not(.btn-nav){display:none}h1{font-size:1.45rem}}
+    {% block estilo %}{% endblock %}
+  </style>
+</head>
+<body>
+<a href="#main" class="skip-link">Pular para conteúdo</a>
+<nav>
+  <a class="nav-logo" href="/">
+    <div class="nav-logo-mark">⚡</div>
+    <div class="nav-logo-text">Turbo<span>Venda</span></div>
+  </a>
+  <div class="nav-links">
+    <a href="/ferramentas">Ferramentas grátis</a>
+    <a href="/empresas">Empresas</a>
+    <a href="/precos">Preços</a>
+    <a href="/cadastro?utm_source=site&utm_medium=organic&utm_campaign=nav" class="btn-nav" data-cta="nav">Começar grátis</a>
+  </div>
+</nav>
+
+<main id="main">
+<div class="wrap">
+{% block conteudo %}{% endblock %}
+</div>
+</main>
+
+{% include '_rodape_publico.html' %}
+<script>(function(){var p=new URLSearchParams(location.search);['utm_source','utm_medium','utm_campaign'].forEach(function(k){var v=p.get(k);if(v)localStorage.setItem(k,v)})})();</script>
+{% block scripts %}{% endblock %}
+{% include 'cookie_banner.html' %}
+</body>
+</html>

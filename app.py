@@ -2540,7 +2540,10 @@ def _pseo_ler_contagens():
             "FROM empresas_publicas WHERE situacao = '02' "
             "AND cnae_principal = ANY(%s) GROUP BY cnae_principal, municipio, uf",
             (codigos,))
-        return rows, []
+        cidades = _pseo_query(
+            "SELECT municipio, uf, COUNT(*) AS n FROM empresas_publicas "
+            "WHERE situacao = '02' GROUP BY municipio, uf")
+        return rows, cidades
 
 
 def _pseo_recarregar():
@@ -2608,12 +2611,20 @@ def _pseo_montar(rows, cidades_rows):
                     key=lambda c: -c['n'])
     sitemap_set = {(c['cnae_slug'], c['mun_slug'])
                    for c in ranked[:MAX_PSEO_PAGES]}
-    # Total de CNPJs ativos da cidade em todas as atividades (não só B2B)
-    total_cidade = {slugify(f"{r['municipio']}-{r['uf']}"): int(r['n'])
-                    for r in cidades_rows if r['municipio'] and r['uf']}
+    # Total de CNPJs ativos da cidade em todas as atividades (não só B2B) e
+    # ranking das cidades de cada UF por esse total
+    total_cidade, ranking_uf = {}, {}
+    for r in cidades_rows:
+        if r['municipio'] and r['uf']:
+            ms = slugify(f"{r['municipio']}-{r['uf']}")
+            total_cidade[ms] = int(r['n'])
+            ranking_uf.setdefault(r['uf'], []).append(ms)
+    for lst in ranking_uf.values():
+        lst.sort(key=lambda ms: -total_cidade[ms])
     return {'combos': combos, 'cidades': cidades, 'por_cnae': por_cnae,
             'por_cidade': por_cidade, 'ranked': ranked,
-            'sitemap_set': sitemap_set, 'total_cidade': total_cidade}
+            'sitemap_set': sitemap_set, 'total_cidade': total_cidade,
+            'ranking_uf': ranking_uf}
 
 
 def _pseo_sitemap_urls():
@@ -2624,6 +2635,15 @@ def _pseo_sitemap_urls():
         return []
     cnaes_no_ar = sorted({cs for cs, _ in agg['sitemap_set']})
     urls = [f'{_PSEO_BASE}/empresas/{cs}' for cs in cnaes_no_ar]
+    for cs in cnaes_no_ar:
+        urls += [f"{_PSEO_BASE}/empresas/{cs}/estado/{e['uf'].lower()}"
+                 for e in _pseo_estados_do_cnae(agg, cs)
+                 if _pseo_estado_ok(e) and e['total'] >= PSEO_ESTADO_INDEX]
+    hubs = [ms for ms, combos in agg['por_cidade'].items()
+            if sum(1 for c in combos if c['n'] >= PSEO_MIN_EMPRESAS)
+            >= PSEO_CIDADE_HUB_INDEX]
+    hubs.sort(key=lambda ms: -agg['cidades'][ms]['total'])
+    urls += [f'{_PSEO_BASE}/empresas/cidade/{ms}' for ms in hubs]
     urls += [f"{_PSEO_BASE}/empresas/{c['cnae_slug']}/{c['mun_slug']}"
              for c in agg['ranked'][:MAX_PSEO_PAGES]]
     return urls
@@ -2760,8 +2780,7 @@ def pseo_hub():
         top_cidades.append({
             'municipio': cid['municipio'], 'uf': cid['uf'],
             'total': cid['total'],
-            'url': (f"/empresas/{melhores[0]['cnae_slug']}/{mun_slug}"
-                    if melhores else None)})
+            'url': f"/empresas/cidade/{mun_slug}" if melhores else None})
     total_empresas = sum(x['total'] for x in cnaes)
     return render_template('empresas_hub.html', cnaes=cnaes,
                            top_cidades=top_cidades,
@@ -2774,6 +2793,14 @@ def pseo_busca():
     seg_slug = request.args.get('segmento', '').strip()
     cidade = request.args.get('cidade', '').strip()
     if seg_slug not in CNAE_POR_SLUG:
+        # Só a cidade: leva para a página com todos os segmentos dela
+        if cidade:
+            agg = _pseo_agg()
+            alvo = slugify(cidade)
+            for ms, _cid in sorted(agg['cidades'].items(),
+                                   key=lambda kv: -kv[1]['total']):
+                if ms.startswith(alvo) and _pseo_cidade_hub_info(agg, ms)[1]:
+                    return redirect(f'/empresas/cidade/{ms}')
         return redirect('/empresas')
     if cidade:
         agg = _pseo_agg()
@@ -2798,16 +2825,17 @@ def pseo_cnae(cnae_slug):
     pc = agg['por_cnae'].get(cnae_slug)
     if not pc or pc['total'] == 0:
         return _pseo_404()
-    por_uf = {}
-    for c in pc['cidades']:
-        d = por_uf.setdefault(c['uf'], {'uf': c['uf'],
-                                        'uf_nome': UF_NOMES.get(c['uf'], c['uf']),
-                                        'total': 0, 'cidades': []})
-        d['total'] += c['n']
-        d['cidades'].append({**c, 'tem_pagina': c['n'] >= PSEO_MIN_EMPRESAS})
-    ufs = sorted(por_uf.values(), key=lambda d: -d['total'])
+    # Por estado: total, link para a página do estado e as maiores cidades
+    # (a lista de todas as cidades fica na página do estado)
+    ufs = []
+    for d in _pseo_estados_do_cnae(agg, cnae_slug):
+        ufs.append({**d, 'tem_pagina': _pseo_estado_ok(d),
+                    'cidades': [{**c, 'tem_pagina': c['n'] >= PSEO_MIN_EMPRESAS}
+                                for c in d['cidades'][:8]],
+                    'n_cidades': len(d['cidades'])})
     return render_template('empresas_cnae.html', seg=seg, ufs=ufs,
-                           total=pc['total'],
+                           total=pc['total'], total_fmt=_fmt_n(pc['total']),
+                           n_ufs=len(ufs),
                            cnae_fmt=cnae_formatado(seg['codigo']),
                            ga_id=GA_MEASUREMENT_ID)
 
@@ -2943,6 +2971,236 @@ def pseo_cidade(cnae_slug, mun_slug):
                            ld_itemlist=ld_itemlist, ld_faq=ld_faq,
                            titulo=titulo, descricao=descricao,
                            cta_url=cta_url, ga_id=GA_MEASUREMENT_ID)
+
+
+PSEO_ESTADO_MIN = 20        # página de estado só com >= 20 empresas
+PSEO_ESTADO_INDEX = 30      # e indexável a partir de 30
+PSEO_CIDADE_HUB_INDEX = 3   # hub da cidade indexável com >= 3 segmentos com página
+
+
+def _fmt_n(n):
+    """6739551 -> '6.739.551'."""
+    return f'{n:,}'.replace(',', '.')
+
+
+def _pct(parte, todo):
+    return f"{(100 * parte / todo):.1f}".replace('.', ',') if todo else '0'
+
+
+def _pseo_estados_do_cnae(agg, cnae_slug):
+    """[{uf, uf_nome, total, cidades}] do segmento, maior estado primeiro."""
+    por_uf = {}
+    for c in agg['por_cnae'].get(cnae_slug, {}).get('cidades', []):
+        d = por_uf.setdefault(c['uf'], {'uf': c['uf'],
+                                        'uf_nome': UF_NOMES.get(c['uf'], c['uf']),
+                                        'total': 0, 'cidades': []})
+        d['total'] += c['n']
+        d['cidades'].append(c)
+    return sorted(por_uf.values(), key=lambda d: -d['total'])
+
+
+def _pseo_estado_ok(d):
+    return d['total'] >= PSEO_ESTADO_MIN and len(d['cidades']) >= 2
+
+
+def _pseo_cidade_hub_info(agg, mun_slug):
+    combos = agg['por_cidade'].get(mun_slug) or []
+    com_pagina = [c for c in combos if c['n'] >= PSEO_MIN_EMPRESAS]
+    return combos, com_pagina
+
+
+def _ld(obj):
+    return json.dumps(obj, ensure_ascii=False)
+
+
+def _ld_breadcrumb(itens):
+    return _ld({"@context": "https://schema.org", "@type": "BreadcrumbList",
+                "itemListElement": [
+                    {"@type": "ListItem", "position": i + 1, "name": nome,
+                     "item": url} for i, (nome, url) in enumerate(itens)]})
+
+
+def _ld_faq(faq):
+    return _ld({"@context": "https://schema.org", "@type": "FAQPage",
+                "mainEntity": [{"@type": "Question", "name": q,
+                                "acceptedAnswer": {"@type": "Answer", "text": a}}
+                               for q, a in faq]})
+
+
+@app.route('/empresas/<cnae_slug>/estado/<uf>')
+def pseo_estado(cnae_slug, uf):
+    """Segmento num estado: ranking real das cidades do UF."""
+    if uf != uf.lower():
+        return redirect(f'/empresas/{cnae_slug}/estado/{uf.lower()}', 301)
+    UF = uf.upper()
+    seg = CNAE_POR_SLUG.get(cnae_slug)
+    if not seg or UF not in UF_NOMES:
+        return _pseo_404()
+    agg = _pseo_agg()
+    estados = _pseo_estados_do_cnae(agg, cnae_slug)
+    d = next((e for e in estados if e['uf'] == UF), None)
+    if not d or not _pseo_estado_ok(d):
+        return _pseo_404()
+    uf_nome = UF_NOMES[UF]
+    n, cidades = d['total'], d['cidades']
+    total_br = agg['por_cnae'][cnae_slug]['total']
+    rank = estados.index(d) + 1
+    top3 = cidades[:3]
+    n_top3 = sum(c['n'] for c in top3)
+    com_pagina = [c for c in cidades if c['n'] >= PSEO_MIN_EMPRESAS]
+    nome, label = seg['nome'], seg['label']
+    cnae_fmt = cnae_formatado(seg['codigo'])
+
+    texto = [
+        f"O {uf_nome} tem {_fmt_n(n)} empresas ativas de {nome} (CNAE {cnae_fmt}), "
+        f"espalhadas por {len(cidades)} municípios, segundo os dados abertos do CNPJ "
+        f"da Receita Federal. É o {rank}º estado do país nesse segmento, com "
+        f"{_pct(n, total_br)}% das {_fmt_n(total_br)} empresas ativas do Brasil.",
+        "A maior concentração está em " + ', '.join(
+            f"{c['municipio']} ({_fmt_n(c['n'])})" for c in top3)
+        + f": juntas, essas cidades somam {_pct(n_top3, n)}% do segmento no estado. "
+        f"{len(com_pagina)} municípios têm 8 ou mais empresas e ganharam página "
+        f"própria com a lista completa (razão social, bairro, porte e ano de abertura).",
+        f"Para prospectar {label.lower()} no {uf_nome}, comece pelas cidades do topo "
+        f"do ranking — mais empresas por visita e por campanha — e amplie o raio para "
+        f"as vizinhas quando a lista esgotar. O TurboVenda transforma esses CNPJs em "
+        f"leads com telefone, e-mail e site encontrados em fontes públicas.",
+    ]
+    faq = [
+        (f"Quantas empresas de {nome} existem no {uf_nome}?",
+         f"Segundo os dados abertos do CNPJ da Receita Federal, são {_fmt_n(n)} "
+         f"empresas ativas de {nome} (CNAE {cnae_fmt}) em {len(cidades)} municípios "
+         f"do {uf_nome}."),
+        (f"Qual cidade do {uf_nome} tem mais empresas de {nome}?",
+         f"{top3[0]['municipio']}, com {_fmt_n(top3[0]['n'])} empresas ativas"
+         + (f", seguida de {top3[1]['municipio']} ({_fmt_n(top3[1]['n'])})"
+            if len(top3) > 1 else '') + "."),
+        ("Como conseguir telefone e e-mail dessas empresas?",
+         "Esta página mostra só contagens públicas. No TurboVenda, a IA enriquece "
+         "cada empresa com telefone, e-mail e site de fontes públicas e escreve a "
+         "primeira abordagem. O plano grátis inclui 50 leads, sem cartão."),
+    ]
+    outros_estados = [e for e in estados if e['uf'] != UF and _pseo_estado_ok(e)][:12]
+    outros_segmentos = []
+    for s in CNAE_B2B:
+        if s['slug'] == cnae_slug:
+            continue
+        e = next((x for x in _pseo_estados_do_cnae(agg, s['slug'])
+                  if x['uf'] == UF), None)
+        if e and _pseo_estado_ok(e):
+            outros_segmentos.append({'seg': s, 'total': e['total']})
+    outros_segmentos.sort(key=lambda x: -x['total'])
+
+    canonical = f'{_PSEO_BASE}/empresas/{cnae_slug}/estado/{uf}'
+    indexavel = n >= PSEO_ESTADO_INDEX
+    return render_template(
+        'empresas_estado.html', seg=seg, uf=UF, uf_slug=uf, uf_nome=uf_nome,
+        n=n, cidades=cidades, texto=texto, faq=faq, cnae_fmt=cnae_fmt,
+        destaques=[(_fmt_n(n), 'empresas ativas'),
+                   (str(len(cidades)), 'municípios'),
+                   (f'{rank}º', 'estado do país'),
+                   (f'{_pct(n, total_br)}%', 'do total nacional')],
+        outros_estados=outros_estados, outros_segmentos=outros_segmentos[:12],
+        pseo_min=PSEO_MIN_EMPRESAS,
+        titulo=f"{label} no {uf_nome}: {_fmt_n(n)} empresas ativas | TurboVenda",
+        descricao=(f"{_fmt_n(n)} empresas ativas de {nome} no {uf_nome}, em "
+                   f"{len(cidades)} cidades. Ranking por município com dados "
+                   f"abertos do CNPJ. Prospecte com IA grátis."),
+        canonical=canonical,
+        robots_meta='index, follow' if indexavel else 'noindex, follow',
+        ld_json=[_ld_breadcrumb([
+            ("Home", f"{_PSEO_BASE}/"), ("Empresas", f"{_PSEO_BASE}/empresas"),
+            (label, f"{_PSEO_BASE}/empresas/{cnae_slug}"), (uf_nome, canonical)]),
+            _ld_faq(faq)],
+        cta_url=(f"/cadastro?utm_source=pseo&utm_medium=organic"
+                 f"&utm_campaign={cnae_slug}-{uf}"),
+        ga_id=GA_MEASUREMENT_ID)
+
+
+@app.route('/empresas/cidade/<mun_slug>')
+def pseo_cidade_hub(mun_slug):
+    """Todas as atividades B2B de uma cidade, com o total real de CNPJs."""
+    agg = _pseo_agg()
+    combos, com_pagina = _pseo_cidade_hub_info(agg, mun_slug)
+    if not com_pagina:
+        return _pseo_404()
+    mun, UF = combos[0]['municipio'], combos[0]['uf']
+    uf_nome = UF_NOMES.get(UF, UF)
+    total = agg['total_cidade'].get(mun_slug)
+    ranking = agg['ranking_uf'].get(UF, [])
+    rank = ranking.index(mun_slug) + 1 if mun_slug in ranking else None
+    b2b = sum(c['n'] for c in combos)
+    segs = [{**c, 'seg': CNAE_POR_SLUG[c['cnae_slug']],
+             'tem_pagina': c['n'] >= PSEO_MIN_EMPRESAS} for c in combos]
+    top3 = segs[:3]
+
+    texto = []
+    if total and rank:
+        texto.append(
+            f"{mun} - {UF} tem {_fmt_n(total)} CNPJs ativos somando todas as "
+            f"atividades, segundo os dados abertos da Receita Federal — é a "
+            f"{rank}ª cidade do {uf_nome} em número de empresas, entre "
+            f"{len(ranking)} municípios.")
+    texto.append(
+        f"Nos segmentos B2B mapeados pelo TurboVenda, a cidade soma {_fmt_n(b2b)} "
+        f"empresas em {len(segs)} atividades. As maiores são "
+        + ', '.join(f"{s['seg']['label'].lower()} ({_fmt_n(s['n'])})" for s in top3)
+        + f". {len(com_pagina)} segmentos têm 8 ou mais empresas e ganharam página "
+        f"com a lista completa — razão social, bairro, porte e ano de abertura.")
+    texto.append(
+        f"Use a tabela abaixo para escolher por onde começar a prospecção em {mun}: "
+        f"segmentos grandes rendem volume; os menores costumam ter menos "
+        f"concorrência batendo na mesma porta.")
+    faq = [
+        (f"Quantas empresas existem em {mun}?",
+         (f"Segundo os dados abertos do CNPJ, {mun} - {UF} tem {_fmt_n(total)} "
+          f"empresas ativas em todas as atividades." if total else
+          f"Nos segmentos B2B mapeados, {mun} - {UF} tem {_fmt_n(b2b)} empresas "
+          f"ativas.")),
+        (f"Quais segmentos B2B têm mais empresas em {mun}?",
+         "Pelos dados da Receita Federal: " + '; '.join(
+             f"{s['seg']['label']} ({_fmt_n(s['n'])})" for s in top3) + "."),
+        (f"Como conseguir uma lista de empresas de {mun} com telefone?",
+         "As páginas de cada segmento trazem a lista com dados cadastrais públicos. "
+         "Para telefone, e-mail e site, o TurboVenda enriquece cada empresa com "
+         "fontes públicas — o plano grátis inclui 50 leads, sem cartão."),
+    ]
+    vizinhas = []
+    if rank:
+        janela = ranking[max(0, rank - 7):rank + 6]
+        for ms in janela:
+            if ms == mun_slug:
+                continue
+            cb, cp = _pseo_cidade_hub_info(agg, ms)
+            if len(cp) >= PSEO_CIDADE_HUB_INDEX:
+                vizinhas.append({'mun_slug': ms, 'municipio': cb[0]['municipio'],
+                                 'uf': UF, 'total': agg['total_cidade'][ms]})
+    canonical = f'{_PSEO_BASE}/empresas/cidade/{mun_slug}'
+    destaques = [(_fmt_n(b2b), 'empresas em segmentos B2B'),
+                 (str(len(segs)), 'segmentos B2B presentes')]
+    if total:
+        destaques.insert(0, (_fmt_n(total), 'CNPJs ativos (todas as atividades)'))
+    if rank:
+        destaques.append((f'{rank}ª', f'cidade do {UF} em empresas'))
+    return render_template(
+        'empresas_cidade_hub.html', municipio=mun, uf=UF, uf_nome=uf_nome,
+        mun_slug=mun_slug, segs=segs, texto=texto, faq=faq, destaques=destaques,
+        vizinhas=vizinhas[:10],
+        titulo=(f"Empresas em {mun} - {UF}: "
+                + (f"{_fmt_n(total)} CNPJs ativos" if total else
+                   f"{_fmt_n(b2b)} empresas B2B") + " | TurboVenda"),
+        descricao=(f"Lista de empresas em {mun} - {UF} por segmento: "
+                   f"{_fmt_n(b2b)} empresas B2B em {len(segs)} atividades, com "
+                   f"dados abertos do CNPJ. Veja a lista e prospecte com IA."),
+        canonical=canonical,
+        robots_meta=('index, follow' if len(com_pagina) >= PSEO_CIDADE_HUB_INDEX
+                     else 'noindex, follow'),
+        ld_json=[_ld_breadcrumb([
+            ("Home", f"{_PSEO_BASE}/"), ("Empresas", f"{_PSEO_BASE}/empresas"),
+            (f"{mun} - {UF}", canonical)]), _ld_faq(faq)],
+        cta_url=(f"/cadastro?utm_source=pseo&utm_medium=organic"
+                 f"&utm_campaign=cidade-{mun_slug}"),
+        ga_id=GA_MEASUREMENT_ID)
 
 
 @app.route('/manifest.json')

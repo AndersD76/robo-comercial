@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ seg.label }} no Sul do Brasil ({{ total }} ativas) | TurboVenda</title>
-  <meta name="description" content="{{ total }} empresas ativas de {{ seg.nome }} (CNAE {{ cnae_fmt }}) no RS, SC e PR, segundo os dados abertos do CNPJ. Veja a lista por cidade e prospecte com IA.">
+  <title>{{ seg.label }} no Brasil: {{ total_fmt }} empresas ativas | TurboVenda</title>
+  <meta name="description" content="{{ total_fmt }} empresas ativas de {{ seg.nome }} (CNAE {{ cnae_fmt }}) em {{ n_ufs }} estados, segundo os dados abertos do CNPJ. Veja por estado e cidade e prospecte com IA.">
   <meta name="robots" content="index, follow">
   <meta name="google-site-verification" content="VMyveSsuwuHW6VKMlQUXLacN3llx6ELz38VRdprEVxA">
   <link rel="canonical" href="https://www.turbovenda.com.br/empresas/{{ seg.slug }}">
-  <meta property="og:title" content="{{ seg.label }} no Sul do Brasil ({{ total }} ativas) | TurboVenda">
+  <meta property="og:title" content="{{ seg.label }} no Brasil: {{ total_fmt }} empresas ativas | TurboVenda">
   <meta property="og:description" content="{{ total }} empresas ativas de {{ seg.nome }} por cidade, segundo os dados abertos do CNPJ.">
   <meta property="og:url" content="https://www.turbovenda.com.br/empresas/{{ seg.slug }}">
   <meta property="og:image" content="https://www.turbovenda.com.br/static/og-image.png">
@@ -110,11 +110,13 @@
 <main id="main">
 <div class="wrap">
   <div class="crumbs"><a href="/">Home</a> › <a href="/empresas">Empresas</a> › {{ seg.label }}</div>
-  <h1>{{ seg.label }} no Sul do Brasil ({{ total }} ativas)</h1>
+  <h1>{{ seg.label }} no Brasil: {{ total_fmt }} empresas ativas</h1>
   <p class="meta-line">Empresas de {{ seg.nome }} · CNAE {{ cnae_fmt }} · Fonte: dados abertos do CNPJ (Receita Federal)</p>
 
+  <p class="meta-line" style="margin-top:-14px">{{ n_ufs }} estados · as maiores cidades de cada estado abaixo; a lista completa de municípios está na página do estado.</p>
   {% for u in ufs %}
-  <h2>{{ u.uf_nome }} <small>· {{ u.total }} empresas</small></h2>
+  <h2>{% if u.tem_pagina %}<a href="/empresas/{{ seg.slug }}/estado/{{ u.uf|lower }}" style="color:#e2e8f0">{{ u.uf_nome }}</a>{% else %}{{ u.uf_nome }}{% endif %}
+    <small>· {{ u.total }} empresas em {{ u.n_cidades }} municípios</small></h2>
   <div class="grid">
     {% for c in u.cidades %}
     {% if c.tem_pagina %}
@@ -125,6 +127,9 @@
     <div class="semlink"><span class="nome">{{ c.municipio }}</span><span class="qtd">{{ c.n }}</span></div>
     {% endif %}
     {% endfor %}
+    {% if u.tem_pagina and u.n_cidades > u.cidades|length %}
+    <a href="/empresas/{{ seg.slug }}/estado/{{ u.uf|lower }}"><span class="nome">Todas as {{ u.n_cidades }} cidades do {{ u.uf }}</span><span class="qtd">›</span></a>
+    {% endif %}
   </div>
   {% endfor %}
 

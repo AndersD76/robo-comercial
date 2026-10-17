@@ -1,0 +1,58 @@
+{% extends '_publico_base.html' %}
+{% block conteudo %}
+  <div class="crumbs"><a href="/">Home</a> › <a href="/empresas">Empresas</a> › {{ municipio }} - {{ uf }}</div>
+  <h1>Empresas em {{ municipio }} - {{ uf }}</h1>
+  <p class="meta-line">{{ uf_nome }} · Fonte: dados abertos do CNPJ (Receita Federal)</p>
+
+  <div class="destaques">
+    {% for valor, rotulo in destaques %}
+    <div class="destaque"><b>{{ valor }}</b><span>{{ rotulo }}</span></div>
+    {% endfor %}
+  </div>
+
+  <div class="texto">
+    {% for p in texto %}<p>{{ p }}</p>{% endfor %}
+  </div>
+
+  <div class="cta-box">
+    <p><strong>Vai prospectar em {{ municipio }}?</strong><br>
+       O TurboVenda monta a lista com telefone, e-mail e site e a IA escreve a abordagem.</p>
+    <a href="{{ cta_url }}" class="cta-btn" data-cta="pseo-cidade-hub">Gerar 50 leads grátis</a>
+  </div>
+
+  <h2>Empresas por segmento em {{ municipio }}</h2>
+  <table class="dados">
+    <thead><tr><th>Segmento</th><th>CNAE</th><th style="text-align:right">Empresas</th></tr></thead>
+    <tbody>
+      {% for s in segs %}
+      <tr>
+        <td>{% if s.tem_pagina %}<a href="/empresas/{{ s.cnae_slug }}/{{ mun_slug }}">{{ s.seg.label }}</a>{% else %}{{ s.seg.label }}{% endif %}</td>
+        <td style="color:#64748b;font-size:12.5px">{{ s.cnae[:4] }}-{{ s.cnae[4] }}/{{ s.cnae[5:] }}</td>
+        <td class="num">{{ s.n }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p style="font-size:13px;color:#64748b">Segmentos com 8 ou mais empresas têm link para a lista completa. Quer o perfil
+    de um segmento (porte, ano de abertura, bairros)? Use a
+    <a href="/ferramentas/lista-de-empresas?cidade={{ municipio|urlencode }}&uf={{ uf }}">ferramenta grátis de lista de empresas</a>.</p>
+
+  <h2>Perguntas frequentes</h2>
+  <div class="faq">
+    {% for q, a in faq %}
+    <details{% if loop.first %} open{% endif %}><summary>{{ q }}</summary><p>{{ a }}</p></details>
+    {% endfor %}
+  </div>
+
+  {% if vizinhas %}
+  <h2>Cidades do {{ uf_nome }} de porte parecido</h2>
+  <div class="grid">
+    {% for v in vizinhas %}
+    <a href="/empresas/cidade/{{ v.mun_slug }}"><span class="nome">{{ v.municipio }}</span><span class="qtd">{{ v.total }}</span></a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <p class="fonte">Fonte: dados abertos do CNPJ — Receita Federal do Brasil. Exibimos apenas
+    contagens e dados cadastrais públicos. <a href="/empresas/sobre-os-dados">Sobre os dados e pedidos de remoção</a>.</p>
+{% endblock %}

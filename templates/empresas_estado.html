@@ -1,0 +1,68 @@
+{% extends '_publico_base.html' %}
+{% block conteudo %}
+  <div class="crumbs"><a href="/">Home</a> › <a href="/empresas">Empresas</a> ›
+    <a href="/empresas/{{ seg.slug }}">{{ seg.label }}</a> › {{ uf_nome }}</div>
+  <h1>{{ seg.label }} no {{ uf_nome }}: {{ destaques[0][0] }} empresas ativas</h1>
+  <p class="meta-line">Empresas de {{ seg.nome }} · CNAE {{ cnae_fmt }} · Fonte: dados abertos do CNPJ (Receita Federal)</p>
+
+  <div class="destaques">
+    {% for valor, rotulo in destaques %}
+    <div class="destaque"><b>{{ valor }}</b><span>{{ rotulo }}</span></div>
+    {% endfor %}
+  </div>
+
+  <div class="texto">
+    {% for p in texto %}<p>{{ p }}</p>{% endfor %}
+  </div>
+
+  <div class="cta-box">
+    <p><strong>Quer os contatos dessas empresas?</strong><br>
+       A IA do TurboVenda encontra telefone, e-mail e site e escreve a primeira mensagem.</p>
+    <a href="{{ cta_url }}" class="cta-btn" data-cta="pseo-estado">Prospectar no {{ uf }} — grátis</a>
+  </div>
+
+  <h2>Ranking de cidades do {{ uf_nome }} <small>· {{ cidades|length }} municípios</small></h2>
+  <table class="dados">
+    <thead><tr><th>#</th><th>Cidade</th><th style="text-align:right">Empresas</th></tr></thead>
+    <tbody>
+      {% for c in cidades %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{% if c.n >= pseo_min %}<a href="/empresas/{{ seg.slug }}/{{ c.mun_slug }}">{{ c.municipio }}</a>{% else %}{{ c.municipio }}{% endif %}</td>
+        <td class="num">{{ c.n }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p style="font-size:13px;color:#64748b">Cidades com 8 ou mais empresas têm link para a lista completa.
+    Veja o perfil (porte, ano de abertura, bairros) de qualquer cidade na
+    <a href="/ferramentas/lista-de-empresas?segmento={{ seg.slug }}&uf={{ uf }}">ferramenta grátis de lista de empresas</a>.</p>
+
+  <h2>Perguntas frequentes</h2>
+  <div class="faq">
+    {% for q, a in faq %}
+    <details{% if loop.first %} open{% endif %}><summary>{{ q }}</summary><p>{{ a }}</p></details>
+    {% endfor %}
+  </div>
+
+  {% if outros_estados %}
+  <h2>{{ seg.label }} em outros estados</h2>
+  <div class="grid">
+    {% for e in outros_estados %}
+    <a href="/empresas/{{ seg.slug }}/estado/{{ e.uf|lower }}"><span class="nome">{{ e.uf_nome }}</span><span class="qtd">{{ e.total }}</span></a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if outros_segmentos %}
+  <h2>Outros segmentos no {{ uf_nome }}</h2>
+  <div class="grid">
+    {% for o in outros_segmentos %}
+    <a href="/empresas/{{ o.seg.slug }}/estado/{{ uf|lower }}"><span class="nome">{{ o.seg.label }}</span><span class="qtd">{{ o.total }}</span></a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <p class="fonte">Fonte: dados abertos do CNPJ — Receita Federal do Brasil. Exibimos apenas
+    contagens e dados cadastrais públicos. <a href="/empresas/sobre-os-dados">Sobre os dados e pedidos de remoção</a>.</p>
+{% endblock %}

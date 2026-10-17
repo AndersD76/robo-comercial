@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Empresas por segmento e cidade — dados abertos do CNPJ | TurboVenda</title>
-  <meta name="description" content="Listas de empresas ativas por CNAE e cidade no Sul do Brasil, com base nos dados abertos do CNPJ da Receita Federal. {{ total_empresas }} empresas mapeadas. Prospecte com IA grátis.">
+  <meta name="description" content="Listas de empresas ativas por CNAE, estado e cidade, com base nos dados abertos do CNPJ da Receita Federal. {{ total_empresas }} empresas mapeadas. Prospecte com IA grátis.">
   <meta name="robots" content="index, follow">
   <meta name="google-site-verification" content="VMyveSsuwuHW6VKMlQUXLacN3llx6ELz38VRdprEVxA">
   <link rel="canonical" href="https://www.turbovenda.com.br/empresas">
@@ -97,11 +97,11 @@
 <div class="wrap">
   <h1>Empresas por segmento e cidade</h1>
   <p class="sub">{{ total_empresas }} empresas ativas mapeadas a partir dos dados abertos
-     do CNPJ da Receita Federal (RS, SC e PR). Escolha um segmento e uma cidade para ver a
+     do CNPJ da Receita Federal, em todos os estados. Escolha um segmento e uma cidade para ver a
      lista — e prospecte com a IA do TurboVenda.</p>
 
   <form class="busca" method="GET" action="/empresas/busca">
-    <select name="segmento" required aria-label="Segmento">
+    <select name="segmento" aria-label="Segmento">
       <option value="">Escolha o segmento…</option>
       {% for item in cnaes %}
       <option value="{{ item.seg.slug }}">{{ item.seg.label }} ({{ item.total }})</option>
@@ -130,7 +130,7 @@
       <span class="qtd">{{ c.total }}</span>
     </a>
     {% else %}
-    <a href="/empresas/busca?cidade={{ c.municipio }}">
+    <a href="/empresas/busca?cidade={{ c.municipio|urlencode }}">
       <span class="nome">{{ c.municipio }} - {{ c.uf }}</span>
       <span class="qtd">{{ c.total }}</span>
     </a>
