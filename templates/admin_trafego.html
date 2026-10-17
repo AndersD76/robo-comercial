@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Tráfego — Admin TurboVenda</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Inter,system-ui,sans-serif;background:#060b18;color:#e2e8f0;padding:24px}
+    a{color:#818cf8}
+    .topo{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px}
+    h1{font-size:1.4rem}
+    .periodos a{display:inline-block;padding:6px 12px;border:1px solid rgba(255,255,255,.15);border-radius:8px;margin-left:6px;text-decoration:none;font-size:13px;color:#cbd5e1}
+    .periodos a.on{background:#6366f1;border-color:#6366f1;color:#fff}
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:24px}
+    .card{background:#0d1526;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:16px}
+    .card b{display:block;font-size:1.6rem}
+    .card span{color:#94a3b8;font-size:12.5px}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+    h2{font-size:1rem;margin:22px 0 10px;color:#cbd5e1}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th{text-align:left;color:#94a3b8;font-weight:600;padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.1)}
+    td{padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.05);word-break:break-all}
+    td.n{text-align:right;font-weight:700;color:#a5b4fc;white-space:nowrap;word-break:normal}
+    .barra{display:inline-block;height:8px;background:linear-gradient(90deg,#6366f1,#8b5cf6);border-radius:4px;vertical-align:middle;margin-right:6px}
+    .vazio{color:#64748b;font-size:13px;padding:10px 0}
+    .erro{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5;padding:12px;border-radius:8px;margin-bottom:16px}
+    .nota{color:#64748b;font-size:12px;margin-top:28px;line-height:1.6}
+    @media(max-width:900px){.grid2{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="topo">
+    <h1>Tráfego do site <span style="color:#64748b;font-weight:400;font-size:14px">· últimos {{ dias }} dias · bots fora</span></h1>
+    <div class="periodos">
+      {% for n in [7, 30, 90] %}<a href="?dias={{ n }}" class="{{ 'on' if dias == n }}">{{ n }} dias</a>{% endfor %}
+      <a href="/admin/dashboard">← Admin</a>
+    </div>
+  </div>
+  {% if erro %}<div class="erro">Erro ao consultar: {{ erro }}</div>{% endif %}
+
+  {% if d.totais %}
+  <div class="cards">
+    <div class="card"><b>{{ d.totais.entradas }}</b><span>visitas (entradas no site)</span></div>
+    <div class="card"><b>{{ d.totais.visitas }}</b><span>páginas vistas</span></div>
+    <div class="card"><b>{{ d.cliques }}</b><span>cliques em CTA</span></div>
+    <div class="card"><b>{{ d.totais.bots }}</b><span>acessos de robôs (ignorados)</span></div>
+  </div>
+
+  <h2>Por dia</h2>
+  {% set maxv = (d.por_dia|map(attribute='visitas')|max) if d.por_dia else 1 %}
+  {% if d.por_dia %}
+  <table><thead><tr><th>Dia</th><th>Páginas vistas</th><th style="text-align:right">Entradas</th><th style="text-align:right">Cliques CTA</th></tr></thead><tbody>
+    {% for r in d.por_dia %}
+    <tr><td>{{ r.dia.strftime('%d/%m') }}</td>
+        <td><span class="barra" style="width:{{ (180 * r.visitas / maxv)|round|int }}px"></span>{{ r.visitas }}</td>
+        <td class="n">{{ r.entradas }}</td><td class="n">{{ r.cliques }}</td></tr>
+    {% endfor %}
+  </tbody></table>
+  {% else %}<p class="vazio">Nenhuma visita registrada no período ainda.</p>{% endif %}
+
+  <div class="grid2">
+    <div>
+      <h2>Origem das visitas</h2>
+      {% if d.origens %}<table><thead><tr><th>Origem (UTM ou site de referência)</th><th style="text-align:right">Entradas</th></tr></thead><tbody>
+        {% for r in d.origens %}<tr><td>{{ r.origem }}</td><td class="n">{{ r.entradas }}</td></tr>{% endfor %}
+      </tbody></table>{% else %}<p class="vazio">Sem dados.</p>{% endif %}
+
+      <h2>Campanhas (UTM)</h2>
+      {% if d.campanhas %}<table><thead><tr><th>Campanha</th><th>Fonte / meio</th><th style="text-align:right">Entradas</th></tr></thead><tbody>
+        {% for r in d.campanhas %}<tr><td>{{ r.utm_campaign }}</td><td>{{ r.utm_source }} / {{ r.utm_medium }}</td><td class="n">{{ r.entradas }}</td></tr>{% endfor %}
+      </tbody></table>{% else %}<p class="vazio">Nenhuma visita com utm_campaign ainda.</p>{% endif %}
+
+      <h2>Cliques em CTA</h2>
+      {% if d.ctas %}<table><thead><tr><th>Página</th><th>CTA</th><th style="text-align:right">Cliques</th></tr></thead><tbody>
+        {% for r in d.ctas %}<tr><td>{{ r.path }}</td><td>{{ r.cta }}</td><td class="n">{{ r.n }}</td></tr>{% endfor %}
+      </tbody></table>{% else %}<p class="vazio">Sem cliques registrados.</p>{% endif %}
+    </div>
+    <div>
+      <h2>Páginas mais vistas</h2>
+      {% if d.paginas %}<table><thead><tr><th>Página</th><th style="text-align:right">Vistas</th><th style="text-align:right">Entradas</th></tr></thead><tbody>
+        {% for r in d.paginas %}<tr><td><a href="{{ r.path }}" target="_blank">{{ r.path }}</a></td><td class="n">{{ r.visitas }}</td><td class="n">{{ r.entradas }}</td></tr>{% endfor %}
+      </tbody></table>{% else %}<p class="vazio">Sem dados.</p>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <p class="nota">Entrada = página vista vinda de fora do site (busca, rede social, link direto); é a melhor aproximação de
+    "visita". Origem usa a UTM quando houver e, senão, o site de referência. Robôs são identificados pelo user-agent, que não
+    é gravado; IP também não (LGPD). Os dados ficam nas tabelas <code>pageviews</code> e <code>cta_cliques</code> do banco.</p>
+</body>
+</html>

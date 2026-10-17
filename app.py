@@ -9019,6 +9019,216 @@ def admin_logout():
     return redirect(url_for('admin_login'))
 
 
+# =============================================================================
+# Medição de tráfego no próprio banco (padrão do portfólio): pageviews das
+# páginas públicas e cliques de CTA. Sem IP e sem user-agent gravados (LGPD);
+# complementa o GA4, que só carrega com consentimento e some com ad-block.
+# =============================================================================
+
+_TRAF_FORA = ('/api/', '/admin', '/dashboard', '/configurar', '/static/', '/t/',
+              '/webhook/', '/oauth/', '/pagamento/', '/agendar/',
+              '/trial-expirado', '/logout', '/health')
+_BOT_UA = ('bot', 'crawl', 'spider', 'slurp', 'bing', 'google', 'yandex', 'baidu',
+           'duckduck', 'facebookexternalhit', 'whatsapp', 'telegram', 'ahrefs',
+           'semrush', 'headless', 'python', 'curl', 'wget', 'go-http', 'okhttp',
+           'axios', 'java/', 'lighthouse', 'preview', 'monitor', 'uptime',
+           'scrapy', 'httpclient', 'node-fetch')
+_TRAF_SQL = """
+CREATE TABLE IF NOT EXISTS pageviews (
+    id           BIGSERIAL PRIMARY KEY,
+    path         TEXT NOT NULL,
+    referrer     TEXT DEFAULT '',
+    utm_source   TEXT DEFAULT '',
+    utm_medium   TEXT DEFAULT '',
+    utm_campaign TEXT DEFAULT '',
+    is_bot       BOOLEAN DEFAULT false,
+    created_at   TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE pageviews ADD COLUMN IF NOT EXISTS entrada BOOLEAN DEFAULT false;
+CREATE INDEX IF NOT EXISTS idx_pageviews_created ON pageviews(created_at);
+CREATE TABLE IF NOT EXISTS cta_cliques (
+    id           BIGSERIAL PRIMARY KEY,
+    path         TEXT NOT NULL,
+    cta          TEXT DEFAULT '',
+    destino      TEXT DEFAULT '',
+    utm_source   TEXT DEFAULT '',
+    utm_medium   TEXT DEFAULT '',
+    utm_campaign TEXT DEFAULT '',
+    created_at   TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_cta_cliques_created ON cta_cliques(created_at);
+"""
+# Guarda a UTM da chegada e avisa o servidor a cada clique em CTA (link para
+# /cadastro ou elemento com data-cta); sendBeacon não atrasa a navegação
+_TRAF_SCRIPT = (
+    "<script>(function(){var L=window.localStorage;function g(k){try{return L.getItem(k)||''}"
+    "catch(e){return ''}}try{var q=new URLSearchParams(location.search);['utm_source',"
+    "'utm_medium','utm_campaign'].forEach(function(k){var v=q.get(k);if(v)L.setItem(k,v)})}"
+    "catch(e){}document.addEventListener('click',function(e){var a=e.target.closest&&"
+    "e.target.closest('a[href*=\"/cadastro\"],[data-cta]');if(!a||!navigator.sendBeacon)return;"
+    "var d={path:location.pathname,cta:a.getAttribute('data-cta')||(a.textContent||'')"
+    ".trim().slice(0,60),destino:a.getAttribute('href')||'',utm_source:g('utm_source'),"
+    "utm_medium:g('utm_medium'),utm_campaign:g('utm_campaign')};try{navigator.sendBeacon("
+    "'/api/t/cta',new Blob([JSON.stringify(d)],{type:'application/json'}))}catch(x){}},true)"
+    "})();</script>")
+
+_traf_fila = None
+_traf_lock = threading.Lock()
+
+
+def _traf_gravador(fila):
+    """Thread única que grava em lote a cada ~2 s."""
+    import queue as _queue
+    tabelas_ok = False
+    while True:
+        itens = [fila.get()]
+        time.sleep(2)
+        while True:
+            try:
+                itens.append(fila.get_nowait())
+            except _queue.Empty:
+                break
+        try:
+            conn = _conn()
+            try:
+                c = conn.cursor()
+                if not tabelas_ok:
+                    c.execute(_TRAF_SQL)
+                    tabelas_ok = True
+                pvs = [v for t, v in itens if t == 'pv']
+                ctas = [v for t, v in itens if t == 'cta']
+                if pvs:
+                    psycopg2.extras.execute_values(
+                        c, "INSERT INTO pageviews (path, referrer, utm_source, "
+                           "utm_medium, utm_campaign, is_bot, entrada) VALUES %s", pvs)
+                if ctas:
+                    psycopg2.extras.execute_values(
+                        c, "INSERT INTO cta_cliques (path, cta, destino, utm_source, "
+                           "utm_medium, utm_campaign) VALUES %s", ctas)
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.debug(f'trafego: gravação falhou (ignorada): {e}')
+
+
+def _traf_enfileirar(tipo, valores):
+    """Best-effort: nunca atrasa nem derruba a resposta."""
+    global _traf_fila
+    if not DATABASE_URL:
+        return
+    if _traf_fila is None:
+        import queue as _queue
+        with _traf_lock:
+            if _traf_fila is None:
+                fila = _queue.Queue(maxsize=5000)
+                threading.Thread(target=_traf_gravador, args=(fila,),
+                                 daemon=True).start()
+                _traf_fila = fila
+    try:
+        _traf_fila.put_nowait((tipo, valores))
+    except Exception:
+        pass
+
+
+@app.after_request
+def _trafego_pageview(resp):
+    try:
+        if (request.method != 'GET' or resp.status_code != 200
+                or resp.direct_passthrough
+                or 'text/html' not in (resp.content_type or '')
+                or request.path.startswith(_TRAF_FORA)):
+            return resp
+        ua = (request.headers.get('User-Agent') or '').lower()
+        ref = (request.headers.get('Referer') or '')[:300]
+        interno = _urlparse(ref).netloc.lower().endswith('turbovenda.com.br')
+        a = request.args
+        _traf_enfileirar('pv', (
+            request.path[:300], '' if interno else ref,
+            a.get('utm_source', '')[:120], a.get('utm_medium', '')[:120],
+            a.get('utm_campaign', '')[:120],
+            not ua or any(b in ua for b in _BOT_UA), not interno))
+        html = resp.get_data(as_text=True)
+        if '</body>' in html and '/api/t/cta' not in html:
+            resp.set_data(html.replace('</body>', _TRAF_SCRIPT + '</body>', 1))
+    except Exception:
+        pass
+    return resp
+
+
+@app.route('/api/t/cta', methods=['POST'])
+@limiter.limit("60 per minute", key_func=_ip_cliente)
+def api_trafego_cta():
+    d = request.get_json(silent=True, force=True) or {}
+
+    def g(k, n):
+        return str(d.get(k) or '')[:n]
+    if g('path', 300).startswith('/'):
+        _traf_enfileirar('cta', (g('path', 300), g('cta', 80), g('destino', 300),
+                                 g('utm_source', 120), g('utm_medium', 120),
+                                 g('utm_campaign', 120)))
+    return ('', 204)
+
+
+@app.route('/admin/trafego')
+@admin_required
+def admin_trafego():
+    """Visitas humanas (bots fora) por dia, página e origem, e cliques de CTA."""
+    dias = max(1, min(request.args.get('dias', 30, type=int) or 30, 365))
+    janela = "created_at > now() - (%s * interval '1 day')"
+    humano = "is_bot = false"
+    dia_br = "DATE(created_at AT TIME ZONE 'America/Sao_Paulo')"
+    origem = ("COALESCE(NULLIF(utm_source, ''), NULLIF(split_part(regexp_replace("
+              "referrer, '^https?://(www\\.)?', ''), '/', 1), ''), 'direto')")
+    dados, erro = {}, None
+    conn = None
+    try:
+        conn = _conn()
+        c = conn.cursor()
+        c.execute(_TRAF_SQL)
+        conn.commit()
+
+        def q(sql, *extra):
+            c.execute(sql, (dias,) + extra)
+            return c.fetchall()
+        dados['totais'] = q(
+            f"SELECT COUNT(*) FILTER (WHERE {humano}) AS visitas, "
+            f"COUNT(*) FILTER (WHERE {humano} AND entrada) AS entradas, "
+            f"COUNT(*) FILTER (WHERE is_bot) AS bots FROM pageviews WHERE {janela}")[0]
+        dados['cliques'] = q(f"SELECT COUNT(*) AS n FROM cta_cliques WHERE {janela}")[0]['n']
+        dados['por_dia'] = q(
+            f"SELECT {dia_br} AS dia, COUNT(*) AS visitas, "
+            f"COUNT(*) FILTER (WHERE entrada) AS entradas FROM pageviews "
+            f"WHERE {janela} AND {humano} GROUP BY 1 ORDER BY 1 DESC")
+        cl_dia = {r['dia']: r['n'] for r in q(
+            f"SELECT {dia_br} AS dia, COUNT(*) AS n FROM cta_cliques "
+            f"WHERE {janela} GROUP BY 1")}
+        for r in dados['por_dia']:
+            r['cliques'] = cl_dia.get(r['dia'], 0)
+        dados['paginas'] = q(
+            f"SELECT path, COUNT(*) AS visitas, COUNT(*) FILTER (WHERE entrada) "
+            f"AS entradas FROM pageviews WHERE {janela} AND {humano} "
+            f"GROUP BY path ORDER BY visitas DESC LIMIT 40")
+        dados['origens'] = q(
+            f"SELECT {origem} AS origem, COUNT(*) AS entradas FROM pageviews "
+            f"WHERE {janela} AND {humano} AND entrada GROUP BY 1 "
+            f"ORDER BY entradas DESC LIMIT 30")
+        dados['campanhas'] = q(
+            f"SELECT utm_campaign, utm_source, utm_medium, COUNT(*) AS entradas "
+            f"FROM pageviews WHERE {janela} AND {humano} AND entrada "
+            f"AND utm_campaign <> '' GROUP BY 1, 2, 3 ORDER BY entradas DESC LIMIT 30")
+        dados['ctas'] = q(
+            f"SELECT path, cta, COUNT(*) AS n FROM cta_cliques WHERE {janela} "
+            f"GROUP BY 1, 2 ORDER BY n DESC LIMIT 30")
+    except Exception as e:
+        logger.exception('admin_trafego')
+        erro = str(e)
+    finally:
+        if conn:
+            conn.close()
+    return render_template('admin_trafego.html', dias=dias, d=dados, erro=erro)
+
+
 @app.route('/admin/api/stats')
 @admin_required
 def admin_api_stats():
