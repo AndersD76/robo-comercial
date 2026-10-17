@@ -1,0 +1,24 @@
+{% extends '_publico_base.html' %}
+{% block estilo %}
+    .alts{display:grid;gap:12px;margin-top:18px}
+    .alt{display:block;background:#0d1526;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:20px;text-decoration:none}
+    .alt:hover{border-color:rgba(99,102,241,.5)}
+    .alt b{display:block;color:#fff;font-size:1.1rem;margin-bottom:6px}
+    .alt span{color:#94a3b8;font-size:14px}
+{% endblock %}
+{% block conteudo %}
+  <div class="crumbs"><a href="/">Home</a> › Alternativas</div>
+  <h1>Alternativas às ferramentas de prospecção B2B</h1>
+  <p>Comparativos feitos a partir do que cada empresa publica no próprio site, com fonte e data. Cada página diz
+     também quando a outra ferramenta é a melhor escolha — nem todo time precisa da mesma coisa.</p>
+  <div class="alts">
+    {% for a in alternativas %}
+    <a class="alt" href="/alternativas/{{ a.slug }}"><b>Alternativa ao {{ a.nome }}</b><span>{{ a.resumo }}</span></a>
+    {% endfor %}
+    <a class="alt" href="/blog/turbovenda-vs-rdstation"><b>TurboVenda x RD Station</b><span>CRM de inbound ou prospecção outbound: qual escolher.</span></a>
+  </div>
+  <div class="cta-box">
+    <p><strong>Compare na prática</strong><br>Teste o mesmo segmento e cidade nas ferramentas que você está avaliando. No TurboVenda, os primeiros 50 leads são grátis.</p>
+    <a href="/cadastro?utm_source=alternativas&utm_medium=organic&utm_campaign=hub" class="cta-btn" data-cta="alternativas-hub">Criar conta grátis</a>
+  </div>
+{% endblock %}

@@ -2264,6 +2264,10 @@ def _static_sitemap_urls():
     for f in FERRAMENTAS:
         urls.append((f"https://www.turbovenda.com.br/ferramentas/{f['slug']}",
                      rev, 'monthly', '0.9'))
+    urls.append(('https://www.turbovenda.com.br/alternativas', rev, 'monthly', '0.7'))
+    for a in ALTERNATIVAS:
+        urls.append((f"https://www.turbovenda.com.br/alternativas/{a['slug']}",
+                     a['consultado_em'], 'monthly', '0.7'))
     return urls
 
 
@@ -3537,6 +3541,46 @@ def ferramenta_calculadora():
                                  ("Ferramentas", f"{_PSEO_BASE}/ferramentas"),
                                  ("Calculadora de leads", canonical)]),
                  _ld_faq([(q, re.sub(r'<[^>]+>', '', a)) for q, a in faq])],
+        ga_id=GA_MEASUREMENT_ID)
+
+
+# =============================================================================
+# Comparativos "alternativa ao X" — fatos públicos com fonte e data
+# =============================================================================
+
+from conteudo_alternativas import ALTERNATIVAS  # noqa: E402
+_ALT_POR_SLUG = {a['slug']: a for a in ALTERNATIVAS}
+
+
+@app.route('/alternativas')
+def alternativas_hub():
+    canonical = f'{_PSEO_BASE}/alternativas'
+    return render_template(
+        'alternativas_hub.html', alternativas=ALTERNATIVAS,
+        titulo='Alternativas a Econodata, Speedio, Leads2b e Apollo | TurboVenda',
+        descricao=('Comparativos honestos entre o TurboVenda e as principais '
+                   'ferramentas de prospecção B2B: base de dados, CRM, preço e '
+                   'quando cada uma faz mais sentido.'),
+        canonical=canonical,
+        ld_json=[_ld_breadcrumb([("Home", f"{_PSEO_BASE}/"),
+                                 ("Alternativas", canonical)])],
+        ga_id=GA_MEASUREMENT_ID)
+
+
+@app.route('/alternativas/<slug>')
+def alternativa_page(slug):
+    a = _ALT_POR_SLUG.get(slug)
+    if not a:
+        return render_template('404.html'), 404
+    canonical = f'{_PSEO_BASE}/alternativas/{slug}'
+    return render_template(
+        'alternativa.html', a=a,
+        outras=[x for x in ALTERNATIVAS if x['slug'] != slug],
+        titulo=a['titulo'], descricao=a['desc'], canonical=canonical,
+        ld_json=[_ld_breadcrumb([("Home", f"{_PSEO_BASE}/"),
+                                 ("Alternativas", f"{_PSEO_BASE}/alternativas"),
+                                 (a['nome'], canonical)]),
+                 _ld_faq(a['faq'])],
         ga_id=GA_MEASUREMENT_ID)
 
 

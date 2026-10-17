@@ -1,0 +1,46 @@
+{% extends '_publico_base.html' %}
+{% block estilo %}
+    .texto ul{margin:0 0 14px 20px;color:#cbd5e1;font-size:15px}
+    .texto li{margin-bottom:6px}
+    table.dados td:first-child{color:#94a3b8;font-weight:600;width:22%}
+    table.dados td{vertical-align:top;font-size:13.5px}
+    .fontes li{font-size:12.5px;color:#64748b;margin-bottom:4px;word-break:break-all}
+    .fontes a{color:#818cf8}
+{% endblock %}
+{% block conteudo %}
+  <div class="crumbs"><a href="/">Home</a> › <a href="/alternativas">Alternativas</a> › {{ a.nome }}</div>
+  <h1>{{ a.h1 }}</h1>
+  <p class="meta-line">Comparativo · informações públicas consultadas em {{ a.consultado_em[8:10] }}/{{ a.consultado_em[5:7] }}/{{ a.consultado_em[:4] }}</p>
+  <p>{{ a.resumo }}</p>
+
+  <h2>{{ a.nome }} x TurboVenda</h2>
+  <table class="dados">
+    <thead><tr><th>Critério</th><th>{{ a.nome }}</th><th>TurboVenda</th></tr></thead>
+    <tbody>
+      {% for criterio, deles, nosso in a.tabela %}
+      <tr><td>{{ criterio }}</td><td>{{ deles }}</td><td>{{ nosso }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="texto">{{ a.conteudo|safe }}</div>
+
+  <h2>Perguntas frequentes</h2>
+  <div class="faq">
+    {% for q, r in a.faq %}<details{% if loop.first %} open{% endif %}><summary>{{ q }}</summary><p>{{ r }}</p></details>{% endfor %}
+  </div>
+
+  <h2>Outros comparativos</h2>
+  <div class="grid">
+    {% for o in outras %}<a href="/alternativas/{{ o.slug }}"><span class="nome">Alternativa ao {{ o.nome }}</span><span class="qtd">›</span></a>{% endfor %}
+    <a href="/blog/turbovenda-vs-rdstation"><span class="nome">TurboVenda x RD Station</span><span class="qtd">›</span></a>
+  </div>
+
+  <div class="fonte">
+    <p style="font-size:12.5px;color:#64748b">Fontes consultadas:</p>
+    <ul class="fontes">{% for f in a.fontes %}<li><a href="{{ f }}" rel="nofollow noopener" target="_blank">{{ f }}</a></li>{% endfor %}</ul>
+    <p style="font-size:12.5px;color:#64748b;margin-top:10px">Comparativo feito a partir de informações públicas dos sites oficiais
+      na data indicada; preços e recursos podem mudar. As marcas citadas pertencem aos seus donos. Encontrou algo desatualizado?
+      Escreva para suporte@turbovenda.com.br.</p>
+  </div>
+{% endblock %}
