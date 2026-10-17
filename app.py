@@ -3589,6 +3589,14 @@ def alternativa_page(slug):
         ga_id=GA_MEASUREMENT_ID)
 
 
+@app.route('/favicon.ico')
+def favicon():
+    # O Google não aceita favicon em data: URI nos resultados de busca e
+    # sempre procura /favicon.ico
+    return send_file(os.path.join(app.root_path, 'static', 'favicon.ico'),
+                     mimetype='image/vnd.microsoft.icon', max_age=7 * 86400)
+
+
 @app.route('/manifest.json')
 def manifest_json():
     m = {
