@@ -704,12 +704,25 @@ class Buscador:
     # SERPER.DEV API (Google Search API — funciona de qualquer IP)
     # =========================================================================
 
-    async def _buscar_serper(self, termo, max_resultados=20):
-        """Busca via Serper.dev API (Google). Precisa SERPER_API_KEY."""
+    async def _buscar_serper(self, termo, max_resultados=20, pagina=1):
+        """Busca via Serper.dev API (Google). Precisa SERPER_API_KEY.
+
+        pagina: 1, 2, 3... (cada página tem max_resultados). Antes a página
+        não era enviada: toda "página 2..5" de um termo devolvia os mesmos
+        resultados da 1, e o termo se esgotava em duplicados.
+        """
         api_key = os.environ.get('SERPER_API_KEY', '')
         if not api_key:
             return []
         resultados = []
+        corpo = {
+            'q': termo,
+            'gl': 'br',
+            'hl': 'pt-br',
+            'num': max_resultados,
+        }
+        if pagina and pagina > 1:
+            corpo['page'] = int(pagina)
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 resp = await client.post(
@@ -718,12 +731,7 @@ class Buscador:
                         'X-API-KEY': api_key,
                         'Content-Type': 'application/json',
                     },
-                    json={
-                        'q': termo,
-                        'gl': 'br',
-                        'hl': 'pt-br',
-                        'num': max_resultados,
-                    },
+                    json=corpo,
                 )
                 data = resp.json()
 
@@ -779,7 +787,10 @@ class Buscador:
         urls_vistas = set()
 
         # === FASE 1: Serper API (sem bloqueio) ===
-        serper = await self._buscar_serper(termo, max_resultados)
+        # start é o deslocamento em resultados; a página do Serper é 1-based
+        pagina_serper = start // max(1, max_resultados) + 1
+        serper = await self._buscar_serper(termo, max_resultados,
+                                           pagina=pagina_serper)
         if serper:
             for r in serper:
                 if r['url'] not in urls_vistas:

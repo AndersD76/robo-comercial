@@ -200,15 +200,34 @@ def get_descricao_empresa(schema: str) -> str:
     return ''
 
 
+def _decifrar(valor: str) -> str:
+    """O app grava as chaves cifradas ('ENC:...', Fernet com ENCRYPTION_KEY).
+    Devolve a chave em claro, ou '' se não der para decifrar."""
+    if not valor or not valor.startswith('ENC:'):
+        return valor or ''
+    chave = os.environ.get('ENCRYPTION_KEY', '')
+    if len(chave) != 44:
+        return ''
+    try:
+        from cryptography.fernet import Fernet
+        return Fernet(chave.encode()).decrypt(valor[4:].encode()).decode()
+    except Exception:
+        return ''
+
+
 def load_serper_key(schema: str):
-    """Lê serper_api_key do bot_config e seta como env var."""
+    """Lê serper_api_key do bot_config e seta como env var.
+
+    A chave vem cifrada do app; antes ia cifrada para o Serper (401) e
+    ainda tirava do caminho a chave global do servidor.
+    """
     try:
         conn = _conn(schema)
         c = conn.cursor()
         c.execute("SELECT serper_api_key FROM bot_config ORDER BY id DESC LIMIT 1")
         row = c.fetchone()
         conn.close()
-        key = row.get('serper_api_key') if row else None
+        key = _decifrar(row.get('serper_api_key') if row else None)
         if key:
             os.environ['SERPER_API_KEY'] = key
             return True
@@ -1189,6 +1208,9 @@ def _resultado_para_empresa(r):
     }
 
 
+_RESULTADOS_POR_BUSCA = 20
+
+
 async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
                       palavras_concorrente: list = None,
                       evitar: list = None, estados: list = None,
@@ -1203,7 +1225,9 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
         pagina = 0
         buscador._termo_paginas[termo] = 0
     buscador._termo_paginas[termo] = pagina + 1
-    start = pagina * 10
+    # Deslocamento em resultados, do tamanho da página pedida ao buscador
+    # (20): a página 2 do Serper começa no 21º resultado.
+    start = pagina * _RESULTADOS_POR_BUSCA
 
     if start > 0:
         print(f'[{schema}] 🔍 Buscando: "{termo}" (página {pagina + 1})', flush=True)
@@ -1212,7 +1236,8 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
     log_db(schema, 'info', f'Busca: {termo} (p{pagina + 1})')
 
     try:
-        resultados = await buscador.buscar_leads(termo, start=start)
+        resultados = await buscador.buscar_leads(
+            termo, max_resultados=_RESULTADOS_POR_BUSCA, start=start)
     except Exception as e:
         print(f'[{schema}] Erro na busca: {e}', flush=True)
         return 0
