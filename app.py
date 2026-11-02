@@ -201,8 +201,9 @@ elif DATABASE_URL.startswith('postgres://'):
 
 _db_pool = None
 try:
+    # 8 threads do gunicorn + threads de fundo (medição, pSEO, IndexNow)
     _db_pool = psycopg2.pool.ThreadedConnectionPool(
-        minconn=2, maxconn=10, dsn=DATABASE_URL,
+        minconn=2, maxconn=20, dsn=DATABASE_URL,
         cursor_factory=psycopg2.extras.RealDictCursor)
 except Exception as _pool_err:
     logger.warning(f'Pool de conexões falhou, usando fallback: {_pool_err}')
@@ -530,12 +531,31 @@ class _PooledConn:
     def __exit__(self, *args):
         self.close()
 
+    def __del__(self):
+        # Rede de segurança: conexão esquecida aberta volta ao pool quando o
+        # objeto some, em vez de ficar presa e encolher o pool para sempre
+        try:
+            self.close()
+        except Exception:
+            pass
+
 
 def _conn(schema=None):
+    conn = None
     if _db_pool:
-        raw = _db_pool.getconn()
-        conn = _PooledConn(raw, _db_pool)
-    else:
+        # O ThreadedConnectionPool falha na hora quando esgota. Com 8 threads
+        # atendendo robôs de busca em paralelo, isso derrubava páginas de
+        # empresas (4 mil erros em 4 dias). Espera uma conexão livre por
+        # alguns segundos e, se não vier, abre uma conexão direta.
+        for tentativa in range(40):
+            try:
+                conn = _PooledConn(_db_pool.getconn(), _db_pool)
+                break
+            except psycopg2.pool.PoolError:
+                time.sleep(0.1)
+        if conn is None:
+            logger.warning('pool de conexões cheio: usando conexão direta')
+    if conn is None:
         conn = psycopg2.connect(DATABASE_URL,
                                 cursor_factory=psycopg2.extras.RealDictCursor)
     if schema:
