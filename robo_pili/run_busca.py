@@ -66,6 +66,72 @@ _DOMINIO_PATTERNS_SKIP = [
     'comparativo', 'ranking', 'melhor', 'review',
 ]
 
+# Catálogos e listas de empresas: a página fala de dezenas de empresas, e
+# raspar ela gravava como lead "Metalurgia em Passo Fundo" com o e-mail de
+# uma empresa qualquer da lista
+_CATALOGO_DOMINIOS = (
+    'listatudo', 'todosnegocios', 'boaempresa', 'qualotelefone', 'telelistas',
+    'apontador', 'solutudo', 'encontra', 'planetabrasileiro', 'applocal',
+    'construtorasbrasil', 'construtorasem', 'empresasdobrasil', 'cnpj',
+    'diretorio', 'catalogo', 'listamais', 'empresaqui', 'buscaempresa',
+    'achei', 'telefone', 'guia', 'econodata', 'casadosdados', 'informecadastral',
+)
+_CATALOGO_PRIMEIRA = (
+    'melhores', 'maiores', 'lista', 'empresas', 'construtoras', 'metalurgicas',
+    'metalurgia', 'fabricas', 'industrias', 'lojas', 'distribuidoras',
+    'transportadoras', 'clinicas', 'escritorios', 'fornecedores', 'oficinas',
+    'restaurantes', 'imobiliarias', 'contabilidades', 'serralherias',
+)
+
+
+def _e_catalogo(r, lead):
+    dominio = re.sub(r'^www\.', '', (r.get('dominio') or lead.get('website')
+                                     or '').lower())
+    if any(p in dominio for p in _CATALOGO_DOMINIOS):
+        return True
+    titulo = _sem_acento(r.get('titulo') or '').lower().strip()
+    primeira = (titulo.split() or [''])[0]
+    if re.search(r'\(\d+\)\s*$', titulo):          # "... em Caxias do Sul (18)"
+        return True
+    return primeira in _CATALOGO_PRIMEIRA and re.search(r'\b(em|de|no|na)\b',
+                                                        titulo) is not None
+
+
+_WEBMAIL = {'gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.com',
+            'yahoo.com.br', 'live.com', 'bol.com.br', 'uol.com.br',
+            'terra.com.br', 'ig.com.br', 'icloud.com', 'globo.com',
+            'msn.com', 'hotmail.com.br', 'outlook.com.br'}
+_MX_CACHE = {}
+
+
+def _dominio_recebe_email(email):
+    """O domínio do e-mail existe e recebe mensagem? ("@123gmail.com" veio
+    da Receita com erro de digitação do próprio dono.) Na dúvida — falha de
+    rede — aceita."""
+    dominio = (email or '').rsplit('@', 1)[-1].lower().strip()
+    if not dominio or dominio in _WEBMAIL:
+        return True
+    if dominio not in _MX_CACHE:
+        import requests as _http
+        ok = True
+        try:
+            for tipo in ('MX', 'A'):
+                r = _http.get('https://dns.google/resolve',
+                              params={'name': dominio, 'type': tipo},
+                              timeout=4).json()
+                if r.get('Status') == 3:          # NXDOMAIN: não existe
+                    ok = False
+                    break
+                if r.get('Answer'):
+                    ok = True
+                    break
+                ok = False
+        except Exception:
+            ok = True
+        _MX_CACHE[dominio] = ok
+    return _MX_CACHE[dominio]
+
+
 # Adiciona o diretório atual ao path para importar buscador.py, e a raiz do
 # repositório para a validação de contato compartilhada com o painel
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -255,6 +321,75 @@ def _tokens_nome(valor):
             if len(p) >= 4 and p not in _PALAVRAS_VAZIAS}
 
 
+_MUNICIPIOS_POR_UF = None
+
+
+def _cidade_do_termo(termo, estados=None):
+    """('Passo Fundo', 'RS') a partir de "construtoras em Passo Fundo RS",
+    no formato em que a Receita grava o município (sem acento, Title Case).
+    Serve para casar a empresa com a Receita pelo nome quando o site não
+    traz CNPJ nem telefone que bata."""
+    global _MUNICIPIOS_POR_UF
+    if _MUNICIPIOS_POR_UF is None:
+        _MUNICIPIOS_POR_UF = {}
+        caminho = os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), 'municipios_ibge.json')
+        try:
+            with open(caminho, encoding='utf-8') as f:
+                for slug, nome in json.load(f).items():
+                    cid, uf = slug[:-3], slug[-2:].upper()
+                    _MUNICIPIOS_POR_UF.setdefault(uf, []).append((cid, nome))
+            for lst in _MUNICIPIOS_POR_UF.values():
+                lst.sort(key=lambda x: -len(x[0]))  # "sao-jose-dos-pinhais" antes de "sao-jose"
+        except (OSError, ValueError):
+            pass
+    t = '-' + re.sub(r'[^a-z0-9]+', '-', _sem_acento(termo or '').lower()) + '-'
+    ufs = [u for u in _MUNICIPIOS_POR_UF if f'-{u.lower()}-' in t]
+    for uf in ufs or [u.upper() for u in (estados or [])]:
+        for cid, nome in _MUNICIPIOS_POR_UF.get(uf, []):
+            if f'-{cid}-' in t:
+                return _sem_acento(nome).title(), uf
+    return None, None
+
+
+def _casar_por_nome(c, lead):
+    """Candidato único na cidade da busca cujo nome contém todas as palavras
+    do nome que a web trouxe. Exige unicidade: "Gobbi Engenharia" casa com
+    GOBBI - ENGENHARIA LTDA, mas um nome que bate em duas empresas fica sem
+    casamento (melhor sem CNPJ que com o CNPJ de outra empresa)."""
+    mun, uf = lead.get('_mun_busca'), lead.get('_uf_busca')
+    if not mun or not uf:
+        return None
+    web = _tokens_nome(lead.get('nome_fantasia')) - _tokens_nome(f'{mun} {uf}')
+    if not web:
+        return None
+    # Todas as palavras no nome (razão social + fantasia): com OR, uma
+    # palavra comum ("engenharia") enchia o LIMIT antes da empresa certa
+    pats = [f'%{p}%' for p in web]
+    c.execute("SELECT * FROM public.empresas_publicas WHERE uf = %s "
+              "AND municipio = %s AND situacao = '02' AND "
+              "(COALESCE(razao_social, '') || ' ' || COALESCE(nome_fantasia, '')) "
+              "ILIKE ALL(%s) LIMIT 50", (uf, mun, pats))
+    candidatos = []
+    for cand in c.fetchall():
+        # MEI (razão social "12.345.678 NOME DA PESSOA"): casar pessoa
+        # física pelo sobrenome erra demais
+        if re.match(r'^\d{2}\.\d{3}\.\d{3} ', cand.get('razao_social') or ''):
+            continue
+        alvo = (_tokens_nome(cand.get('razao_social'))
+                | _tokens_nome(cand.get('nome_fantasia')))
+        if web <= alvo:
+            candidatos.append((len(alvo - web), dict(cand)))
+    if not candidatos:
+        return None
+    candidatos.sort(key=lambda x: x[0])
+    if len(candidatos) > 1 and candidatos[0][0] == candidatos[1][0]:
+        print(f'[receita] nome bate com mais de uma empresa, ignorando: '
+              f'{lead.get("nome_fantasia")}', flush=True)
+        return None
+    return candidatos[0][1]
+
+
 def _nome_confere(nome_web, oficial):
     """O nome oficial tem a ver com o que a web trouxe?
 
@@ -330,6 +465,12 @@ def validar_na_receita(lead):
                 elif len(achados) > 1:
                     print('[receita] telefone compartilhado, ignorando: '
                           f'{lead.get("nome_fantasia")}', flush=True)
+
+        if not row:
+            # Sem CNPJ nem telefone que bata: nome + cidade da busca. Era aqui
+            # que empresas reais (site com telefone, sem e-mail) eram
+            # descartadas, embora a Receita tenha o e-mail de ~90% delas.
+            row = _casar_por_nome(c, lead)
         return dict(row) if row else {}
     except Exception as e:
         print(f'[receita] erro na consulta: {e}', flush=True)
@@ -1075,8 +1216,14 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
         return 0
 
     salvos = 0
+    mun_busca, uf_busca = _cidade_do_termo(termo, estados)
     for r in resultados:
         lead = _resultado_para_empresa(r)
+        lead['_mun_busca'], lead['_uf_busca'] = mun_busca, uf_busca
+        if _e_catalogo(r, lead):
+            print(f'[{schema}]   ✗ Skip (catálogo/lista de empresas): '
+                  f'{r.get("titulo", "")[:60]}', flush=True)
+            continue
         # Link de plataforma (Google Maps, buscador, rede social) não é o site
         # da empresa. Raspar essa página gravava o press@google.com do rodapé
         # e números da página como telefone. A empresa segue sem site: o
@@ -1209,9 +1356,14 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
                   f'{lead.get("nome_fantasia")}', flush=True)
             continue
 
-        # Última barreira: e-mail de plataforma fora e telefone cujo DDD não
-        # é do estado da empresa fora (DDD 17 em loja de Goiás era lixo)
-        limpar_contatos(lead)
+        # Última barreira: e-mail de plataforma ou de domínio que não existe
+        # fora; telefone com DDD de outro estado fora quando o estado é
+        # confiável (veio da Receita)
+        limpar_contatos(lead, checar_uf=casou)
+        if lead.get('email') and not _dominio_recebe_email(lead['email']):
+            print(f'[{schema}]   ✗ E-mail com domínio inexistente: '
+                  f'{lead["email"]}', flush=True)
+            lead['email'] = None
 
         # EXIGE telefone E email — sem os dois não serve
         if (not lead.get('telefone') or not lead.get('email')

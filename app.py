@@ -3895,9 +3895,16 @@ def api_bot_start(bot):
         return jsonify({'error': 'canal inválido (busca|linkedin|wa)'}), 400
     if _proc_running(schema, canal):
         return jsonify({'status': 'already_running'})
+    try:
+        proc = _iniciar_bot(schema, canal)
+    except Exception:
+        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
+    return jsonify({'status': 'started', 'pid': proc.pid, 'canal': canal})
 
+
+def _iniciar_bot(schema, canal):
     _matar_chromium_orfao()
-    log_path = _bot_log_path(_get_schema(), canal)
+    log_path = _bot_log_path(schema, canal)
     _cortar_log(log_path)
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     log_file = open(log_path, 'a', encoding='utf-8')
@@ -3908,8 +3915,6 @@ def api_bot_start(bot):
             # Grupo próprio: o /stop derruba o robô e tudo o que ele abriu
             start_new_session=True,
         )
-    except Exception as e:
-        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
     finally:
         log_file.close()  # o robô herdou o descritor; o worker não precisa
     _procs.setdefault(schema, {})
@@ -3920,7 +3925,81 @@ def api_bot_start(bot):
             f.write(str(proc.pid))
     except OSError:
         logger.warning(f'Não gravou o PID do robô {canal} de {schema}')
-    return jsonify({'status': 'started', 'pid': proc.pid, 'canal': canal})
+    _bot_lembrar(schema, canal, ligado=True)
+    return proc
+
+
+# Cada deploy reinicia o container e mata os robôs; sem isto, todo cliente
+# ficava "Parado" sem saber por quê. O robô de busca que o cliente deixou
+# ligado volta sozinho no boot (o de WhatsApp não: precisa do QR Code).
+def _bot_lembrar(schema, canal, ligado):
+    if not DATABASE_URL:
+        return
+    try:
+        with _conn() as conn:
+            with conn.cursor() as c:
+                c.execute("CREATE TABLE IF NOT EXISTS bots_ligados ("
+                          "schema_name TEXT, canal TEXT, "
+                          "desde TIMESTAMPTZ DEFAULT now(), "
+                          "PRIMARY KEY (schema_name, canal))")
+                if ligado:
+                    c.execute("INSERT INTO bots_ligados (schema_name, canal) "
+                              "VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                              (schema, canal))
+                else:
+                    c.execute("DELETE FROM bots_ligados WHERE schema_name = %s "
+                              "AND canal = %s", (schema, canal))
+            conn.commit()
+    except Exception:
+        logger.exception('bots_ligados: falha ao gravar')
+
+
+def _bots_semear_primeira_vez(c):
+    """Primeiro boot com bots_ligados: considera ligado o robô de busca que
+    registrou busca nas últimas 48 h (os deploys de 02/11 derrubaram esses
+    robôs antes de existir o registro)."""
+    c.execute("CREATE TABLE IF NOT EXISTS bots_ligados ("
+              "schema_name TEXT, canal TEXT, desde TIMESTAMPTZ DEFAULT now(), "
+              "PRIMARY KEY (schema_name, canal))")
+    c.execute("SELECT schema_name FROM users WHERE schema_name ~ '^emp_[0-9]+$'")
+    for (schema,) in [tuple(r.values()) for r in c.fetchall()]:
+        c.execute("SELECT to_regclass(%s) AS t", (f'{schema}.logs',))
+        if not c.fetchone()['t']:
+            continue
+        c.execute(psql.SQL("SELECT 1 FROM {}.logs WHERE mensagem LIKE 'Busca:%%' "
+                           "AND timestamp > NOW() - INTERVAL '48 hours' LIMIT 1")
+                  .format(psql.Identifier(schema)))
+        if c.fetchone():
+            c.execute("INSERT INTO bots_ligados (schema_name, canal) "
+                      "VALUES (%s, 'busca') ON CONFLICT DO NOTHING", (schema,))
+
+
+def _bots_religar_no_boot():
+    time.sleep(30)  # app no ar antes de abrir os robôs
+    try:
+        with _conn() as conn:
+            with conn.cursor() as c:
+                c.execute("SELECT to_regclass('public.bots_ligados') AS t")
+                if not c.fetchone()['t']:
+                    _bots_semear_primeira_vez(c)
+                    conn.commit()
+                c.execute("SELECT b.schema_name FROM bots_ligados b "
+                          "JOIN users u ON u.schema_name = b.schema_name "
+                          "WHERE b.canal = 'busca' AND u.ativo = TRUE "
+                          "AND (u.plano_expira IS NULL OR u.plano_expira > now())")
+                schemas = [r['schema_name'] for r in c.fetchall()]
+        for schema in schemas:
+            if not _proc_running(schema, 'busca'):
+                _iniciar_bot(schema, 'busca')
+                time.sleep(3)  # não abre todos de uma vez
+        if schemas:
+            logger.info(f'robôs de busca religados após o deploy: {len(schemas)}')
+    except Exception:
+        logger.exception('falha ao religar robôs no boot')
+
+
+if DATABASE_URL and os.environ.get('RAILWAY_ENVIRONMENT_ID'):
+    threading.Thread(target=_bots_religar_no_boot, daemon=True).start()
 
 
 @app.route('/api/<bot>/stop', methods=['POST'])
@@ -3932,6 +4011,7 @@ def api_bot_stop(bot):
     if canal not in _BOT_SCRIPTS:
         return jsonify({'error': 'canal inválido (busca|linkedin|wa)'}), 400
     was_running = _parar_bot(schema, canal)
+    _bot_lembrar(schema, canal, ligado=False)  # parado pelo cliente: não religa no deploy
     return jsonify({'status': 'stopped', 'canal': canal, 'was_running': was_running})
 
 
@@ -8707,7 +8787,9 @@ def api_pagamento_pix():
             headers={
                 'Authorization': f'Bearer {MP_ACCESS_TOKEN}',
                 'Content-Type': 'application/json',
-                'X-Idempotency-Key': f"pix_{user['id']}_{plano_id}",
+                # Chave única por tentativa: a fixa por cliente+plano fazia o MP
+                # devolver a cobrança anterior (já vencida) na 2ª tentativa
+                'X-Idempotency-Key': f"pix_{user['id']}_{plano_id}_{secrets.token_hex(8)}",
             },
             json={
                 'transaction_amount': plano['valor'],
@@ -8793,7 +8875,9 @@ def api_pagamento_cartao():
             headers={
                 'Authorization': f'Bearer {MP_ACCESS_TOKEN}',
                 'Content-Type': 'application/json',
-                'X-Idempotency-Key': f"card_{user['id']}_{plano_id}",
+                # Chave única por tentativa: a fixa por cliente+plano fazia o MP
+                # devolver a cobrança anterior (já vencida) na 2ª tentativa
+                'X-Idempotency-Key': f"card_{user['id']}_{plano_id}_{secrets.token_hex(8)}",
             },
             json={
                 'transaction_amount': plano['valor'],
@@ -8889,7 +8973,9 @@ def api_pagamento_boleto():
             headers={
                 'Authorization': f'Bearer {MP_ACCESS_TOKEN}',
                 'Content-Type': 'application/json',
-                'X-Idempotency-Key': f"boleto_{user['id']}_{plano_id}",
+                # Chave única por tentativa: a fixa por cliente+plano fazia o MP
+                # devolver a cobrança anterior (já vencida) na 2ª tentativa
+                'X-Idempotency-Key': f"boleto_{user['id']}_{plano_id}_{secrets.token_hex(8)}",
             },
             json={
                 'transaction_amount': plano['valor'],
