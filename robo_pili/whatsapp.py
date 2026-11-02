@@ -620,4 +620,6 @@ class WhatsAppBot:
         brasileiro válido; fixo (10 dígitos) vai como está — antes ganhava um
         9 na frente e virava um celular que não existe."""
         numeros = normalizar_telefone(telefone)
-        return '55' + numeros if numeros else None
+        if not numeros or numeros.startswith('0'):  # 0800 não tem WhatsApp
+            return None
+        return '55' + numeros

@@ -32,6 +32,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--aplicar', action='store_true',
                     help='grava a limpeza (sem isto, só mostra as contagens)')
+    ap.add_argument('--checar-uf', action='store_true',
+                    help='também apaga telefone com DDD de outro estado (o estado do lead pode estar errado)')
     args = ap.parse_args()
 
     dsn = os.environ.get('DATABASE_URL', '')
@@ -61,7 +63,7 @@ def main():
         por_campo = {k: 0 for k in cols}
         for r in linhas:
             antes = dict(r)
-            depois = limpar_contatos(dict(r))
+            depois = limpar_contatos(dict(r), checar_uf=args.checar_uf)
             mudou = [k for k in cols if antes.get(k) and not depois.get(k)]
             if not mudou:
                 continue

@@ -71,11 +71,18 @@ def normalizar_telefone(valor):
     d = _so_digitos(valor)
     if d.startswith('55') and len(d) in (12, 13):
         d = d[2:]
+    if re.fullmatch(r'0[3589]00\d{7}', d):   # 0800/0300/0500/0900
+        return d
     if d.startswith('0') and len(d) in (11, 12):  # 0 + DDD (discagem antiga)
         d = d[1:]
     if len(d) not in (10, 11) or d[:2] not in DDD_UF:
         return None
     numero = d[2:]
+    if len(numero) == 8 and numero[0] in '6789':
+        # Celular no formato antigo, de antes do 9º dígito: todo celular
+        # brasileiro ganhou o 9 na frente
+        numero = '9' + numero
+        d = d[:2] + numero
     if len(numero) == 9 and numero[0] != '9':
         return None
     if len(numero) == 8 and numero[0] not in '2345':
@@ -100,6 +107,8 @@ def telefone_compativel(telefone, uf):
     n = normalizar_telefone(telefone)
     if not n:
         return False
+    if n.startswith('0'):  # 0800: nacional, vale em qualquer estado
+        return True
     uf = (uf or '').strip().upper()
     if len(uf) != 2:
         return True
@@ -131,14 +140,18 @@ def email_valido(email):
     return True
 
 
-def limpar_contatos(lead):
+def limpar_contatos(lead, checar_uf=False):
     """Apaga (no dicionário, não no banco) e-mail e telefones que não passam
     na validação. Se o e-mail era de plataforma, o lead foi raspado de uma
-    página do Google/afins e os telefones de lá também não são confiáveis."""
+    página do Google/afins e os telefones de lá também não são confiáveis.
+
+    checar_uf: também descarta telefone cujo DDD não é do estado do lead.
+    Só use quando o estado é confiável (veio da Receita): o estado que o
+    robô adivinha pelo texto da busca erra, e aí o telefone bom sumiria."""
     email_lixo = bool(lead.get('email')) and not email_valido(lead['email'])
     if email_lixo:
         lead['email'] = None
-    uf = lead.get('estado')
+    uf = lead.get('estado') if checar_uf else None
     for campo in ('telefone', 'telefone2', 'whatsapp'):
         v = lead.get(campo)
         if v and (email_lixo or not telefone_compativel(v, uf)):
