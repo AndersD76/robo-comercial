@@ -8,8 +8,13 @@ import re
 import os
 import random
 import asyncio
+import sys
 import time
 from urllib.parse import quote_plus, urlparse, unquote
+
+# Raiz do repositório: validação de contato compartilhada com o painel
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from validacao_contato import normalizar_telefone, telefones_do_texto  # noqa: E402
 
 import httpx
 
@@ -949,38 +954,14 @@ class Buscador:
     # =========================================================================
 
     def _extrair_telefones(self, texto):
-        """Extrai telefones brasileiros de um texto"""
-        telefones = []
-        patterns = [
-            r'\((\d{2})\)\s*(\d{4,5})[-.\s]?(\d{4})',
-            r'(\d{2})\s?(\d{4,5})[-.\s](\d{4})',
-        ]
-        for pattern in patterns:
-            for match in re.findall(pattern, texto):
-                numero = ''.join(match)
-                validado = self.validar_telefone(numero)
-                if validado and validado not in telefones:
-                    telefones.append(validado)
-        return telefones
+        """Telefones brasileiros de um texto. No bloco do Google a avaliação
+        vem grudada ("4,9(17) 93472-9613"): a regex antiga lia o "(17)" como
+        DDD — a de validacao_contato não aceita "(" grudado num dígito."""
+        return telefones_do_texto(texto)
 
     def validar_telefone(self, telefone):
-        """Valida telefone brasileiro"""
-        if not telefone:
-            return None
-        numeros = re.sub(r'\D', '', str(telefone))
-        if numeros.startswith('55') and len(numeros) >= 12:
-            numeros = numeros[2:]
-        if len(numeros) not in [10, 11]:
-            return None
-        ddd = numeros[:2]
-        if ddd not in self.ddds_validos:
-            return None
-        numero = numeros[2:]
-        if len(numero) == 9 and not numero.startswith('9'):
-            return None
-        if len(set(numero)) == 1:
-            return None
-        return numeros
+        """Valida telefone brasileiro (DDD real, celular com 9, fixo 2-5)."""
+        return normalizar_telefone(telefone)
 
     def validar_cnpj(self, cnpj):
         """Valida CNPJ brasileiro"""

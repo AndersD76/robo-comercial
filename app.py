@@ -39,6 +39,7 @@ try:
 except ImportError:
     pass
 
+from validacao_contato import email_valido, limpar_contatos
 from pseo_data import (CNAE_B2B, CNAE_POR_CODIGO, CNAE_POR_SLUG,
                        PORTE_LABELS, UF_NOMES, cnae_formatado, do_uf,
                        no_uf, nome_municipio, slugify)
@@ -334,6 +335,13 @@ def _parar_bot(schema: str, canal: str) -> bool:
     return True
 
 
+def _bot_log_path(schema: str, canal: str) -> str:
+    """Um log por cliente: o arquivo único por canal mostrava no console de
+    cada cliente as linhas dos outros (nomes de leads, termos, empresa)."""
+    seguro = re.sub(r'[^A-Za-z0-9_]', '_', schema or 'sem_schema')
+    return os.path.join(_BOT_DIR, 'logs', f'{canal}-{seguro}.log')
+
+
 def _cortar_log(path: str, limite: int = 5 * 1024 * 1024,
                 manter: int = 1024 * 1024):
     """Os logs dos robôs só crescem; acima do limite mantém só o final.
@@ -494,6 +502,10 @@ def _serialize_row(row: dict) -> dict:
             row[k] = _para_horario_brasil(v)
         elif not isinstance(v, (str, int, float, bool, list, dict)):
             row[k] = str(v)
+    if 'nome_fantasia' in row:
+        # Lead: não mostra contato que é lixo da coleta antiga
+        # (press@google.com, telefone com DDD de outro estado)
+        limpar_contatos(row)
     return row
 
 
@@ -3885,8 +3897,9 @@ def api_bot_start(bot):
         return jsonify({'status': 'already_running'})
 
     _matar_chromium_orfao()
-    log_path = os.path.join(_BOT_DIR, f'{canal}.log')
+    log_path = _bot_log_path(_get_schema(), canal)
     _cortar_log(log_path)
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
     log_file = open(log_path, 'a', encoding='utf-8')
     try:
         proc = subprocess.Popen(
@@ -3929,7 +3942,7 @@ def api_bot_console(bot):
     if canal not in _BOT_SCRIPTS:
         return jsonify({'lines': []})
     n = max(1, min(request.args.get('n', 60, type=int) or 60, 1000))
-    log_path = os.path.join(_BOT_DIR, f'{canal}.log')
+    log_path = _bot_log_path(_get_schema(), canal)
     try:
         _cortar_log(log_path)
         return jsonify({'lines': _ultimas_linhas(log_path, n)})
@@ -4781,7 +4794,7 @@ def api_export_leads(bot):
                              WHERE ct.empresa_id = e.id AND ct.decisor = 1
                              LIMIT 1) AS decisor_linkedin
                      FROM empresas e ORDER BY e.encontrado_em DESC""")
-        rows = c.fetchall()
+        rows = [limpar_contatos(dict(r)) for r in c.fetchall()]
         conn.close()
         output = io.StringIO()
         writer = csv.writer(output)
@@ -5608,6 +5621,12 @@ def api_dominio_verificar(bot):
 
 def _send_email(ecfg, to_email, to_name, subject, html):
     """Envia pela caixa do cliente (Unipile/OAuth), Resend ou SMTP."""
+    if not email_valido(to_email):
+        # Leads antigos guardam e-mail de plataforma (press@google.com):
+        # disparar para eles queima a reputação do remetente do cliente
+        logger.info('envio recusado: e-mail inválido para prospecção (%s)',
+                    (to_email or '')[:60])
+        return False
     conta_unipile = ecfg.get('unipile_account_id', '')
     if conta_unipile:
         if _unipile_enviar(conta_unipile, ecfg.get('sender_name', ''),

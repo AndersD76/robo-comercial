@@ -66,10 +66,19 @@ _DOMINIO_PATTERNS_SKIP = [
     'comparativo', 'ranking', 'melhor', 'review',
 ]
 
-# Adiciona o diretório atual ao path para importar buscador.py
+# Adiciona o diretório atual ao path para importar buscador.py, e a raiz do
+# repositório para a validação de contato compartilhada com o painel
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from buscador import Buscador  # noqa: E402
+from validacao_contato import (dominio_plataforma, email_valido,  # noqa: E402
+                               limpar_contatos, normalizar_telefone,
+                               telefones_do_texto)
+
+
+class _SemSite(Exception):
+    """Lead sem site próprio: não há o que raspar."""
 
 
 def _fix_url(url: str) -> str:
@@ -608,19 +617,10 @@ def _extrair_emails(texto):
 
 
 def _extrair_telefones_texto(texto):
-    """Extrai telefones brasileiros de um texto (snippet, título)."""
-    if not texto:
-        return []
-    # Padrões: (XX) XXXXX-XXXX, (XX) XXXX-XXXX, XX XXXXX-XXXX, etc.
-    padrao = r'\(?\d{2}\)?\s*\d{4,5}[-.\s]?\d{4}'
-    encontrados = re.findall(padrao, texto)
-    # Limpa e retorna só dígitos
-    resultado = []
-    for t in encontrados:
-        digitos = re.sub(r'\D', '', t)
-        if 10 <= len(digitos) <= 11:
-            resultado.append(digitos)
-    return resultado
+    """Telefones brasileiros de um texto ou HTML, só os que têm formato de
+    telefone. A regex antiga recortava 11 dígitos de qualquer número
+    comprido da página (IDs, avaliações) e gravava como telefone."""
+    return telefones_do_texto(texto)
 
 
 _HEADERS = {
@@ -686,7 +686,10 @@ def _extrair_cnpj(texto):
 
 
 def _email_valido(email):
-    """Filtra emails genéricos, de imagem, etc."""
+    """Filtra emails genéricos, de imagem, de plataforma (press@google.com
+    vinha do rodapé do Google Maps), etc."""
+    if not email_valido(email):
+        return False
     low = email.lower()
     if any(x in low for x in _EMAIL_BLACKLIST):
         return False
@@ -708,18 +711,13 @@ def _extrair_mailto_tel(html):
         if _email_valido(m) and m not in emails:
             emails.append(m)
     # tel: e wa.me
-    for m in re.findall(r'(?:tel:|href=["\']tel:)[\s]*([+\d\s\-().]+)', html):
-        digitos = re.sub(r'\D', '', m)
-        if 10 <= len(digitos) <= 13 and digitos not in tels:
+    links = (re.findall(r'(?:tel:|href=["\']tel:)[\s]*([+\d\s\-().]+)', html)
+             + re.findall(r'wa\.me/(\d+)', html)
+             + re.findall(r'api\.whatsapp\.com/send\?phone=(\d+)', html))
+    for m in links:
+        digitos = normalizar_telefone(m)
+        if digitos and digitos not in tels:
             tels.append(digitos)
-    # wa.me links
-    for m in re.findall(r'wa\.me/(\d+)', html):
-        if m not in tels:
-            tels.append(m)
-    # api.whatsapp.com
-    for m in re.findall(r'api\.whatsapp\.com/send\?phone=(\d+)', html):
-        if m not in tels:
-            tels.append(m)
     return emails, tels
 
 
@@ -1079,18 +1077,27 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
     salvos = 0
     for r in resultados:
         lead = _resultado_para_empresa(r)
-        if not lead.get('website'):
+        # Link de plataforma (Google Maps, buscador, rede social) não é o site
+        # da empresa. Raspar essa página gravava o press@google.com do rodapé
+        # e números da página como telefone. A empresa segue sem site: o
+        # telefone do resultado ainda pode casar com a Receita.
+        site_plataforma = (dominio_plataforma(lead.get('website'))
+                           or dominio_plataforma(r.get('url')))
+        if site_plataforma:
+            lead['website'] = None
+        elif not lead.get('website'):
             continue
 
         # Filtra blogs, portais e sites não-empresariais
-        dominio = lead['website'].lower()
+        dominio = (lead.get('website') or '').lower()
         dominio_limpo = re.sub(r'^www\.', '', dominio)
         is_blacklisted = False
         for bl in _DOMINIOS_BLACKLIST:
-            if dominio_limpo == bl or dominio_limpo.endswith('.' + bl):
+            if dominio_limpo and (dominio_limpo == bl
+                                  or dominio_limpo.endswith('.' + bl)):
                 is_blacklisted = True
                 break
-        if not is_blacklisted:
+        if not is_blacklisted and dominio_limpo:
             for pat in _DOMINIO_PATTERNS_SKIP:
                 if pat in dominio_limpo:
                     is_blacklisted = True
@@ -1132,10 +1139,15 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
                       flush=True)
                 continue
 
-        # SEMPRE scrapa o site para buscar telefone, email, CNPJ e decisores
-        url_scrape = r.get('url', lead.get('website', ''))
+        # Scrapa o site da empresa para buscar telefone, email, CNPJ e
+        # decisores — nunca a página de uma plataforma
+        url_scrape = (lead.get('website') if site_plataforma
+                      else r.get('url', lead.get('website', '')))
         decisores = []
+        contatos = {'telefones': [], 'emails': [], 'cnpj': None, 'decisores': []}
         try:
+            if not url_scrape:
+                raise _SemSite()
             contatos = await asyncio.wait_for(_scrape_site(url_scrape), timeout=25)
             # Email
             if contatos['emails']:
@@ -1173,6 +1185,8 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
                 extras.append(f'{len(decisores)} decisor(es)')
             extra_str = (' | ' + ', '.join(extras)) if extras else ''
             print(f'[{schema}]   🔎 {lead["website"]}: {n_tel} tel, {n_email} email{extra_str}', flush=True)
+        except _SemSite:
+            pass
         except asyncio.TimeoutError:
             print(f'[{schema}]   ⚠ Timeout scrape {lead["website"]} (>25s)', flush=True)
             contatos = {'telefones': [], 'emails': [], 'cnpj': None, 'decisores': []}
@@ -1194,6 +1208,10 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
                   f'estados, confirmado na Receita): '
                   f'{lead.get("nome_fantasia")}', flush=True)
             continue
+
+        # Última barreira: e-mail de plataforma fora e telefone cujo DDD não
+        # é do estado da empresa fora (DDD 17 em loja de Goiás era lixo)
+        limpar_contatos(lead)
 
         # EXIGE telefone E email — sem os dois não serve
         if (not lead.get('telefone') or not lead.get('email')

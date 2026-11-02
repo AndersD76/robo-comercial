@@ -4,11 +4,16 @@ Automação WhatsApp Web v3 - Pili Equipamentos
 Usa Playwright com seletores estáveis (atributos data-*, JS DOM)
 """
 
-import re
+import os
 import random
 import asyncio
+import sys
 from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
+
+# Raiz do repositório: validação de contato compartilhada com o painel
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from validacao_contato import normalizar_telefone  # noqa: E402
 
 from config import (
     INTERVALO_MSG_MIN, INTERVALO_MSG_MAX,
@@ -611,21 +616,8 @@ class WhatsAppBot:
     # =========================================================================
 
     def _formatar_numero(self, telefone):
-        """Formata número para WhatsApp (55XXXXXXXXXXX)"""
-        if not telefone:
-            return None
-
-        numeros = re.sub(r'\D', '', str(telefone))
-
-        if numeros.startswith('55') and len(numeros) in [12, 13]:
-            return numeros
-
-        if len(numeros) == 11:
-            return '55' + numeros
-        elif len(numeros) == 10:
-            # Celular sem o 9 → adiciona
-            ddd = numeros[:2]
-            resto = numeros[2:]
-            return '55' + ddd + '9' + resto
-
-        return None
+        """Formata número para WhatsApp (55 + DDD + número). Só número
+        brasileiro válido; fixo (10 dígitos) vai como está — antes ganhava um
+        9 na frente e virava um celular que não existe."""
+        numeros = normalizar_telefone(telefone)
+        return '55' + numeros if numeros else None
