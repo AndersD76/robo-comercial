@@ -58,6 +58,8 @@ BATCH = 5000
 
 # Posições no CSV Estabelecimentos (layout oficial dados abertos CNPJ)
 E_CNPJ_BASICO = 0
+E_CNPJ_ORDEM = 1         # filial (4 digitos)
+E_CNPJ_DV = 2            # digitos verificadores
 E_MATRIZ_FILIAL = 3       # 1=matriz 2=filial
 E_NOME_FANTASIA = 4
 E_SITUACAO = 5            # 02=ativa
@@ -127,6 +129,7 @@ def limpar_email(valor):
 DDL_PG = """
 CREATE TABLE IF NOT EXISTS empresas_publicas (
     cnpj_basico    TEXT PRIMARY KEY,
+    cnpj           TEXT,
     razao_social   TEXT,
     nome_fantasia  TEXT,
     municipio      TEXT,
@@ -150,6 +153,8 @@ MIGRACOES = [
     'ALTER TABLE empresas_publicas ADD COLUMN IF NOT EXISTS email TEXT',
     'ALTER TABLE empresas_publicas ADD COLUMN IF NOT EXISTS socio_nome TEXT',
     'ALTER TABLE empresas_publicas ADD COLUMN IF NOT EXISTS socio_cargo TEXT',
+    # CNPJ completo (14 digitos): so a raiz nao aparece na coluna CNPJ do lead
+    'ALTER TABLE empresas_publicas ADD COLUMN IF NOT EXISTS cnpj TEXT',
 ]
 
 DDL_SQLITE = DDL_PG.replace('DATE', 'TEXT')
@@ -222,14 +227,15 @@ class PgDB:
             with self.conn.cursor() as c:
                 self._extras.execute_values(
                     c,
-                    'INSERT INTO empresas_publicas (cnpj_basico, razao_social, nome_fantasia, municipio, uf, bairro, cnae_principal, porte, data_abertura, situacao, telefone, telefone2, email) '
+                    'INSERT INTO empresas_publicas (cnpj_basico, razao_social, nome_fantasia, municipio, uf, bairro, cnae_principal, porte, data_abertura, situacao, telefone, telefone2, email, cnpj) '
                     'VALUES %s ON CONFLICT (cnpj_basico) DO UPDATE SET '
                     # DO NOTHING pularia as ~700 mil linhas ja ingeridas antes
                     # de existirem estas colunas, e o contato nunca chegaria.
                     # COALESCE preenche o que falta sem apagar o que ja ha.
                     'telefone = COALESCE(EXCLUDED.telefone, empresas_publicas.telefone), '
                     'telefone2 = COALESCE(EXCLUDED.telefone2, empresas_publicas.telefone2), '
-                    'email = COALESCE(EXCLUDED.email, empresas_publicas.email)',
+                    'email = COALESCE(EXCLUDED.email, empresas_publicas.email), '
+                    'cnpj = COALESCE(EXCLUDED.cnpj, empresas_publicas.cnpj)',
                     rows)
             self.conn.commit()
         self._exec_with_retry(_do)
@@ -282,7 +288,8 @@ class SqliteDB:
 
     def ensure_schema(self):
         self.conn.execute(DDL_SQLITE)
-        for col in ('telefone', 'telefone2', 'email'):
+        for col in ('telefone', 'telefone2', 'email', 'socio_nome',
+                    'socio_cargo', 'cnpj'):
             try:
                 self.conn.execute(
                     f'ALTER TABLE empresas_publicas ADD COLUMN {col} TEXT')
@@ -296,8 +303,8 @@ class SqliteDB:
         self.conn.executemany(
             'INSERT OR IGNORE INTO empresas_publicas (cnpj_basico, razao_social, '
             'nome_fantasia, municipio, uf, bairro, cnae_principal, porte, '
-            'data_abertura, situacao, telefone, telefone2, email) '
-            'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)', rows)
+            'data_abertura, situacao, telefone, telefone2, email, cnpj) '
+            'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)', rows)
         self.conn.commit()
 
     def update_socio_batch(self, rows):
@@ -506,6 +513,8 @@ def run_real(db, args):
                 parse_data_abertura(row[E_DATA_INICIO]),
                 row[E_SITUACAO].strip(),
                 tel1, tel2, mail,
+                cb.zfill(8) + row[E_CNPJ_ORDEM].strip().zfill(4)
+                + row[E_CNPJ_DV].strip().zfill(2),
             ))
             cnpjs.add(cb)
             if len(batch) >= BATCH:
@@ -642,6 +651,7 @@ def run_sample(db):
                     None,
                     (f'contato{seq}@exemplo{k}.com.br'
                      if k % 2 else None),
+                    f'{seq:08d}000100',                 # CNPJ completo
                 ))
     db.insert_batch(rows)
     print(f'[sample] {len(rows)} empresas sintéticas inseridas '

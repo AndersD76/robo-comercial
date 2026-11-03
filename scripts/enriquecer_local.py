@@ -23,6 +23,7 @@ Como usar:
 """
 import argparse
 import os
+import re
 import sqlite3
 import sys
 
@@ -79,7 +80,7 @@ def leads_pendentes(pg, schema, limite):
         SELECT e.id, e.nome_fantasia, e.cnpj, e.telefone, e.whatsapp,
                e.estado, e.cidade, e.email
         FROM "{schema}".empresas e
-        WHERE e.telefone IS NOT NULL
+        WHERE (e.telefone IS NOT NULL OR e.cidade IS NOT NULL)
           AND (e.cnpj IS NULL OR NOT EXISTS (
                 SELECT 1 FROM "{schema}".contatos ct
                 WHERE ct.empresa_id = e.id AND ct.decisor = 1))
@@ -109,21 +110,69 @@ def buscar_oficial(idx, lead):
         f'OR telefone2 IN ({marks}) LIMIT 2',
         variantes + variantes)
     achados = cur.fetchall()
-    if len(achados) != 1:
+    if len(achados) == 1:
+        cand = dict(achados[0])
+        if cnpj_match.nome_confere(lead.get('nome_fantasia'), cand):
+            return cand
+    return casar_por_nome(idx, lead)
+
+
+def casar_por_nome(idx, lead):
+    """Sem CNPJ nem telefone que bata: nome + cidade. Só aceita candidato
+    único com todas as palavras do nome (MEI fora: casar pessoa física pelo
+    sobrenome erra demais) — melhor sem CNPJ que com o de outra empresa."""
+    mun, uf = (lead.get('cidade') or '').strip(), (lead.get('estado') or '').strip()
+    if not mun or len(uf) != 2:
         return {}
-    cand = dict(achados[0])
-    if not cnpj_match.nome_confere(lead.get('nome_fantasia'), cand):
+    mun = cnpj_match.sem_acento(mun).title()   # formato da Receita
+    web = (cnpj_match.tokens_nome(lead.get('nome_fantasia'))
+           - cnpj_match.tokens_nome(f'{mun} {uf}'))
+    if not web:
         return {}
-    return cand
+    cond = ' AND '.join(
+        "(COALESCE(razao_social, '') || ' ' || COALESCE(nome_fantasia, '')) LIKE ?"
+        for _ in web)
+    cur = idx.cursor()
+    cur.execute(f'SELECT * FROM empresas_publicas WHERE uf = ? AND municipio = ? '
+                f'AND {cond} LIMIT 50', [uf.upper(), mun] + [f'%{p}%' for p in web])
+    candidatos = []
+    for r in cur.fetchall():
+        cand = dict(r)
+        if re.match(r'^\d{2}\.\d{3}\.\d{3} ', cand.get('razao_social') or ''):
+            continue
+        alvo = (cnpj_match.tokens_nome(cand.get('razao_social'))
+                | cnpj_match.tokens_nome(cand.get('nome_fantasia')))
+        if web <= alvo:
+            candidatos.append((len(alvo - web), cand))
+    candidatos.sort(key=lambda x: x[0])
+    if not candidatos or (len(candidatos) > 1
+                          and candidatos[0][0] == candidatos[1][0]):
+        return {}
+    return candidatos[0][1]
+
+
+def cnpj_formatado(d):
+    d = re.sub(r'\D', '', d or '')
+    if len(d) != 14:
+        return None
+    return f'{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}'
 
 
 def gravar(pg, schema, lead_id, novo):
     c = pg.cursor()
+    if novo.get('cnpj'):
+        # empresas.cnpj é UNIQUE: se outro lead do cliente já é essa empresa
+        # (achada duas vezes), o UPDATE derrubaria a execução inteira
+        c.execute(f'SELECT 1 FROM "{schema}".empresas WHERE cnpj = %s '
+                  f'AND id <> %s LIMIT 1', (novo['cnpj'], lead_id))
+        if c.fetchone():
+            novo = {k: v for k, v in novo.items() if k != 'cnpj'}
     campos, valores = [], []
     for coluna, chave in (('nome_fantasia', 'nome_fantasia'),
                           ('razao_social', 'razao_social'),
                           ('estado', 'estado'), ('cidade', 'cidade'),
-                          ('segmento', 'segmento'), ('email', 'email')):
+                          ('segmento', 'segmento'), ('email', 'email'),
+                          ('cnpj', 'cnpj')):
         if novo.get(chave):
             campos.append(f'{coluna}=%s')
             valores.append(novo[chave])
@@ -193,6 +242,9 @@ def main():
                 novo, casou = cnpj_match.aplicar(dict(lead), oficial)
                 if not casou:
                     continue
+                # A coluna CNPJ do painel: o índice guarda o número completo
+                if not lead.get('cnpj') and oficial.get('cnpj'):
+                    novo['cnpj'] = cnpj_formatado(oficial['cnpj'])
                 gravar(pg, schema, lead['id'], novo)
                 ok += 1
             pg.commit()

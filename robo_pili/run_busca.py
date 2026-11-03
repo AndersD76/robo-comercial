@@ -1353,6 +1353,11 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
         if casou:
             print(f'[{schema}]   ✓ Receita: {lead.get("nome_fantasia")} '
                   f'({lead.get("estado")}/{lead.get("cidade")})', flush=True)
+        elif (mun_busca and not lead.get('cidade')
+              and lead.get('estado') in (None, '', uf_busca)):
+            # A cidade da busca vai junto: o enriquecimento local usa
+            # nome + cidade para achar o CNPJ e o sócio depois
+            lead['cidade'], lead['estado'] = mun_busca, uf_busca
 
         if _fora_dos_estados(lead, estados):
             print(f'[{schema}]   ✗ Skip ({lead.get("estado")} fora dos '
