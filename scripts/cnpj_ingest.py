@@ -285,8 +285,16 @@ class SqliteDB:
     def __init__(self, path):
         import sqlite3
         self.conn = sqlite3.connect(path)
+        # O índice local se reconstrói do zero, então durabilidade não importa.
+        # Com o cache padrão (2 MB) e os cinco índices vivos, cada lote de 5 mil
+        # levava 20 s a partir de 4 milhões de linhas: dias para o Brasil todo.
+        self.conn.execute('PRAGMA journal_mode=OFF')
+        self.conn.execute('PRAGMA synchronous=OFF')
+        self.conn.execute('PRAGMA cache_size=-512000')   # ~500 MB
+        self.conn.execute('PRAGMA temp_store=MEMORY')
 
     def ensure_schema(self):
+        # sem INDEXES aqui: criar_indices() roda depois da carga
         self.conn.execute(DDL_SQLITE)
         for col in ('telefone', 'telefone2', 'email', 'socio_nome',
                     'socio_cargo', 'cnpj'):
@@ -295,6 +303,10 @@ class SqliteDB:
                     f'ALTER TABLE empresas_publicas ADD COLUMN {col} TEXT')
             except Exception:
                 pass
+        self.conn.commit()
+
+    def criar_indices(self):
+        print('[db] criando índices...', flush=True)
         for idx in INDEXES:
             self.conn.execute(idx)
         self.conn.commit()
@@ -434,6 +446,29 @@ def load_municipios(session, month, dest_dir, keep):
     return mapa
 
 
+class ConjuntoCnpj:
+    """cnpj_basico (8 dígitos) como 1 bit: 12,5 MB para o Brasil inteiro,
+    contra ~2 GB de um set com 20+ milhões de strings."""
+    LIMITE = 100_000_000
+
+    def __init__(self):
+        self._bits = bytearray(self.LIMITE // 8)
+
+    @classmethod
+    def _numero(cls, cb):
+        n = int(cb) if cb.isdigit() else -1
+        return n if 0 <= n < cls.LIMITE else -1
+
+    def add(self, cb):
+        n = self._numero(cb)
+        if n >= 0:
+            self._bits[n >> 3] |= 1 << (n & 7)
+
+    def __contains__(self, cb):
+        n = self._numero(cb)
+        return n >= 0 and bool(self._bits[n >> 3] & (1 << (n & 7)))
+
+
 def run_real(db, args):
     session = _http()
     if args.offline:
@@ -472,7 +507,7 @@ def run_real(db, args):
 
     # Pass 1 — Estabelecimentos: filtra e insere (razão social vem depois)
     inseridos = 0
-    cnpjs = set()
+    cnpjs = ConjuntoCnpj()
     for name in est_zips:
         path = download(session, month, name, args.dir)
         batch = []
@@ -692,6 +727,8 @@ def main():
         run_sample(db)
     else:
         run_real(db, args)
+    if isinstance(db, SqliteDB):
+        db.criar_indices()
     if isinstance(db, PgDB):
         _atualizar_resumos(db.conn)
     db.close()
