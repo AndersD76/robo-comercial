@@ -660,7 +660,11 @@ def _check_lead_limit_busca(schema: str) -> bool:
             return True
         conn2 = _conn(schema)
         c2 = conn2.cursor()
-        c2.execute('SELECT COUNT(*) AS total FROM empresas')
+        c2.execute('SELECT COUNT(*) AS total FROM empresas '
+                       # Só conta lead com algum contato: o lixo da coleta antiga
+                       # (limpo em 03/11) enchia a cota grátis e travava o robô
+                       "WHERE COALESCE(telefone, '') <> '' OR COALESCE(email, '') <> '' "
+                       "OR COALESCE(whatsapp, '') <> ''")
         total = c2.fetchone()['total']
         conn2.close()
         return total < limite

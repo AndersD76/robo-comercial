@@ -910,7 +910,11 @@ def _check_lead_limit(schema, uid=None):
     try:
         conn2 = _conn(schema)
         c2 = conn2.cursor()
-        c2.execute('SELECT COUNT(*) AS total FROM empresas')
+        c2.execute('SELECT COUNT(*) AS total FROM empresas '
+                       # Só conta lead com algum contato: o lixo da coleta antiga
+                       # (limpo em 03/11) enchia a cota grátis e travava o robô
+                       "WHERE COALESCE(telefone, '') <> '' OR COALESCE(email, '') <> '' "
+                       "OR COALESCE(whatsapp, '') <> ''")
         total = c2.fetchone()['total']
     except Exception:
         return True, ''
@@ -9089,7 +9093,11 @@ def api_meu_plano():
         if schema:
             conn2 = _conn(schema)
             c2 = conn2.cursor()
-            c2.execute('SELECT COUNT(*) AS total FROM empresas')
+            c2.execute('SELECT COUNT(*) AS total FROM empresas '
+                       # Só conta lead com algum contato: o lixo da coleta antiga
+                       # (limpo em 03/11) enchia a cota grátis e travava o robô
+                       "WHERE COALESCE(telefone, '') <> '' OR COALESCE(email, '') <> '' "
+                       "OR COALESCE(whatsapp, '') <> ''")
             total_leads = c2.fetchone()['total']
             conn2.close()
     except Exception:
