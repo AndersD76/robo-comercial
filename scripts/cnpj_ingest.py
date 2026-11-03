@@ -287,10 +287,11 @@ class SqliteDB:
         # O índice local se reconstrói do zero, então durabilidade não importa.
         # Com o cache padrão (2 MB) e os cinco índices vivos, cada lote de 5 mil
         # levava 20 s a partir de 4 milhões de linhas: dias para o Brasil todo.
+        # Monte num SSD: passados ~3 GB a gravação vira leitura aleatória, e
+        # num HD mecânico cai para ~1.400 linhas/s (4 h só de Estabelecimentos).
         self.conn.execute('PRAGMA journal_mode=OFF')
         self.conn.execute('PRAGMA synchronous=OFF')
         self.conn.execute('PRAGMA cache_size=-512000')   # ~500 MB
-        self.conn.execute('PRAGMA temp_store=MEMORY')
 
     def ensure_schema(self):
         # sem INDEXES aqui: criar_indices() roda depois da carga
