@@ -74,9 +74,8 @@ E_DDD_2 = 23
 E_TELEFONE_2 = 24
 E_EMAIL = 27
 
-# Posições no CSV Socios (layout oficial). ATENCAO: nao conferido contra
-# arquivo real ainda — o usuario nao baixou Socios*.zip. Validar na
-# primeira ingestao (o script imprime uma amostra).
+# Posições no CSV Socios (layout oficial), conferidas em Socios5.zip de
+# 2026-10-13: 11 colunas; 49 (socio-administrador) e 73% das qualificacoes.
 S_CNPJ_BASICO = 0
 S_IDENTIFICADOR = 1       # 1=PJ 2=PF 3=estrangeiro
 S_NOME = 2

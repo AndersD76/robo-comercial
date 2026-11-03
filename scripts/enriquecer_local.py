@@ -22,6 +22,7 @@ Como usar:
   --limite N máximo de leads por execução (padrão 500)
 """
 import argparse
+import json
 import os
 import re
 import sqlite3
@@ -69,11 +70,11 @@ def schemas_de_clientes(pg):
     return [r['schemaname'] for r in c.fetchall()]
 
 
-def leads_pendentes(pg, schema, limite):
+def leads_pendentes(pg, schema, limite, tentados):
     """Leads que ainda nao passaram pela Receita.
 
     Criterio: sem CNPJ ou sem decisor — que e exatamente o que a base
-    tem para oferecer.
+    tem para oferecer — e ainda nao conferido contra este indice.
     """
     c = pg.cursor()
     c.execute(f"""
@@ -84,9 +85,36 @@ def leads_pendentes(pg, schema, limite):
           AND (e.cnpj IS NULL OR NOT EXISTS (
                 SELECT 1 FROM "{schema}".contatos ct
                 WHERE ct.empresa_id = e.id AND ct.decisor = 1))
-        ORDER BY e.encontrado_em DESC
-        LIMIT %s""", (limite,))
-    return c.fetchall()
+        ORDER BY e.encontrado_em DESC""")
+    return [r for r in c.fetchall()
+            if f'{schema}:{r["id"]}' not in tentados][:limite]
+
+
+def caminho_tentados(indice):
+    return os.path.splitext(indice)[0] + '_tentados.json'
+
+
+def carregar_tentados(indice):
+    """Leads já conferidos contra esta versão do índice. Sem isso, quem não
+    está na Receita (ou é MEI, sem sócio) seria reprocessado a cada 15 min
+    e, passando de --limite, os leads mais antigos nunca teriam vez.
+    Índice novo (mês seguinte) zera a lista: vale conferir de novo."""
+    versao = int(os.path.getmtime(indice))
+    try:
+        with open(caminho_tentados(indice), encoding='utf-8') as f:
+            salvo = json.load(f)
+        if salvo.get('versao') == versao:
+            return versao, set(salvo.get('leads', []))
+    except (OSError, ValueError):
+        pass
+    return versao, set()
+
+
+def salvar_tentados(indice, versao, tentados):
+    tmp = caminho_tentados(indice) + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump({'versao': versao, 'leads': sorted(tentados)}, f)
+    os.replace(tmp, caminho_tentados(indice))
 
 
 def buscar_oficial(idx, lead):
@@ -226,16 +254,19 @@ def main():
     print(f'[indice] {args.indice}: {linhas:,} empresas')
 
     pg = psycopg2.connect(dsn, cursor_factory=psycopg2.extras.RealDictCursor)
+    versao, tentados = carregar_tentados(args.indice)
     processados = enriquecidos = 0
     erro = ''
     try:
         for schema in schemas_de_clientes(pg):
-            leads = leads_pendentes(pg, schema, args.limite)
+            leads = leads_pendentes(pg, schema, args.limite, tentados)
             if not leads:
                 continue
             ok = 0
+            conferidos = []
             for lead in leads:
                 processados += 1
+                conferidos.append(f'{schema}:{lead["id"]}')
                 oficial = buscar_oficial(idx, dict(lead))
                 if not oficial:
                     continue
@@ -248,6 +279,8 @@ def main():
                 gravar(pg, schema, lead['id'], novo)
                 ok += 1
             pg.commit()
+            # só depois do commit: se a gravação falhar, confere de novo
+            tentados.update(conferidos)
             enriquecidos += ok
             print(f'[{schema}] {len(leads)} pendentes, {ok} enriquecidos')
     except Exception as e:
@@ -255,6 +288,10 @@ def main():
         erro = f'{type(e).__name__}: {e}'
         print(f'[erro] {erro}')
     finally:
+        try:
+            salvar_tentados(args.indice, versao, tentados)
+        except OSError as e:
+            print(f'[aviso] lista de conferidos nao salva: {e}')
         bater_ponto(pg, processados, enriquecidos, linhas, erro)
         pg.close()
         idx.close()
