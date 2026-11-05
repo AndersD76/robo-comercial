@@ -169,6 +169,11 @@ INDEXES = [
     'WHERE telefone IS NOT NULL',
     'CREATE INDEX IF NOT EXISTS idx_emp_pub_tel2 ON empresas_publicas (telefone2) '
     'WHERE telefone2 IS NOT NULL',
+    # o worker local casa por nome dentro da cidade: com o nome no índice o
+    # LIKE roda sobre ele, contíguo, sem buscar cada linha da tabela (São
+    # Paulo são 2,6 milhões de empresas; sem isso, ~1 min por lead)
+    'CREATE INDEX IF NOT EXISTS idx_emp_pub_nome_cidade ON empresas_publicas '
+    '(uf, municipio, razao_social, nome_fantasia)',
 ]
 
 

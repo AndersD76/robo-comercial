@@ -130,7 +130,8 @@ def buscar_oficial(idx, lead):
             return dict(r)
     variantes = cnpj_match.variantes_telefone(lead)
     if not variantes:
-        return {}
+        # lead só com e-mail ainda casa por nome + cidade
+        return casar_por_nome(idx, lead)
     marks = ','.join('?' * len(variantes))
     # LIMIT 2: 23% dos telefones da Receita sao de contador (um deles em
     # 8.783 empresas). Telefone que nao identifica uma empresa so nao vale.
@@ -144,6 +145,14 @@ def buscar_oficial(idx, lead):
         if cnpj_match.nome_confere(lead.get('nome_fantasia'), cand):
             return cand
     return casar_por_nome(idx, lead)
+
+
+def _dica_indice_nome(idx):
+    """Força o índice (uf, municipio, nomes): o LIKE roda sobre ele sem ler a
+    tabela linha a linha. Índice montado antes de 2026-11 não o tem."""
+    tem = idx.execute("SELECT 1 FROM sqlite_master WHERE type = 'index' "
+                      "AND name = 'idx_emp_pub_nome_cidade'").fetchone()
+    return 'INDEXED BY idx_emp_pub_nome_cidade ' if tem else ''
 
 
 def casar_por_nome(idx, lead):
@@ -162,7 +171,8 @@ def casar_por_nome(idx, lead):
         "(COALESCE(razao_social, '') || ' ' || COALESCE(nome_fantasia, '')) LIKE ?"
         for _ in web)
     cur = idx.cursor()
-    cur.execute(f'SELECT * FROM empresas_publicas WHERE uf = ? AND municipio = ? '
+    cur.execute(f'SELECT * FROM empresas_publicas {_dica_indice_nome(idx)}'
+                f'WHERE uf = ? AND municipio = ? '
                 f'AND {cond} LIMIT 50', [uf.upper(), mun] + [f'%{p}%' for p in web])
     candidatos = []
     for r in cur.fetchall():
@@ -220,6 +230,24 @@ def gravar(pg, schema, lead_id, novo):
                  novo.get('decisor_cargo') or 'Sócio'))
 
 
+LOTE = 25
+
+
+def enriquecer_lead(idx, pg, schema, lead):
+    """Casa o lead com a Receita e grava. True se achou e gravou."""
+    oficial = buscar_oficial(idx, dict(lead))
+    if not oficial:
+        return False
+    novo, casou = cnpj_match.aplicar(dict(lead), oficial)
+    if not casou:
+        return False
+    # A coluna CNPJ do painel: o índice guarda o número completo
+    if not lead.get('cnpj') and oficial.get('cnpj'):
+        novo['cnpj'] = cnpj_formatado(oficial['cnpj'])
+    gravar(pg, schema, lead['id'], novo)
+    return True
+
+
 def bater_ponto(pg, processados, enriquecidos, linhas_indice, detalhe=''):
     """Registra que o worker esta vivo, para o app avisar se parar."""
     c = pg.cursor()
@@ -270,30 +298,35 @@ def main():
     versao, tentados = carregar_tentados(args.indice)
     processados = enriquecidos = 0
     erro = ''
+    conferidos = []
+
+    def fechar_lote():
+        # Só depois do commit: se a gravação falhar, confere de novo. E lote a
+        # lote, porque o Agendador corta a execução em 2 h (e o PC pode
+        # desligar): sem isso cada corte perdia tudo e recomeçava do zero.
+        pg.commit()
+        tentados.update(conferidos)
+        conferidos.clear()
+        try:
+            salvar_tentados(args.indice, versao, tentados)
+        except OSError as e:
+            print(f'[aviso] lista de conferidos nao salva: {e}')
+
     try:
         for schema in schemas_de_clientes(pg):
             leads = leads_pendentes(pg, schema, args.limite, tentados)
             if not leads:
                 continue
             ok = 0
-            conferidos = []
             for lead in leads:
                 processados += 1
+                if enriquecer_lead(idx, pg, schema, lead):
+                    ok += 1
                 conferidos.append(f'{schema}:{lead["id"]}')
-                oficial = buscar_oficial(idx, dict(lead))
-                if not oficial:
-                    continue
-                novo, casou = cnpj_match.aplicar(dict(lead), oficial)
-                if not casou:
-                    continue
-                # A coluna CNPJ do painel: o índice guarda o número completo
-                if not lead.get('cnpj') and oficial.get('cnpj'):
-                    novo['cnpj'] = cnpj_formatado(oficial['cnpj'])
-                gravar(pg, schema, lead['id'], novo)
-                ok += 1
-            pg.commit()
-            # só depois do commit: se a gravação falhar, confere de novo
-            tentados.update(conferidos)
+                if len(conferidos) >= LOTE:
+                    fechar_lote()
+                    bater_ponto(pg, processados, enriquecidos + ok, linhas)
+            fechar_lote()
             enriquecidos += ok
             print(f'[{schema}] {len(leads)} pendentes, {ok} enriquecidos')
     except Exception as e:
@@ -301,10 +334,6 @@ def main():
         erro = f'{type(e).__name__}: {e}'
         print(f'[erro] {erro}')
     finally:
-        try:
-            salvar_tentados(args.indice, versao, tentados)
-        except OSError as e:
-            print(f'[aviso] lista de conferidos nao salva: {e}')
         bater_ponto(pg, processados, enriquecidos, linhas, erro)
         pg.close()
         idx.close()
