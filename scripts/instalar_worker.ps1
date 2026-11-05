@@ -4,8 +4,9 @@
 # rede), o agendador simplesmente roda de novo no proximo ciclo. Processo
 # fixo precisaria de supervisao propria.
 #
-# Uso (PowerShell como Administrador, na pasta do projeto):
-#   .\scripts\instalar_worker.ps1 -DatabaseUrl 'postgresql://...'
+# Uso (PowerShell na pasta do projeto; nao precisa ser Administrador):
+#   .\scripts\instalar_worker.ps1 -DatabaseUrl 'postgresql://...' `
+#       -Indice 'C:\cnpj\indice.sqlite'
 #
 # Para remover:
 #   Unregister-ScheduledTask -TaskName 'TurboVenda-Receita' -Confirm:$false
@@ -25,20 +26,28 @@ $log = Join-Path $projeto 'worker_receita.log'
 if (-not (Test-Path $script))  { throw "Nao achei $script" }
 if (-not (Test-Path $Indice))  { throw "Indice nao encontrado em $Indice. Gere primeiro com cnpj_ingest.py --sqlite" }
 
-# A senha do banco fica na variavel da tarefa, nao no comando — assim nao
-# aparece na listagem de processos de quem estiver no micro.
-$cmd = "`$env:DATABASE_URL='$DatabaseUrl'; & '$python' '$script' --indice '$Indice' *>> '$log'"
-$bytes = [System.Text.Encoding]::Unicode.GetBytes($cmd)
-$encoded = [Convert]::ToBase64String($bytes)
+# pythonw: sem console, entao nenhuma janela pisca na tela a cada execucao
+$pythonw = Join-Path (Split-Path -Parent $python) 'pythonw.exe'
+if (-not (Test-Path $pythonw)) { throw "Nao achei $pythonw (vem junto com o Python oficial)" }
 
-$acao = New-ScheduledTaskAction -Execute 'powershell.exe' `
-    -Argument "-NoProfile -WindowStyle Hidden -EncodedCommand $encoded" `
+# A senha do banco fica num arquivo so do usuario, nao no comando da tarefa:
+# assim nao aparece na listagem de processos nem na definicao da tarefa.
+$pasta = Join-Path $env:LOCALAPPDATA 'TurboVenda'
+New-Item -ItemType Directory -Force $pasta | Out-Null
+$dsnArquivo = Join-Path $pasta 'database_url.txt'
+[System.IO.File]::WriteAllText($dsnArquivo, $DatabaseUrl)
+icacls $dsnArquivo /inheritance:r /grant:r "$($env:USERNAME):F" | Out-Null
+
+$acao = New-ScheduledTaskAction -Execute $pythonw `
+    -Argument "`"$script`" --indice `"$Indice`" --dsn-arquivo `"$dsnArquivo`" --log `"$log`"" `
     -WorkingDirectory $projeto
 
 $gatilho = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
     -RepetitionInterval (New-TimeSpan -Minutes $MinutosIntervalo)
 
+# Notebook: o padrao do Windows nao roda tarefa na bateria
 $config = New-ScheduledTaskSettingsSet -StartWhenAvailable `
+    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
     -DontStopOnIdleEnd -ExecutionTimeLimit (New-TimeSpan -Hours 2) `
     -MultipleInstances IgnoreNew
 

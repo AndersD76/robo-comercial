@@ -27,6 +27,7 @@ import os
 import re
 import sqlite3
 import sys
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import cnpj_match  # noqa: E402
@@ -242,9 +243,21 @@ def main():
     ap.add_argument('--indice', default=os.environ.get(
         'CNPJ_INDICE', 'E:/cnpj/indice.sqlite'))
     ap.add_argument('--limite', type=int, default=500)
+    # O agendador roda via pythonw (sem janela piscando a cada 15 min), que
+    # não tem console nem variável de ambiente própria: daí log e DSN em arquivo
+    ap.add_argument('--log', help='acrescenta a saída neste arquivo')
+    ap.add_argument('--dsn-arquivo', help='arquivo com a DATABASE_URL')
     args = ap.parse_args()
 
+    if args.log:
+        sys.stdout = sys.stderr = open(args.log, 'a', encoding='utf-8',
+                                       buffering=1)
+        print(f'--- {datetime.now():%Y-%m-%d %H:%M:%S}')
+
     dsn = os.environ.get('DATABASE_URL', '')
+    if not dsn and args.dsn_arquivo:
+        with open(args.dsn_arquivo, encoding='utf-8-sig') as f:
+            dsn = f.read().strip()
     if not dsn:
         print('[fatal] DATABASE_URL nao definido')
         sys.exit(2)
