@@ -3728,8 +3728,11 @@ def dashboard():
             pass
     schema = user['schema_name']
     stats = get_stats(schema)
+    # O aviso do worker é para o operador: o cliente não tem como religar o
+    # PC com a base, e um "está parado" no painel dele só parece app quebrado
     return render_template('dashboard.html',
-                           worker_receita=_status_worker_receita(),
+                           worker_receita=(_status_worker_receita()
+                                           if session.get('admin_auth') else None),
                            bot=schema,
                            user=user,
                            stats=stats,
@@ -9151,7 +9154,8 @@ def admin_login():
 @app.route('/admin/dashboard')
 @admin_required
 def admin_dashboard():
-    return render_template('admin.html')
+    return render_template('admin.html',
+                           worker_receita=_status_worker_receita())
 
 
 @app.route('/admin/logout')
