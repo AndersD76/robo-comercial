@@ -281,9 +281,16 @@ class PgDB:
 
 
 class SqliteDB:
-    def __init__(self, path):
+    def __init__(self, path, montar_a_parte=False):
         import sqlite3
-        self.conn = sqlite3.connect(path)
+        # Sem journal, um reboot no meio corrompe o arquivo (aconteceu). Por
+        # isso a carga real monta em <path>.montando e só troca no fim: o
+        # worker segue lendo o índice anterior, inteiro, enquanto isso.
+        self.destino = path
+        self.path = path + '.montando' if montar_a_parte else path
+        if montar_a_parte and os.path.exists(self.path):
+            os.remove(self.path)   # sobra de carga interrompida: recomeça
+        self.conn = sqlite3.connect(self.path)
         # O índice local se reconstrói do zero, então durabilidade não importa.
         # Com o cache padrão (2 MB) e os cinco índices vivos, cada lote de 5 mil
         # levava 20 s a partir de 4 milhões de linhas: dias para o Brasil todo.
@@ -338,6 +345,21 @@ class SqliteDB:
     def close(self):
         self.conn.close()
 
+    def publicar(self):
+        """Troca o índice em uso pelo recém-montado. O worker pode estar com
+        o antigo aberto por alguns segundos: tenta de novo antes de desistir."""
+        import time
+        if self.path == self.destino:
+            return
+        for tentativa in range(30):
+            try:
+                os.replace(self.path, self.destino)
+                print(f'[db] índice publicado em {self.destino}')
+                return
+            except PermissionError:
+                time.sleep(10)
+        raise RuntimeError(f'{self.destino} segue em uso; o novo ficou em {self.path}')
+
 
 def _open_db(args):
     dsn = os.environ.get('DATABASE_URL', '')
@@ -354,7 +376,7 @@ def _open_db(args):
         path = args.sqlite or os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'pseo_dev.sqlite')
         print(f'[db] DATABASE_URL ausente — fallback SQLite (SÓ TESTE): {path}')
-        return SqliteDB(path)
+        return SqliteDB(path, montar_a_parte=not args.sample)
     print('[FATAL] DATABASE_URL não definido (obrigatório para ingestão real)')
     sys.exit(1)
 
@@ -732,6 +754,8 @@ def main():
     if isinstance(db, PgDB):
         _atualizar_resumos(db.conn)
     db.close()
+    if isinstance(db, SqliteDB):
+        db.publicar()
 
 
 def _atualizar_resumos(conn):
