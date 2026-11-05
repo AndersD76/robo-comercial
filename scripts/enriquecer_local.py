@@ -27,6 +27,7 @@ import os
 import re
 import sqlite3
 import sys
+import time
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -248,6 +249,20 @@ def enriquecer_lead(idx, pg, schema, lead):
     return True
 
 
+DIAS_INDICE_VELHO = 45
+
+
+def aviso_indice_velho(indice):
+    """A Receita publica todo mês e a atualizar_receita.py troca o índice.
+    Passado mês e meio sem troca, a atualização parou e os leads novos
+    deixam de achar as empresas abertas desde então."""
+    dias = int((time.time() - os.path.getmtime(indice)) / 86400)
+    if dias <= DIAS_INDICE_VELHO:
+        return ''
+    return (f'indice da Receita com {dias} dias sem atualizar '
+            f'(veja atualizar_receita.log)')
+
+
 def bater_ponto(pg, processados, enriquecidos, linhas_indice, detalhe=''):
     """Registra que o worker esta vivo, para o app avisar se parar."""
     c = pg.cursor()
@@ -334,7 +349,8 @@ def main():
         erro = f'{type(e).__name__}: {e}'
         print(f'[erro] {erro}')
     finally:
-        bater_ponto(pg, processados, enriquecidos, linhas, erro)
+        bater_ponto(pg, processados, enriquecidos, linhas,
+                    erro or aviso_indice_velho(args.indice))
         pg.close()
         idx.close()
     print(f'[fim] {processados} processados, {enriquecidos} enriquecidos')

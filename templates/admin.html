@@ -233,7 +233,8 @@
     {% if worker_receita.ativo %}
       <i class="fas fa-circle-check"></i>
       <strong>Enriquecimento pela Receita ativo.</strong>
-      Última execução há {{ worker_receita.horas }}h · {{ worker_receita.enriquecidos }} leads enriquecidos nela ·
+      Última execução {% if worker_receita.horas %}há {{ worker_receita.horas }}h{% else %}há menos de 1h{% endif %} ·
+      {% if worker_receita.processados %}{{ worker_receita.processados }} leads conferidos, {{ worker_receita.enriquecidos }} enriquecidos{% else %}nenhum lead pendente{% endif %} ·
       índice com {{ '{:,}'.format(worker_receita.indice_linhas).replace(',', '.') }} empresas.
     {% elif worker_receita.nunca_rodou %}
       <i class="fas fa-triangle-exclamation"></i>

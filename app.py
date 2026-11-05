@@ -4997,8 +4997,8 @@ def _status_worker_receita():
                 c.execute("SELECT to_regclass('public.worker_receita') t")
                 if not c.fetchone()['t']:
                     return {'ativo': False, 'nunca_rodou': True}
-                c.execute("""SELECT ultima_execucao, leads_enriquecidos,
-                                    indice_linhas, detalhe,
+                c.execute("""SELECT ultima_execucao, leads_processados,
+                                    leads_enriquecidos, indice_linhas, detalhe,
                                     EXTRACT(EPOCH FROM (NOW() - ultima_execucao))/3600 AS horas
                              FROM public.worker_receita WHERE id = 1""")
                 r = c.fetchone()
@@ -5009,6 +5009,7 @@ def _status_worker_receita():
             'ativo': horas < 6,            # roda a cada 15 min; 6h é folga
             'nunca_rodou': False,
             'horas': int(horas),
+            'processados': r['leads_processados'] or 0,
             'enriquecidos': r['leads_enriquecidos'] or 0,
             'indice_linhas': r['indice_linhas'] or 0,
             'erro': (r['detalhe'] or '')[:200],
