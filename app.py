@@ -40,6 +40,7 @@ except ImportError:
     pass
 
 from validacao_contato import email_valido, limpar_contatos
+import emails_funil
 from pseo_data import (CNAE_B2B, CNAE_POR_CODIGO, CNAE_POR_SLUG,
                        PORTE_LABELS, UF_NOMES, cnae_formatado, do_uf,
                        no_uf, nome_municipio, slugify)
@@ -796,9 +797,19 @@ def login_required(f):
         if 'user_id' not in session:
             if request.path.startswith('/api/'):
                 return jsonify({'error': 'não autenticado'}), 401
+            # Volta para onde ia depois do login (ex.: o pagamento aberto
+            # pelo link de um e-mail), em vez de cair sempre no painel
+            if request.method == 'GET':
+                session['login_next'] = request.full_path.rstrip('?')
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated
+
+
+def _destino_seguro(url):
+    """Só caminho interno: nada de //outro-site ou http://... (open redirect)."""
+    return (isinstance(url, str) and url.startswith('/')
+            and not url.startswith('//') and '\\' not in url)
 
 
 def get_current_user():
@@ -1228,6 +1239,8 @@ def _proc_running(schema: str, canal: str) -> bool:
 def login():
     if session.get('user_id'):
         return redirect(url_for('dashboard'))
+    if _destino_seguro(request.args.get('next')):
+        session['login_next'] = request.args['next']
     error = None
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
@@ -1281,6 +1294,9 @@ def login():
                     _init_user_schema(schema)
                 except Exception:
                     logger.exception("Erro ao inicializar schema no login")
+                destino = session.pop('login_next', None)
+                if _destino_seguro(destino):
+                    return redirect(destino)
                 return redirect(url_for('dashboard'))
             error = 'Email ou senha incorretos'
         except Exception as e:
@@ -2138,6 +2154,7 @@ def robots_txt():
         "Disallow: /configurar\n"
         "Disallow: /logout\n"
         "Disallow: /trial-expirado\n"
+        "Disallow: /assinar\n"
         "Disallow: /pagamento/\n"
         "Disallow: /t/\n\n"
         "User-agent: GPTBot\n"
@@ -3728,6 +3745,7 @@ def dashboard():
             pass
     schema = user['schema_name']
     stats = get_stats(schema)
+    _ligar_robo_primeira_vez_ao_fundo(schema)
     # O aviso do worker é para o operador: o cliente não tem como religar o
     # PC com a base, e um "está parado" no painel dele só parece app quebrado
     return render_template('dashboard.html',
@@ -4007,6 +4025,92 @@ def _bots_religar_no_boot():
 
 if DATABASE_URL and os.environ.get('RAILWAY_ENVIRONMENT_ID'):
     threading.Thread(target=_bots_religar_no_boot, daemon=True).start()
+
+
+_ligar_trava = threading.Lock()
+_ligar_em_andamento = set()  # uma tentativa por conta de cada vez
+_ligar_dispensados = set()   # já tem lead ou o robô já rodou: não volta a olhar
+
+
+def _ligar_robo_primeira_vez(schema):
+    """Metade de quem se cadastrava nunca recebia um lead: configurava e não
+    clicava em "iniciar" (28 das 31 contas sem lead em 05/11/2026). O robô de
+    busca liga sozinho na primeira vez. Só em conta sem lead nenhum e cujo
+    robô nunca rodou, para não religar quem desligou de propósito."""
+    if (not DATABASE_URL or not re.match(r'^emp_\d+$', schema or '')
+            or schema in _ligar_dispensados):
+        return False
+    # Trava por conta, não global: gerar termos pela IA leva segundos e não
+    # pode segurar a primeira vez de outro cliente
+    with _ligar_trava:
+        if schema in _ligar_em_andamento:
+            return False
+        _ligar_em_andamento.add(schema)
+    try:
+        if _proc_running(schema, 'busca'):
+            return False
+        with _conn() as conn:
+            c = conn.cursor()
+            c.execute("SELECT 1 FROM users WHERE schema_name = %s AND ativo = TRUE "
+                      "AND (plano_expira IS NULL OR plano_expira > NOW())", (schema,))
+            if not c.fetchone():
+                return False
+        with _conn(schema) as conn:
+            c = conn.cursor()
+            for tabela in ('empresas', 'logs', 'bot_config'):
+                c.execute('SELECT to_regclass(%s) AS t', (f'{schema}.{tabela}',))
+                if not c.fetchone()['t']:
+                    return False
+            c.execute('SELECT EXISTS (SELECT 1 FROM empresas) AS leads, '
+                      'EXISTS (SELECT 1 FROM logs) AS rodou')
+            r = c.fetchone()
+        if r['leads'] or r['rodou']:
+            _ligar_dispensados.add(schema)
+            return False
+        cfg = get_bot_config(schema)
+        termos = cfg.get('termos_busca') or []
+        if isinstance(termos, str):
+            termos = json.loads(termos or '[]')
+        if not termos:
+            # Sem termos o robô cairia na lista genérica de indústria, que
+            # não tem nada a ver com o cliente: gera a partir da descrição
+            if not (cfg.get('descricao') or '').strip():
+                return False
+            gerado = _gerar_termos(cfg.get('empresa_nome') or '', cfg['descricao'],
+                                   cfg.get('website') or '',
+                                   cfg.get('estados_atuacao') or [])
+            termos = gerado.get('termos') or []
+            if not termos:
+                return False
+            with _conn(schema) as conn:
+                c = conn.cursor()
+                c.execute('UPDATE bot_config SET termos_busca = %s',
+                          (psycopg2.extras.Json(termos),))
+                conn.commit()
+                if gerado.get('evitar'):
+                    try:
+                        c.execute('UPDATE bot_config SET segmentos_evitar = %s',
+                                  (psycopg2.extras.Json(gerado['evitar']),))
+                        conn.commit()
+                    except Exception:
+                        conn.rollback()
+        _iniciar_bot(schema, 'busca')
+        _ligar_dispensados.add(schema)
+        logger.info(f'robô de busca ligado sozinho na primeira vez: {schema}')
+        return True
+    except Exception:
+        logger.exception(f'falha ao ligar o robô na primeira vez: {schema}')
+        return False
+    finally:
+        with _ligar_trava:
+            _ligar_em_andamento.discard(schema)
+
+
+def _ligar_robo_primeira_vez_ao_fundo(schema):
+    # Gerar termos pode levar segundos (IA): não segura a página
+    if schema and schema not in _ligar_dispensados and DATABASE_URL:
+        threading.Thread(target=_ligar_robo_primeira_vez, args=(schema,),
+                         daemon=True).start()
 
 
 @app.route('/api/<bot>/stop', methods=['POST'])
@@ -6437,6 +6541,7 @@ def api_save_config(bot):
                 pass
 
         logger.info(f'save_config/{schema}: OK - salvou {len(termos)} termos')
+        _ligar_robo_primeira_vez_ao_fundo(schema)
         return jsonify({'ok': True, 'redirect': '/dashboard', 'termos': termos})
     except Exception as e:
         import traceback
@@ -7016,7 +7121,11 @@ def _gerar_termos(empresa_nome: str, descricao: str, website: str, estados_selec
         for uf in ufs:
             termos.add(f'{seg} {uf} contato site:.com.br')
 
-    while len(termos) < 130:
+    # Com poucos segmentos e um estado só, as combinações não chegam a 130 e o
+    # laço girava para sempre, travando a requisição: limita as tentativas
+    for _ in range(5000):
+        if len(termos) >= 130:
+            break
         seg = random.choice(segmentos)
         loc = random.choice(cidades + estados)
         pat = random.choice(PADROES)
@@ -9556,7 +9665,8 @@ def admin_api_payments():
 
 CRON_SECRET = os.environ.get('CRON_SECRET', '')
 
-APP_URL = os.environ.get('APP_URL', 'https://turbovenda.com.br')
+# Com www: o domínio sem www não tem DNS e os links dos e-mails não abriam
+APP_URL = os.environ.get('APP_URL', 'https://www.turbovenda.com.br')
 
 
 def _send_system_email(to_email, subject, html):
@@ -9590,190 +9700,81 @@ def _send_system_email(to_email, subject, html):
         return False
 
 
-def _trial_email_3d_html(empresa_nome, total_leads, upgrade_url):
-    """HTML do email '3 dias restantes no trial'."""
-    return f'''<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#1e293b">
-  <div style="text-align:center;margin-bottom:32px">
-    <h1 style="color:#6366f1;font-size:24px;margin:0">TurboVenda</h1>
-  </div>
-  <p style="font-size:16px;line-height:1.6">Olá, <strong>{empresa_nome}</strong>.</p>
-  <p style="font-size:16px;line-height:1.6">
-    Seu período de teste do TurboVenda expira em <strong>3 dias</strong>.
-  </p>
-  <div style="background:#f8fafc;border-left:4px solid #6366f1;padding:16px 20px;margin:24px 0;border-radius:0 8px 8px 0">
-    <p style="margin:0 0 8px;font-size:15px;color:#475569">Até agora você gerou:</p>
-    <p style="margin:0;font-size:28px;font-weight:700;color:#6366f1">{total_leads} leads</p>
-  </div>
-  <p style="font-size:16px;line-height:1.6">
-    Ao expirar o trial, você perde acesso à prospecção automatizada, busca de leads por IA
-    e todas as ferramentas de outreach. Seus dados ficam salvos, mas não será possível
-    gerar novos leads ou enviar emails.
-  </p>
-  <div style="text-align:center;margin:32px 0">
-    <a href="{upgrade_url}" style="display:inline-block;background:#6366f1;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600">
-      Fazer upgrade agora
-    </a>
-  </div>
-  <p style="font-size:14px;color:#94a3b8;line-height:1.5">
-    Tem dúvidas? Responda este email — nossa equipe responde em até 24h.
-  </p>
-  <hr style="border:none;border-top:1px solid #e2e8f0;margin:32px 0">
-  <p style="font-size:12px;color:#94a3b8;text-align:center">
-    TurboVenda — Prospecção comercial inteligente
-  </p>
-</div>'''
-
-
-def _trial_email_expired_html(empresa_nome, total_leads, upgrade_url):
-    """HTML do email 'trial expirou'."""
-    return f'''<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#1e293b">
-  <div style="text-align:center;margin-bottom:32px">
-    <h1 style="color:#6366f1;font-size:24px;margin:0">TurboVenda</h1>
-  </div>
-  <p style="font-size:16px;line-height:1.6">Olá, <strong>{empresa_nome}</strong>.</p>
-  <p style="font-size:16px;line-height:1.6">
-    Seu período de teste do TurboVenda <strong>expirou</strong>.
-  </p>
-  <div style="background:#f8fafc;border-left:4px solid #6366f1;padding:16px 20px;margin:24px 0;border-radius:0 8px 8px 0">
-    <p style="margin:0 0 8px;font-size:15px;color:#475569">Durante o trial você construiu:</p>
-    <p style="margin:0;font-size:28px;font-weight:700;color:#6366f1">{total_leads} leads</p>
-    <p style="margin:8px 0 0;font-size:14px;color:#64748b">Todos os seus dados continuam salvos.</p>
-  </div>
-  <p style="font-size:16px;line-height:1.6">
-    Para voltar a prospectar e acessar seus leads, ative um plano.
-    Você não perde nenhum dado — tudo continua exatamente onde parou.
-  </p>
-  <div style="text-align:center;margin:32px 0">
-    <a href="{upgrade_url}" style="display:inline-block;background:#6366f1;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600">
-      Reativar minha conta
-    </a>
-  </div>
-  <p style="font-size:14px;color:#94a3b8;line-height:1.5">
-    Precisa de ajuda para escolher o plano certo? Responda este email.
-  </p>
-  <hr style="border:none;border-top:1px solid #e2e8f0;margin:32px 0">
-  <p style="font-size:12px;color:#94a3b8;text-align:center">
-    TurboVenda — Prospecção comercial inteligente
-  </p>
-</div>'''
-
-
-def _get_lead_count(schema):
-    """Retorna total de leads do user (0 se erro)."""
+def _funil_rodar():
+    """Uma passada dos e-mails do teste (emails_funil.py). A trava do banco
+    impede duas passadas juntas quando um deploy sobrepõe dois containers."""
+    if not DATABASE_URL:
+        return None
+    conn = _conn()
     try:
-        conn = _conn(schema)
         c = conn.cursor()
-        c.execute('SELECT COUNT(*) AS n FROM empresas')
-        n = c.fetchone()['n']
+        c.execute('SELECT pg_try_advisory_lock(%s) AS ok', (_FUNIL_TRAVA,))
+        if not c.fetchone()['ok']:
+            return None
+        try:
+            return emails_funil.rodar(conn, _send_system_email, APP_URL,
+                                      MP_PLANOS['starter']['valor'])
+        finally:
+            conn.rollback()
+            c.execute('SELECT pg_advisory_unlock(%s)', (_FUNIL_TRAVA,))
+            conn.commit()
+    finally:
         conn.close()
-        return n
-    except Exception:
-        return 0
+
+
+_FUNIL_TRAVA = 7700501   # número fixo da trava do funil no Postgres
+
+
+def _funil_loop():
+    """De hora em hora, só no horário comercial de Brasília: e-mail de venda
+    às 3 da manhã vai para o fim da caixa de entrada."""
+    time.sleep(120)
+    while True:
+        hora_br = (_dt.datetime.utcnow() - _dt.timedelta(hours=3)).hour
+        if 8 <= hora_br < 20:
+            try:
+                r = _funil_rodar()
+                if r and any(r.values()):
+                    logger.info(f'funil de e-mails: {r}')
+            except Exception:
+                logger.exception('funil de e-mails: falha na passada')
+        time.sleep(3600)
+
+
+if DATABASE_URL and os.environ.get('RAILWAY_ENVIRONMENT_ID'):
+    threading.Thread(target=_funil_loop, daemon=True).start()
 
 
 @app.route('/api/cron/trial-emails')
 @limiter.limit("6 per hour")
 def cron_trial_emails():
-    """Endpoint chamado por cron externo para enviar emails do ciclo de trial.
-
-    Protegido por CRON_SECRET. Envia:
-    - Aviso de 3 dias restantes (plano_expira entre 2 e 4 dias no futuro)
-    - Aviso de trial expirado (plano_expira entre ontem e anteontem)
-
-    Janelas de 2 dias em vez de exatas para tolerar cron que roda 1x/dia.
-    """
-    token = request.args.get('token', '') or request.headers.get('X-Cron-Secret', '')
+    """Força uma passada do funil agora (o app já roda sozinho de hora em
+    hora). Protegido por CRON_SECRET."""
+    token = request.headers.get('X-Cron-Secret', '') or request.args.get('token', '')
     if not CRON_SECRET or not token or not _hmac.compare_digest(token, CRON_SECRET):
         return jsonify({'error': 'Não autorizado'}), 401
-
-    if not DATABASE_URL:
-        return jsonify({'error': 'DATABASE_URL não configurado'}), 500
-
-    upgrade_url = f'{APP_URL}/dashboard?upgrade=starter'
-    sent_3d = 0
-    sent_expired = 0
-    errors = 0
-
     try:
-        conn = _conn()
-        c = conn.cursor()
-
-        # --- Usuarios cujo trial expira em 2-4 dias (janela para "3 dias") ---
-        c.execute("""
-            SELECT id, email, empresa_nome, schema_name, plano_expira
-            FROM users
-            WHERE plano = 'trial'
-              AND plano_expira IS NOT NULL
-              AND plano_expira > NOW()
-              AND plano_expira <= NOW() + INTERVAL '4 days'
-              AND plano_expira > NOW() + INTERVAL '2 days'
-              AND ativo = TRUE
-              AND (trial_email_3d_sent IS NULL OR trial_email_3d_sent = FALSE)
-        """)
-        users_3d = c.fetchall()
-
-        for u in users_3d:
-            schema = u.get('schema_name') or f'emp_{u["id"]}'
-            total = _get_lead_count(schema)
-            empresa = u.get('empresa_nome') or 'Equipe'
-            html = _trial_email_3d_html(empresa, total, upgrade_url)
-            ok = _send_system_email(
-                u['email'],
-                'Seu trial do TurboVenda expira em 3 dias',
-                html
-            )
-            if ok:
-                c.execute('UPDATE users SET trial_email_3d_sent = TRUE WHERE id = %s',
-                          (u['id'],))
-                conn.commit()
-                sent_3d += 1
-            else:
-                errors += 1
-
-        # --- Usuarios cujo trial expirou entre ontem e anteontem ---
-        c.execute("""
-            SELECT id, email, empresa_nome, schema_name, plano_expira
-            FROM users
-            WHERE plano = 'trial'
-              AND plano_expira IS NOT NULL
-              AND plano_expira < NOW()
-              AND plano_expira >= NOW() - INTERVAL '2 days'
-              AND ativo = TRUE
-              AND (trial_email_expired_sent IS NULL OR trial_email_expired_sent = FALSE)
-        """)
-        users_expired = c.fetchall()
-
-        for u in users_expired:
-            schema = u.get('schema_name') or f'emp_{u["id"]}'
-            total = _get_lead_count(schema)
-            empresa = u.get('empresa_nome') or 'Equipe'
-            html = _trial_email_expired_html(empresa, total, upgrade_url)
-            ok = _send_system_email(
-                u['email'],
-                'Seu trial do TurboVenda expirou',
-                html
-            )
-            if ok:
-                c.execute('UPDATE users SET trial_email_expired_sent = TRUE WHERE id = %s',
-                          (u['id'],))
-                conn.commit()
-                sent_expired += 1
-            else:
-                errors += 1
-
-        conn.close()
-    except Exception as e:
-        logger.error(f'Erro geral cron: {e}')
+        r = _funil_rodar()
+    except Exception:
+        logger.exception('cron trial-emails')
         return jsonify({'error': 'Erro interno'}), 500
+    if r is None:
+        return jsonify({'ok': False, 'motivo': 'outra passada em andamento'}), 409
+    return jsonify({'ok': True, **r})
 
-    result = {
-        'ok': True,
-        'sent_3d_warning': sent_3d,
-        'sent_expired': sent_expired,
-        'errors': errors,
-    }
-    logger.info(f'trial-emails concluido: {result}')
-    return jsonify(result)
+
+@app.route('/assinar')
+def assinar():
+    """Link dos e-mails: abre o pagamento (PIX, cartão ou boleto) direto,
+    passando pelo login se precisar."""
+    plano = request.args.get('plano', 'starter')
+    if plano not in MP_PLANOS:
+        plano = 'starter'
+    destino = f'/dashboard?upgrade={plano}'
+    if not session.get('user_id'):
+        session['login_next'] = destino
+        return redirect(url_for('login'))
+    return redirect(destino)
 
 
 # =============================================================================
