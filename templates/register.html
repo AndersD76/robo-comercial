@@ -3,14 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Criar conta grátis — TurboVenda | Prospecção B2B com IA</title>
-  <meta name="description" content="Crie sua conta grátis no TurboVenda. Comece a prospectar leads B2B automaticamente com inteligência artificial. 50 leads grátis.">
+  <title>{% filter titulo_seo %}Teste grátis: 50 leads B2B sem cartão | TurboVenda{% endfilter %}</title>
+  <meta name="description" content="{% filter descricao_seo %}Crie sua conta grátis no TurboVenda. Comece a prospectar leads B2B automaticamente com inteligência artificial. 50 leads grátis.{% endfilter %}">
   <meta name="robots" content="index, follow">
   <meta name="google-site-verification" content="VMyveSsuwuHW6VKMlQUXLacN3llx6ELz38VRdprEVxA">
   <meta property="og:title" content="Criar conta grátis — TurboVenda">
   <meta property="og:description" content="Crie sua conta grátis no TurboVenda. 50 leads grátis para prospecção B2B com IA.">
   <meta property="og:url" content="https://www.turbovenda.com.br/cadastro">
   <meta property="og:image" content="https://www.turbovenda.com.br/static/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
   <meta property="og:type" content="website">
   <meta property="og:locale" content="pt_BR">
   <meta property="og:site_name" content="TurboVenda">
@@ -32,12 +33,10 @@
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" href="/static/favicon-96.png" type="image/png" sizes="96x96">
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+{% include '_fontes.html' %}
   <link rel="stylesheet" href="/static/tokens.css">
   <link rel="stylesheet" href="/static/components.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  {% include '_icones.html' %}
   <style>
     *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
     body{font-family:'Inter',sans-serif;background:#060b18;color:#f1f5f9;
@@ -52,7 +51,7 @@
         display:flex;align-items:center;justify-content:center;font-size:22px}
     .logo-text{font-size:20px;font-weight:900;letter-spacing:-.5px}
     .logo-text span{color:#6366f1}
-    h2{font-size:22px;font-weight:800;margin-bottom:6px;text-align:center}
+    h1,h2{font-size:22px;font-weight:800;margin-bottom:6px;text-align:center}
     .subtitle{color:#64748b;font-size:14px;text-align:center;margin-bottom:24px}
     .field{margin-bottom:16px}
     label{display:block;font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:6px}
@@ -89,7 +88,7 @@
     <div class="logo-mark">⚡</div>
     <div class="logo-text">Turbo<span>Venda</span></div>
   </div>
-  <h2>Teste grátis: gere até 50 leads</h2>
+  <h1>Teste grátis: gere até 50 leads</h1>
   <p class="subtitle">Informe sua empresa, diga quem você quer encontrar e veja os primeiros leads no painel.</p>
 
   <div class="benefits">

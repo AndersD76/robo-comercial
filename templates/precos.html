@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Planos e Preços — TurboVenda | Prospecção B2B a partir de R$0</title>
-  <meta name="description" content="Planos TurboVenda: Grátis (50 leads), Starter R$97/mês (500 leads), Pro R$297/mês (ilimitado). Comece grátis, sem cartão de crédito.">
+  <title>{% filter titulo_seo %}Planos e preços de prospecção B2B | TurboVenda{% endfilter %}</title>
+  <meta name="description" content="{% filter descricao_seo %}Planos TurboVenda: Grátis (50 leads), Starter R$97/mês (500 leads), Pro R$297/mês (ilimitado). Comece grátis, sem cartão de crédito.{% endfilter %}">
   <meta name="keywords" content="TurboVenda preços, planos TurboVenda, CRM B2B preço, prospecção automática valor">
   <meta name="robots" content="index, follow">
   <meta name="google-site-verification" content="VMyveSsuwuHW6VKMlQUXLacN3llx6ELz38VRdprEVxA">
@@ -49,12 +49,10 @@
     }
   })();
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+{% include '_fontes.html' %}
   <link rel="stylesheet" href="/static/tokens.css">
   <link rel="stylesheet" href="/static/components.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  {% include '_icones.html' %}
   <style>
     *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
     :root{--bg:#060b18;--surface:#0d1526;--border:rgba(99,102,241,.18);--accent:#6366f1;--accent2:#8b5cf6;--text:#f1f5f9;--muted:#64748b;--muted2:#94a3b8}

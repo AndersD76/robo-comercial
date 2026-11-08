@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ post.titulo }} — TurboVenda Blog</title>
-  <meta name="description" content="{{ post.desc }}">
+  <title>{% filter titulo_seo %}{{ post.titulo_seo }} — TurboVenda Blog{% endfilter %}</title>
+  <meta name="description" content="{% filter descricao_seo %}{{ post.desc }}{% endfilter %}">
   <meta name="keywords" content="{{ post.keywords }}">
   <meta name="robots" content="index, follow">
   <meta name="google-site-verification" content="VMyveSsuwuHW6VKMlQUXLacN3llx6ELz38VRdprEVxA">
@@ -66,12 +66,10 @@
     }
   })();
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+{% include '_fontes.html' %}
   <link rel="stylesheet" href="/static/tokens.css">
   <link rel="stylesheet" href="/static/components.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  {% include '_icones.html' %}
   <style>
     *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
     :root{

@@ -28,6 +28,13 @@ jobs:
           DATABASE_URL: ""
         run: pytest tests/ -v --tb=short
 
+      - name: Guarda de SEO (título, descrição, canonical, JSON-LD, robots, sitemap)
+        env:
+          # Porta fechada de propósito: as páginas renderizam sem banco e as
+          # programáticas usam a base sintética do cnpj_ingest --sample
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:1/ci
+        run: pytest tests/test_seo.py tests/test_seo_pseo.py -v --tb=short
+
       - name: Validate templates
         run: |
           echo "Checking that all .html template files exist and are non-empty..."

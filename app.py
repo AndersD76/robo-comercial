@@ -71,10 +71,85 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = _dt.timedelta(hours=8)
 
 from werkzeug.middleware.proxy_fix import ProxyFix
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+# Visitante → proxy do Railway → nginx → gunicorn. O nginx acrescenta ao
+# X-Forwarded-For o IP do proxy do Railway, então o do visitante é o penúltimo.
+# Com x_for=1 o app tomava o proxy pelo cliente: todos os visitantes dividiam o
+# mesmo limite (200/min, e 5 cadastros/min) e quem rastreava rápido levava 429.
+_PROXY_SALTOS = int(os.environ.get('PROXY_SALTOS', '2'))
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=_PROXY_SALTOS, x_proto=1, x_host=1)
 
 limiter = Limiter(get_remote_address, app=app, default_limits=["200 per minute"],
                   storage_uri="memory://")
+
+# Buscadores verificados por DNS reverso (método que Google, Bing e Apple
+# documentam) não entram no limite: 429 faz o Googlebot rastrear menos e
+# tirar páginas do índice. Só GET/HEAD; user-agent sozinho não basta.
+_BUSCADORES_DNS = {
+    'googlebot': ('.googlebot.com', '.google.com', '.googleusercontent.com'),
+    'google-inspectiontool': ('.googlebot.com', '.google.com'),
+    'bingbot': ('.search.msn.com',),
+    'adidxbot': ('.search.msn.com',),
+    'applebot': ('.applebot.apple.com',),
+}
+_buscador_cache = {}   # ip -> (verificado, expira_em)
+_dns_pool = None
+
+
+def _dns_confere(ip, dominios):
+    import socket
+    try:
+        host = socket.gethostbyaddr(ip)[0].lower().rstrip('.')
+        if not host.endswith(dominios):
+            return False
+        # Confirma no sentido contrário: o nome tem que apontar de volta para o IP
+        ips = {info[4][0] for info in socket.getaddrinfo(host, None)}
+        return ip in ips
+    except (OSError, UnicodeError):
+        return False
+
+
+def _buscador_verificado():
+    if request.method not in ('GET', 'HEAD'):
+        return False
+    ua = (request.headers.get('User-Agent') or '').lower()
+    dominios = next((d for nome, d in _BUSCADORES_DNS.items() if nome in ua), None)
+    ip = request.remote_addr or ''
+    if not dominios or not ip:
+        return False
+    agora = time.time()
+    em_cache = _buscador_cache.get(ip)
+    if em_cache and em_cache[1] > agora:
+        return em_cache[0]
+    global _dns_pool
+    if _dns_pool is None:
+        import concurrent.futures
+        _dns_pool = concurrent.futures.ThreadPoolExecutor(4, thread_name_prefix='dns')
+    try:
+        ok = _dns_pool.submit(_dns_confere, ip, dominios).result(timeout=2)
+    except Exception:
+        ok = False   # DNS lento: segue com o limite normal desta vez
+    if len(_buscador_cache) > 5000:
+        _buscador_cache.clear()
+    _buscador_cache[ip] = (ok, agora + (86400 if ok else 3600))
+    return ok
+
+
+limiter.request_filter(_buscador_verificado)
+
+_saltos_conferidos = [0]
+
+
+@app.before_request
+def _conferir_saltos_do_proxy():
+    """Nas 3 primeiras requisições após o boot, registra quantos valores o
+    X-Forwarded-For trouxe (só a contagem, nenhum IP), para confirmar no log
+    que PROXY_SALTOS bate com a cadeia real de proxies."""
+    if _saltos_conferidos[0] >= 3 or request.path == '/health':
+        return
+    _saltos_conferidos[0] += 1
+    xff = request.headers.get('X-Forwarded-For', '')
+    valores = len([v for v in xff.split(',') if v.strip()])
+    logger.info(f'proxy: X-Forwarded-For com {valores} valor(es); PROXY_SALTOS={_PROXY_SALTOS}')
 
 GA_MEASUREMENT_ID = os.environ.get('GA_MEASUREMENT_ID', 'G-NGSNSF3SPM')
 
@@ -134,6 +209,96 @@ def _check_csrf():
 app.jinja_env.globals['csrf_token'] = _csrf_token
 app.jinja_env.globals['no_uf'] = no_uf
 app.jinja_env.globals['do_uf'] = do_uf
+
+
+# --- Títulos e descrições no tamanho que o Google mostra ---------------------
+# O resultado de busca corta o título em ~60 caracteres e a descrição em ~155.
+# 314 de 408 páginas passavam disso (growth/diagnostico.md, seção 4).
+TITULO_MAX = 60
+DESCRICAO_MAX = 155
+_SUFIXOS_MARCA = (' — TurboVenda Blog', ' | TurboVenda', ' — TurboVenda')
+
+
+def _cortar(texto, limite):
+    texto = ' '.join((texto or '').split())
+    if len(texto) <= limite:
+        return texto
+    corte = texto[:limite - 1].rsplit(' ', 1)[0].rstrip(' ,;:-–—|(')
+    return corte + '…'
+
+
+def _cabe(opcoes, limite=TITULO_MAX):
+    """A primeira opção que cabe no limite; se nenhuma couber, corta a última
+    na palavra. As opções vão da mais completa para a mais curta."""
+    opcoes = [' '.join(o.split()) for o in opcoes if o]
+    for o in opcoes:
+        if len(o) <= limite:
+            return o
+    return _cortar(opcoes[-1] if opcoes else '', limite)
+
+
+def _titulo_seo(titulo):
+    """Tira a marca do fim antes de cortar: a intenção vale mais que o nome."""
+    titulo = ' '.join((titulo or '').split())
+    opcoes = [titulo]
+    for sufixo in _SUFIXOS_MARCA:
+        if titulo.endswith(sufixo):
+            opcoes.append(titulo[:-len(sufixo)])
+    return _cabe(opcoes)
+
+
+def _descricao_seo(descricao):
+    return _cortar(descricao, DESCRICAO_MAX)
+
+
+def _como_filtro(funcao):
+    """Para `{% filter titulo_seo %}...{% endfilter %}`: conta os caracteres
+    como o leitor vê (sem &amp;) e devolve já escapado, sem escapar duas vezes."""
+    from markupsafe import Markup
+
+    def filtro(valor):
+        if isinstance(valor, Markup):
+            return Markup.escape(funcao(valor.unescape()))
+        return funcao(valor)
+    return filtro
+
+
+app.jinja_env.filters['titulo_seo'] = _como_filtro(_titulo_seo)
+app.jinja_env.filters['descricao_seo'] = _como_filtro(_descricao_seo)
+app.jinja_env.globals['cabe'] = _cabe
+
+_SITE = 'https://www.turbovenda.com.br'
+# TODO-VALIDAR: perfis oficiais (LinkedIn, Instagram, YouTube...) e CNPJ da
+# empresa dona da marca. Vazios, não aparecem no JSON-LD (nada inventado).
+MARCA = {
+    'perfis': [p for p in os.environ.get('MARCA_PERFIS', '').split() if p.startswith('https://')],
+    'cnpj': os.environ.get('MARCA_CNPJ', '').strip(),
+}
+app.jinja_env.globals['marca'] = MARCA
+
+
+@app.before_request
+def _sem_barra_no_final():
+    """/precos/ dava 404; link externo com barra no fim agora chega à página."""
+    caminho = request.path
+    if (len(caminho) > 1 and caminho.endswith('/') and request.method in ('GET', 'HEAD')
+            and not caminho.startswith(('/static/', '/vnc/'))):
+        destino = caminho.rstrip('/') or '/'
+        if request.query_string:
+            destino += '?' + request.query_string.decode('latin-1')
+        return redirect(destino, code=301)
+
+
+import mimetypes  # noqa: E402
+mimetypes.add_type('font/woff2', '.woff2')   # nem todo sistema conhece o tipo
+
+
+@app.after_request
+def _cache_das_fontes(resp):
+    # Nome fixo e conteúdo que não muda: o navegador guarda por um ano
+    if request.path.startswith('/static/fonts/'):
+        resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    return resp
 
 
 @app.before_request
@@ -2118,6 +2283,28 @@ BLOG_POSTS = [
 from conteudo_guias import GUIAS  # noqa: E402
 BLOG_POSTS += GUIAS
 
+# Título da aba/resultado de busca (≤ 60) para os posts cujo título passa
+# disso; o H1 e o og:title continuam com o título completo
+TITULOS_SEO_BLOG = {
+    'base-de-dados-de-empresas-cnpj': 'Base de Dados de Empresas CNPJ: O Que É e Como Usar',
+    'automacao-comercial-para-industria': 'Automação Comercial para Indústria: Como Prospectar',
+    'como-prospectar-clinicas-e-consultorios': 'Como Prospectar Clínicas e Consultórios',
+    'como-prospectar-contabilidades': 'Como Prospectar Escritórios de Contabilidade',
+    'mailing-de-empresas': 'Mailing de Empresas Grátis: Onde Conseguir e Riscos',
+    'como-encontrar-o-decisor-da-empresa': 'Como Encontrar o Decisor da Empresa pelo CNPJ',
+    'como-vender-para-industrias': 'Como Vender para Indústrias: Quem Decide e Como Abordar',
+    'prospectar-empresas-de-tecnologia': 'Como Prospectar Empresas de Tecnologia',
+    'quantos-leads-preciso-para-bater-a-meta': 'Quantos Leads Preciso para Bater a Meta? Funil Reverso',
+    'como-vender-para-cooperativas-agricolas': 'Como Vender para Cooperativas Agrícolas',
+    'crm-para-distribuidora': 'CRM para Distribuidora: Organize Vendas e Carteira',
+    'follow-up-de-vendas': 'Follow-up de Vendas: Quantas Vezes Insistir',
+    'turbovenda-vs-rdstation': 'TurboVenda vs RD Station: Qual Escolher para Prospecção',
+    'mensagem-de-prospeccao-whatsapp': 'Mensagem de Prospecção no WhatsApp: 12 Modelos Prontos',
+    'como-montar-lista-de-prospeccao': 'Como Montar uma Lista de Prospecção B2B',
+}
+for _post in BLOG_POSTS:
+    _post.setdefault('titulo_seo', TITULOS_SEO_BLOG.get(_post['slug']) or _post['titulo'])
+
 
 @app.route('/')
 def landing():
@@ -2126,8 +2313,22 @@ def landing():
 
 @app.route('/blog')
 def blog_index():
+    ld_blog = json.dumps({
+        '@context': 'https://schema.org', '@type': 'Blog',
+        'name': 'Blog do TurboVenda', 'url': f'{_SITE}/blog', 'inLanguage': 'pt-BR',
+        'publisher': {'@id': f'{_SITE}/#organizacao'},
+        'blogPost': [{'@type': 'BlogPosting', 'headline': p['titulo'],
+                      'url': f"{_SITE}/blog/{p['slug']}", 'datePublished': p['data']}
+                     for p in BLOG_POSTS],
+    }, ensure_ascii=False)
+    ld_trilha = json.dumps({
+        '@context': 'https://schema.org', '@type': 'BreadcrumbList',
+        'itemListElement': [
+            {'@type': 'ListItem', 'position': 1, 'name': 'Início', 'item': f'{_SITE}/'},
+            {'@type': 'ListItem', 'position': 2, 'name': 'Blog', 'item': f'{_SITE}/blog'}],
+    }, ensure_ascii=False)
     return render_template('blog.html',
-                           posts=BLOG_POSTS,
+                           posts=BLOG_POSTS, ld_json=[ld_blog, ld_trilha],
                            ga_id=GA_MEASUREMENT_ID)
 
 
@@ -2145,28 +2346,21 @@ def blog_post(slug):
 
 @app.route('/robots.txt')
 def robots_txt():
-    txt = (
-        "User-agent: *\n"
-        "Allow: /\n"
-        "Disallow: /api/\n"
-        "Disallow: /admin/\n"
-        "Disallow: /dashboard\n"
-        "Disallow: /configurar\n"
-        "Disallow: /logout\n"
-        "Disallow: /trial-expirado\n"
-        "Disallow: /assinar\n"
-        "Disallow: /pagamento/\n"
-        "Disallow: /t/\n\n"
-        "User-agent: GPTBot\n"
-        "Allow: /\n\n"
-        "User-agent: ClaudeBot\n"
-        "Allow: /\n\n"
-        "User-agent: PerplexityBot\n"
-        "Allow: /\n\n"
-        "User-agent: Google-Extended\n"
-        "Allow: /\n\n"
-        "Sitemap: https://www.turbovenda.com.br/sitemap.xml\n"
-    )
+    # Um grupo só: crawler citado em grupo próprio ignora o "*", e os grupos
+    # antigos (só "Allow: /") liberavam a área logada para GPTBot e ClaudeBot.
+    # Os de busca e citação vão nomeados para a liberação ficar explícita;
+    # os só de treino (CCBot, Bytespider...) seguem pelo "*" até decisão.
+    agentes = ('*', 'Googlebot', 'Bingbot', 'Applebot', 'DuckDuckBot',
+               'OAI-SearchBot', 'ChatGPT-User', 'GPTBot',
+               'PerplexityBot', 'Perplexity-User',
+               'ClaudeBot', 'Claude-SearchBot', 'Claude-User',
+               'Google-Extended')
+    bloqueados = ('/api/', '/admin/', '/dashboard', '/configurar', '/logout',
+                  '/trial-expirado', '/assinar', '/pagamento/', '/t/')
+    txt = (''.join(f'User-agent: {a}\n' for a in agentes)
+           + 'Allow: /\n'
+           + ''.join(f'Disallow: {b}\n' for b in bloqueados)
+           + '\nSitemap: https://www.turbovenda.com.br/sitemap.xml\n')
     return app.response_class(txt, mimetype='text/plain')
 
 
@@ -2366,9 +2560,29 @@ def sitemap_empresas_xml(n):
     chunk = pseo_urls[inicio:inicio + PSEO_SITEMAP_CHUNK]
     if n < 1 or not chunk:
         return render_template('404.html'), 404
-    # Sem lastmod: os dados só mudam a cada ingestão da Receita, e "hoje"
-    # em 8 mil URLs faria o Google ignorar o lastmod do site todo
-    return _render_urlset([(u, None, 'monthly', '0.7') for u in chunk])
+    # lastmod = data da base da Receita no banco, não "hoje": só muda quando
+    # os dados mudam, e aí o Google sabe que vale rastrear de novo
+    lastmod = _pseo_data_base()
+    return _render_urlset([(u, lastmod, 'monthly', '0.7') for u in chunk])
+
+
+_pseo_base_cache = {'em': 0.0, 'data': None}
+
+
+def _pseo_data_base():
+    """Data da base da Receita carregada (abertura mais recente), ou None."""
+    agora = time.time()
+    if agora - _pseo_base_cache['em'] < 6 * 3600:
+        return _pseo_base_cache['data']
+    # Pela mesma porta das outras consultas pSEO: funciona no Postgres de
+    # produção e no SQLite de desenvolvimento (PSEO_SQLITE)
+    hoje = _dt.date.today().isoformat()
+    linhas = _pseo_query('SELECT max(data_abertura) AS d FROM empresas_publicas '
+                         'WHERE data_abertura <= %s', (hoje,))
+    d = linhas[0]['d'] if linhas else None
+    data = (d.isoformat() if hasattr(d, 'isoformat') else str(d)[:10]) if d else None
+    _pseo_base_cache.update(em=agora, data=data)
+    return data
 
 
 _INDEXNOW_KEY = 'b4f7e2a1c9d84f6e8a3b5c7d9e1f0a2b'
@@ -2421,7 +2635,10 @@ def indexnow_key():
 def _todas_urls_sitemap():
     """(url, lastmod) de tudo o que está nos sitemaps."""
     urls = [(u, lm) for u, lm, _, _ in _static_sitemap_urls()]
-    urls += [(u, None) for u in _pseo_sitemap_urls()]
+    # Mesmo lastmod do sitemap: quando a base da Receita muda, o IndexNow
+    # reenvia as programáticas (antes iam com None e nunca eram reavisadas)
+    base = _pseo_data_base()
+    urls += [(u, base) for u in _pseo_sitemap_urls()]
     return dict(urls)
 
 
@@ -2710,7 +2927,10 @@ def _pseo_sitemap_urls():
     agg = _pseo_agg()
     if not agg['sitemap_set']:
         return []
-    cnaes_no_ar = sorted({cs for cs, _ in agg['sitemap_set']})
+    # Todo hub de segmento indexável entra, não só os que têm cidade no topo:
+    # abate de aves, frigoríficos e outros ficavam linkados e fora do sitemap
+    cnaes_no_ar = sorted(cs for cs, pc in agg['por_cnae'].items()
+                         if pc['total'] >= PSEO_MIN_INDEX)
     urls = [f'{_PSEO_BASE}/empresas/{cs}' for cs in cnaes_no_ar]
     for cs in cnaes_no_ar:
         urls += [f"{_PSEO_BASE}/empresas/{cs}/estado/{e['uf'].lower()}"
@@ -2732,6 +2952,7 @@ def _pseo_aquecer():
     except Exception as e:
         logger.warning(f'pseo: não criou as visões materializadas: {e}')
     _pseo_agg()
+    _pseo_data_base()   # lastmod dos sitemaps pronto antes do Googlebot pedir
 
 
 # Boot no Railway: carrega as contagens antes da primeira visita
@@ -2910,6 +3131,8 @@ def pseo_cnae(cnae_slug):
                                 for c in d['cidades'][:8]],
                     'n_cidades': len(d['cidades'])})
     return render_template('empresas_cnae.html', seg=seg, ufs=ufs,
+                           robots_meta=('index, follow' if pc['total'] >= PSEO_MIN_INDEX
+                                        else 'noindex, follow'),
                            total=pc['total'], total_fmt=_fmt_n(pc['total']),
                            n_ufs=len(ufs),
                            cnae_fmt=cnae_formatado(seg['codigo']),
@@ -2992,7 +3215,10 @@ def pseo_cidade(cnae_slug, mun_slug):
     indexavel = (pagina == 1 and n >= PSEO_MIN_INDEX
                  and (cnae_slug, mun_slug) in agg['sitemap_set'])
     robots_meta = 'index, follow' if indexavel else 'noindex, follow'
-    canonical = f'{_PSEO_BASE}/empresas/{cnae_slug}/{mun_slug}'
+    # Página 2+ aponta para si mesma (canonical para a 1ª junto de noindex é
+    # sinal misturado; o Google recomenda canonical próprio na paginação)
+    canonical = (f'{_PSEO_BASE}/empresas/{cnae_slug}/{mun_slug}'
+                 + (f'?pagina={pagina}' if pagina > 1 else ''))
 
     # JSON-LD (montado em Python -> sempre parseável)
     ld_breadcrumb = json.dumps({
@@ -3028,11 +3254,22 @@ def pseo_cidade(cnae_slug, mun_slug):
             for q, a in faq
         ]}, ensure_ascii=False)
 
-    titulo = (f"Empresas de {seg['nome']} em {mun} - {uf} "
-              f"({n} ativas) | TurboVenda")
-    descricao = (f"Lista com {n} empresas ativas de {seg['nome']} em "
-                 f"{mun} - {uf}, com bairro, porte e ano de abertura. "
-                 f"Dados abertos do CNPJ. Prospecte com IA grátis.")
+    # A frase longa ("Empresas de ... em ...") continua no H1; o título vai
+    # com o nome curto do segmento e a contagem, que é o que diferencia
+    rotulo = seg.get('label') or seg['nome'].capitalize()
+    pag = f' (pág. {pagina})' if pagina > 1 else ''
+    titulo = _cabe([f"{rotulo} em {mun} - {uf}: {_fmt_n(n)} empresas{pag} | TurboVenda",
+                    f"{rotulo} em {mun} - {uf}: {_fmt_n(n)} empresas{pag}",
+                    f"{rotulo} em {mun} - {uf}: {_fmt_n(n)} ativas{pag}",
+                    f"{rotulo} em {mun} - {uf}{pag}",
+                    f"{rotulo} em {mun}{pag}"])
+    descricao = _cabe([f"Lista com {n} empresas ativas de {seg['nome']} em "
+                       f"{mun} - {uf}, com bairro, porte e ano de abertura. "
+                       f"Dados abertos do CNPJ. Prospecte com IA grátis.",
+                       f"{n} empresas ativas de {seg['nome']} em {mun} - {uf}, "
+                       f"com bairro, porte e ano de abertura. Prospecte grátis.",
+                       f"{n} empresas ativas de {seg['nome']} em {mun} - {uf}, "
+                       f"com dados abertos do CNPJ."], DESCRICAO_MAX)
     cta_url = (f"/cadastro?utm_source=pseo&utm_medium=organic"
                f"&utm_campaign={cnae_slug}-{mun_slug}")
 
@@ -3179,10 +3416,17 @@ def pseo_estado(cnae_slug, uf):
                    (f'{_pct(n, total_br)}%', 'do total nacional')],
         outros_estados=outros_estados, outros_segmentos=outros_segmentos[:12],
         pseo_min=PSEO_MIN_EMPRESAS,
-        titulo=f"{label} {no_uf(UF)}: {_fmt_n(n)} empresas ativas | TurboVenda",
-        descricao=(f"{_fmt_n(n)} empresas ativas de {nome} {no_uf(UF)}, em "
-                   f"{len(cidades)} cidades. Ranking por município com dados "
-                   f"abertos do CNPJ. Prospecte com IA grátis."),
+        titulo=_cabe([f"{label} {no_uf(UF)}: {_fmt_n(n)} empresas ativas | TurboVenda",
+                      f"{label} {no_uf(UF)}: {_fmt_n(n)} empresas | TurboVenda",
+                      f"{label} {no_uf(UF)}: {_fmt_n(n)} empresas",
+                      f"{label} {no_uf(UF)}"]),
+        descricao=_cabe([f"{_fmt_n(n)} empresas ativas de {nome} {no_uf(UF)}, em "
+                         f"{len(cidades)} cidades. Ranking por município com dados "
+                         f"abertos do CNPJ. Prospecte com IA grátis.",
+                         f"{_fmt_n(n)} empresas ativas de {nome} {no_uf(UF)}, em "
+                         f"{len(cidades)} cidades, com ranking por município.",
+                         f"{_fmt_n(n)} empresas ativas de {nome} {no_uf(UF)}."],
+                        DESCRICAO_MAX),
         canonical=canonical,
         robots_meta='index, follow' if indexavel else 'noindex, follow',
         ld_json=[_ld_breadcrumb([
@@ -3263,12 +3507,19 @@ def pseo_cidade_hub(mun_slug):
         'empresas_cidade_hub.html', municipio=mun, uf=UF, uf_nome=uf_nome,
         mun_slug=mun_slug, segs=segs, texto=texto, faq=faq, destaques=destaques,
         vizinhas=vizinhas[:10],
-        titulo=(f"Empresas em {mun} - {UF}: "
-                + (f"{_fmt_n(total)} CNPJs ativos" if total else
-                   f"{_fmt_n(b2b)} empresas B2B") + " | TurboVenda"),
-        descricao=(f"Lista de empresas em {mun} - {UF} por segmento: "
-                   f"{_fmt_n(b2b)} empresas B2B em {len(segs)} atividades, com "
-                   f"dados abertos do CNPJ. Veja a lista e prospecte com IA."),
+        titulo=_cabe([f"Empresas em {mun} - {UF}: "
+                      + (f"{_fmt_n(total)} CNPJs ativos" if total else
+                         f"{_fmt_n(b2b)} empresas B2B") + " | TurboVenda",
+                      f"Empresas em {mun} - {UF}: "
+                      + (f"{_fmt_n(total)} CNPJs ativos" if total else
+                         f"{_fmt_n(b2b)} empresas B2B"),
+                      f"Empresas em {mun} - {UF}"]),
+        descricao=_cabe([f"Lista de empresas em {mun} - {UF} por segmento: "
+                         f"{_fmt_n(b2b)} empresas B2B em {len(segs)} atividades, com "
+                         f"dados abertos do CNPJ. Veja a lista e prospecte com IA.",
+                         f"Lista de empresas em {mun} - {UF}: {_fmt_n(b2b)} empresas "
+                         f"B2B em {len(segs)} atividades, com dados abertos do CNPJ."],
+                        DESCRICAO_MAX),
         canonical=canonical,
         robots_meta=('index, follow' if len(com_pagina) >= PSEO_CIDADE_HUB_INDEX
                      else 'noindex, follow'),

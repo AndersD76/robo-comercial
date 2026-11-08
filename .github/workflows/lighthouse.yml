@@ -1,0 +1,27 @@
+name: Lighthouse (produção)
+
+# Mede as 10 páginas principais no site no ar (mobile). SEO, CLS e as
+# auditorias de indexação quebram o job; velocidade só avisa, porque o
+# laboratório oscila. Metas: growth/diagnostico.md, seção 6.
+on:
+  schedule:
+    - cron: "0 9 * * *"   # 06:00 em Brasília
+  workflow_dispatch:
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Lighthouse CI
+        run: npx -y @lhci/cli@0.14.0 autorun
+      - name: Relatórios
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse
+          path: lhci/
+          retention-days: 30

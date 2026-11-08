@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Blog TurboVenda — Dicas de Prospecção B2B, Vendas e CRM</title>
-  <meta name="description" content="Artigos sobre prospecção B2B, automação comercial, CRM, geração de leads e vendas. Dicas práticas para vender mais com inteligência artificial.">
+  <title>{% filter titulo_seo %}Blog de prospecção B2B, vendas e CRM | TurboVenda{% endfilter %}</title>
+  <meta name="description" content="{% filter descricao_seo %}Artigos sobre prospecção B2B, automação comercial, CRM, geração de leads e vendas. Dicas práticas para vender mais com inteligência artificial.{% endfilter %}">
   <meta name="keywords" content="blog vendas B2B, dicas prospecção, CRM, automação comercial, geração de leads">
   <meta name="robots" content="index, follow">
   <meta name="google-site-verification" content="VMyveSsuwuHW6VKMlQUXLacN3llx6ELz38VRdprEVxA">
@@ -34,12 +34,10 @@
     }
   })();
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+{% include '_fontes.html' %}
   <link rel="stylesheet" href="/static/tokens.css">
   <link rel="stylesheet" href="/static/components.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  {% include '_icones.html' %}
   <style>
     *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
     :root{
@@ -96,7 +94,8 @@
     .footer-logo span{color:var(--accent)}
     footer p{color:var(--muted);font-size:13px}
   </style>
-</head>
+  {% for ld in ld_json or [] %}<script type="application/ld+json">{{ ld|safe }}</script>
+  {% endfor %}</head>
 <body>
 <a href="#main" class="skip-link">Pular para conteúdo</a>
 

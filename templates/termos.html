@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Termos de Uso — TurboVenda</title>
-  <meta name="description" content="Termos de Uso da plataforma TurboVenda. Leia nossas condições de utilização do serviço de prospecção B2B com IA.">
+  <title>{% filter titulo_seo %}Termos de Uso — TurboVenda{% endfilter %}</title>
+  <meta name="description" content="{% filter descricao_seo %}Termos de Uso da plataforma TurboVenda. Leia nossas condições de utilização do serviço de prospecção B2B com IA.{% endfilter %}">
+  <meta name="twitter:card" content="summary">
   <meta name="robots" content="index, follow">
   <meta name="google-site-verification" content="VMyveSsuwuHW6VKMlQUXLacN3llx6ELz38VRdprEVxA">
   <meta property="og:title" content="Termos de Uso — TurboVenda">
@@ -31,8 +32,7 @@
     }
   })();
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+{% include '_fontes.html' %}
   <link rel="stylesheet" href="/static/tokens.css">
   <link rel="stylesheet" href="/static/components.css">
   <style>

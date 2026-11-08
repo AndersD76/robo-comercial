@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sobre os dados das páginas de empresas | TurboVenda</title>
-  <meta name="description" content="De onde vêm os dados das listas de empresas do TurboVenda: dados abertos do CNPJ da Receita Federal. O que exibimos, o que não exibimos e como pedir remoção.">
+  <title>{% filter titulo_seo %}Sobre os dados das páginas de empresas | TurboVenda{% endfilter %}</title>
+  <meta name="description" content="{% filter descricao_seo %}De onde vêm os dados das listas de empresas do TurboVenda: dados abertos do CNPJ da Receita Federal. O que exibimos, o que não exibimos e como pedir remoção.{% endfilter %}">
   <meta name="robots" content="index, follow">
   <meta name="google-site-verification" content="VMyveSsuwuHW6VKMlQUXLacN3llx6ELz38VRdprEVxA">
   <link rel="canonical" href="https://www.turbovenda.com.br/empresas/sobre-os-dados">
@@ -32,9 +32,7 @@
     }
   })();
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+{% include '_fontes.html' %}
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:'Inter',sans-serif;background:#060b18;color:#f1f5f9}

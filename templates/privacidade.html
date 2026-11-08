@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Política de Privacidade — TurboVenda</title>
-  <meta name="description" content="Política de Privacidade do TurboVenda. Saiba como coletamos, usamos e protegemos seus dados pessoais conforme a LGPD.">
+  <title>{% filter titulo_seo %}Política de Privacidade — TurboVenda{% endfilter %}</title>
+  <meta name="description" content="{% filter descricao_seo %}Política de Privacidade do TurboVenda. Saiba como coletamos, usamos e protegemos seus dados pessoais conforme a LGPD.{% endfilter %}">
+  <meta name="twitter:card" content="summary">
   <meta name="robots" content="index, follow">
   <meta name="google-site-verification" content="VMyveSsuwuHW6VKMlQUXLacN3llx6ELz38VRdprEVxA">
   <meta property="og:title" content="Política de Privacidade — TurboVenda">
@@ -31,8 +32,7 @@
     }
   })();
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+{% include '_fontes.html' %}
   <link rel="stylesheet" href="/static/tokens.css">
   <link rel="stylesheet" href="/static/components.css">
   <style>

@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ titulo }}</title>
-  <meta name="description" content="{{ descricao }}">
+  <title>{% filter titulo_seo %}{{ titulo }}{% endfilter %}</title>
+  <meta name="description" content="{% filter descricao_seo %}{{ descricao }}{% endfilter %}">
   <meta name="robots" content="{{ robots_meta|default('index, follow') }}">
   <link rel="canonical" href="{{ canonical }}">
   <meta property="og:title" content="{{ titulo }}">
@@ -32,9 +32,7 @@
     }
   })();
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+{% include '_fontes.html' %}
   {% for ld in ld_json|default([]) %}
   <script type="application/ld+json">{{ ld|safe }}</script>
   {% endfor %}

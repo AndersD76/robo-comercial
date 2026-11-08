@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Empresas por segmento e cidade — dados abertos do CNPJ | TurboVenda</title>
-  <meta name="description" content="Listas de empresas ativas por CNAE, estado e cidade, com base nos dados abertos do CNPJ da Receita Federal. {{ total_empresas }} empresas mapeadas. Prospecte com IA grátis.">
+  <title>{% filter titulo_seo %}Empresas por segmento e cidade — dados abertos do CNPJ | TurboVenda{% endfilter %}</title>
+  <meta name="description" content="{% filter descricao_seo %}Listas de empresas ativas por CNAE, estado e cidade, com base nos dados abertos do CNPJ da Receita Federal. {{ total_empresas }} empresas mapeadas. Prospecte com IA grátis.{% endfilter %}">
   <meta name="robots" content="index, follow">
   <meta name="google-site-verification" content="VMyveSsuwuHW6VKMlQUXLacN3llx6ELz38VRdprEVxA">
   <link rel="canonical" href="https://www.turbovenda.com.br/empresas">
@@ -12,6 +12,7 @@
   <meta property="og:description" content="Listas de empresas ativas por CNAE e cidade, com base nos dados abertos do CNPJ da Receita Federal.">
   <meta property="og:url" content="https://www.turbovenda.com.br/empresas">
   <meta property="og:image" content="https://www.turbovenda.com.br/static/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
   <meta property="og:type" content="website">
   <meta property="og:locale" content="pt_BR">
   <meta property="og:site_name" content="TurboVenda">
@@ -32,9 +33,7 @@
     }
   })();
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+{% include '_fontes.html' %}
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:'Inter',sans-serif;background:#060b18;color:#f1f5f9}

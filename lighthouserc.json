@@ -1,0 +1,35 @@
+{
+  "ci": {
+    "collect": {
+      "url": [
+        "https://www.turbovenda.com.br/",
+        "https://www.turbovenda.com.br/precos",
+        "https://www.turbovenda.com.br/cadastro",
+        "https://www.turbovenda.com.br/ferramentas/lista-de-empresas",
+        "https://www.turbovenda.com.br/empresas/cidade/porto-alegre-rs",
+        "https://www.turbovenda.com.br/empresas/usinagem/caxias-do-sul-rs",
+        "https://www.turbovenda.com.br/empresas/usinagem",
+        "https://www.turbovenda.com.br/blog/como-prospectar-clientes-b2b",
+        "https://www.turbovenda.com.br/alternativas/econodata",
+        "https://www.turbovenda.com.br/para/industria"
+      ],
+      "numberOfRuns": 2,
+      "settings": { "formFactor": "mobile", "screenEmulation": { "mobile": true } }
+    },
+    "assert": {
+      "assertions": {
+        "categories:seo": ["error", { "minScore": 0.95 }],
+        "cumulative-layout-shift": ["error", { "maxNumericValue": 0.1 }],
+        "categories:performance": ["warn", { "minScore": 0.85 }],
+        "largest-contentful-paint": ["warn", { "maxNumericValue": 2500 }],
+        "total-blocking-time": ["warn", { "maxNumericValue": 200 }],
+        "is-crawlable": "error",
+        "document-title": "error",
+        "meta-description": "error",
+        "canonical": "error",
+        "http-status-code": "error"
+      }
+    },
+    "upload": { "target": "filesystem", "outputDir": "lhci" }
+  }
+}

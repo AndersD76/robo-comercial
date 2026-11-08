@@ -3,15 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ seg.label }} no Brasil: {{ total_fmt }} empresas ativas | TurboVenda</title>
-  <meta name="description" content="{{ total_fmt }} empresas ativas de {{ seg.nome }} (CNAE {{ cnae_fmt }}) em {{ n_ufs }} estados, segundo os dados abertos do CNPJ. Veja por estado e cidade e prospecte com IA.">
-  <meta name="robots" content="index, follow">
+  <title>{% filter titulo_seo %}{{ cabe([seg.label ~ ' no Brasil: ' ~ total_fmt ~ ' empresas ativas | TurboVenda', seg.label ~ ' no Brasil: ' ~ total_fmt ~ ' empresas | TurboVenda', seg.label ~ ' no Brasil: ' ~ total_fmt ~ ' empresas', seg.label ~ ': ' ~ total_fmt ~ ' empresas', seg.label ~ ' no Brasil']) }}{% endfilter %}</title>
+  <meta name="description" content="{% filter descricao_seo %}{{ total_fmt }} empresas ativas de {{ seg.nome }} (CNAE {{ cnae_fmt }}) em {{ n_ufs }} estados, segundo os dados abertos do CNPJ. Veja por estado e cidade e prospecte com IA.{% endfilter %}">
+  <meta name="robots" content="{{ robots_meta|default('index, follow') }}">
   <meta name="google-site-verification" content="VMyveSsuwuHW6VKMlQUXLacN3llx6ELz38VRdprEVxA">
   <link rel="canonical" href="https://www.turbovenda.com.br/empresas/{{ seg.slug }}">
   <meta property="og:title" content="{{ seg.label }} no Brasil: {{ total_fmt }} empresas ativas | TurboVenda">
   <meta property="og:description" content="{{ total }} empresas ativas de {{ seg.nome }} por cidade, segundo os dados abertos do CNPJ.">
   <meta property="og:url" content="https://www.turbovenda.com.br/empresas/{{ seg.slug }}">
   <meta property="og:image" content="https://www.turbovenda.com.br/static/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
   <meta property="og:type" content="website">
   <meta property="og:locale" content="pt_BR">
   <meta property="og:site_name" content="TurboVenda">
@@ -32,9 +33,7 @@
     }
   })();
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+{% include '_fontes.html' %}
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
