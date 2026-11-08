@@ -1,0 +1,62 @@
+{
+  "paginas_crawleadas": 450,
+  "status": {
+    "200": 408,
+    "429": 41,
+    "erro": 1
+  },
+  "por_tipo": {
+    "home": 2,
+    "alternativas": 5,
+    "blog": 31,
+    "cadastro": 29,
+    "empresas": 1,
+    "empresas-cnae": 55,
+    "empresas-cnae-uf": 34,
+    "empresas-cnae-cidade": 217,
+    "empresas-cidade": 57,
+    "ferramentas": 9,
+    "login": 1,
+    "para": 6,
+    "precos": 1,
+    "privacidade": 1,
+    "termos": 1
+  },
+  "indexaveis": 342,
+  "sem_title": 0,
+  "title_mais_60": 314,
+  "title_duplicado": 56,
+  "sem_description": 0,
+  "desc_mais_155": 221,
+  "desc_duplicada": 56,
+  "sem_canonical": 0,
+  "canonical_diferente": 52,
+  "h1_ausente": 30,
+  "h1_multiplo": 0,
+  "thin_menos_250_palavras": 32,
+  "sem_jsonld": 35,
+  "jsonld_invalido": 0,
+  "sem_og_image": 3,
+  "sem_twitter_card": 88,
+  "com_hreflang": 0,
+  "linkadas_fora_do_sitemap": [
+    "https://www.turbovenda.com.br/empresas/abate-de-aves",
+    "https://www.turbovenda.com.br/empresas/frigorificos",
+    "https://www.turbovenda.com.br/empresas/oleos-vegetais",
+    "https://www.turbovenda.com.br/empresas/produtos-quimicos"
+  ],
+  "no_sitemap_sem_link_entrada_no_crawl": 55,
+  "tempo_ms_p50": 210,
+  "tempo_ms_p90": 377,
+  "jsonld_tipos": {
+    "FAQPage": 286,
+    "Organization": 1,
+    "SoftwareApplication": 1,
+    "WebSite": 1,
+    "BreadcrumbList": 371,
+    "Article": 30,
+    "ItemList": 176,
+    "WebApplication": 8,
+    "WebPage": 1
+  }
+}

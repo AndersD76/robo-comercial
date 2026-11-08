@@ -40,3 +40,6 @@ pseo_dev.sqlite
 # ensaio local da ingestao
 ensaio_cnpj.sqlite
 pseo_dev.sqlite
+
+# Fase 0 do growth: JSON brutos do Lighthouse (regeráveis, ~7 MB)
+growth/dados/lighthouse/*.json
