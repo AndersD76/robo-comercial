@@ -9952,6 +9952,26 @@ CREATE INDEX IF NOT EXISTS idx_cta_cliques_created ON cta_cliques(created_at);
 """
 # Guarda a UTM da chegada e avisa o servidor a cada clique em CTA (link para
 # /cadastro ou elemento com data-cta); sendBeacon não atrasa a navegação
+# Página pré-carregada pelo navegador (o Chrome busca os primeiros resultados
+# do Google antes do clique, via proxy, com "Sec-Purpose: prefetch"): o
+# servidor não sabe se a pessoa vai abrir. Ela fica marcada como
+# "precarregamento" e a visita só conta quando a página é aberta de fato,
+# pelo aviso abaixo. Antes disso a telemetria contava ~2,4x os cliques do GSC.
+_TRAF_PRE_SCRIPT = (
+    "<script>(function(){function f(){try{var q=new URLSearchParams(location.search);"
+    "navigator.sendBeacon('/api/t/pv',new Blob([JSON.stringify({path:location.pathname,"
+    "ref:document.referrer,utm_source:q.get('utm_source')||'',utm_medium:q.get('utm_medium')"
+    "||'',utm_campaign:q.get('utm_campaign')||''})],{type:'application/json'}))}catch(e){}}"
+    "if(!navigator.sendBeacon)return;if(document.prerendering){document.addEventListener("
+    "'prerenderingchange',f,{once:true})}else{f()}})();</script>")
+
+
+def _e_precarregamento():
+    proposito = (request.headers.get('Sec-Purpose', '') + ' '
+                 + request.headers.get('Purpose', '')).lower()
+    return 'prefetch' in proposito or 'prerender' in proposito
+
+
 _TRAF_SCRIPT = (
     "<script>(function(){var L=window.localStorage;function g(k){try{return L.getItem(k)||''}"
     "catch(e){return ''}}try{var q=new URLSearchParams(location.search);['utm_source',"
@@ -10042,17 +10062,20 @@ def _trafego_pageview(resp):
         interno = _urlparse(ref).netloc.lower().endswith('turbovenda.com.br')
         a = request.args
         verificado = robo in _ROBOS_DNS and _buscador_verificado()
+        pre = not robo and _e_precarregamento()
         _traf_enfileirar('pv', (
             request.path[:300], '' if interno else ref,
             a.get('utm_source', '')[:120], a.get('utm_medium', '')[:120],
             a.get('utm_campaign', '')[:120],
-            bool(robo) or not ua or any(b in ua for b in _BOT_UA), not interno,
-            robo, verificado, resp.status_code))
+            pre or bool(robo) or not ua or any(b in ua for b in _BOT_UA),
+            not interno and not pre,
+            'precarregamento' if pre else robo, verificado, resp.status_code))
         if not pagina_html:
             return resp
         html = resp.get_data(as_text=True)
         if '</body>' in html and '/api/t/cta' not in html:
-            resp.set_data(html.replace('</body>', _TRAF_SCRIPT + '</body>', 1))
+            extra = (_TRAF_PRE_SCRIPT if pre else '') + _TRAF_SCRIPT
+            resp.set_data(html.replace('</body>', extra + '</body>', 1))
     except Exception:
         pass
     return resp
@@ -10069,6 +10092,26 @@ def api_trafego_cta():
         _traf_enfileirar('cta', (g('path', 300), g('cta', 80), g('destino', 300),
                                  g('utm_source', 120), g('utm_medium', 120),
                                  g('utm_campaign', 120)))
+    return ('', 204)
+
+
+@app.route('/api/t/pv', methods=['POST'])
+@limiter.limit("60 per minute", key_func=_ip_cliente)
+def api_trafego_pv():
+    """Visita de verdade a uma página que o navegador tinha pré-carregado
+    (ver _TRAF_PRE_SCRIPT): só aqui ela conta como entrada."""
+    d = request.get_json(silent=True, force=True) or {}
+
+    def g(k, n):
+        return str(d.get(k) or '')[:n]
+    path, ref = g('path', 300), g('ref', 300)
+    ua = (request.headers.get('User-Agent') or '').lower()
+    if (path.startswith('/') and not path.startswith(_TRAF_FORA)
+            and ua and not _nome_do_robo(ua) and not any(b in ua for b in _BOT_UA)):
+        interno = _urlparse(ref).netloc.lower().endswith('turbovenda.com.br')
+        _traf_enfileirar('pv', (path, '' if interno else ref, g('utm_source', 120),
+                                g('utm_medium', 120), g('utm_campaign', 120),
+                                False, not interno, '', False, 200))
     return ('', 204)
 
 

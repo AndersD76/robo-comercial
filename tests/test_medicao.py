@@ -27,6 +27,10 @@ class SessaoGSC:
 
     def post(self, url, json=None):
         self.chamadas.append(url)
+        if 'searchAnalytics' in url and json['dimensions'] == ['date', 'page']:
+            return Resp({'rows': [
+                {'keys': ['2026-11-05', 'https://www.turbovenda.com.br/empresas/usinagem/caxias-do-sul-rs'],
+                 'clicks': 9, 'impressions': 400, 'ctr': .0225, 'position': 8.1}]})
         if 'searchAnalytics' in url:
             return Resp({'rows': [
                 {'keys': ['2026-11-05', 'lista de empresas por cidade', 'https://www.turbovenda.com.br/ferramentas/lista-de-empresas'],
@@ -64,10 +68,12 @@ class Conn:
 def test_ingestao_gsc_grava_consultas_sitemaps_e_inspecao():
     conn, s = Conn(), SessaoGSC()
     n = medicao.ingerir_gsc(conn, '{}', 'sc-domain:turbovenda.com.br', sessao=s)
-    assert n == 2
+    assert n == 3
     consultas = [p for sql, p in conn.log if 'busca_consultas' in sql and p]
     assert consultas[0] == ('2026-11-05', 'lista de empresas por cidade', '/ferramentas/lista-de-empresas', 3, 120, 6.4)
     assert consultas[1][2] == '/'   # URL da home vira caminho "/"
+    # segunda passada: total da página, com as consultas escondidas, sob consulta '*'
+    assert consultas[2] == ('2026-11-05', '*', '/empresas/usinagem/caxias-do-sul-rs', 9, 400, 8.1)
     sitemaps = [p for sql, p in conn.log if 'busca_sitemaps' in sql and p]
     assert sitemaps[0][1:] == ('https://www.turbovenda.com.br/sitemap-empresas-1.xml', 5000, 3100)
     inspecoes = [p for sql, p in conn.log if 'busca_inspecao' in sql and p]

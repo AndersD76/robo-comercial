@@ -71,25 +71,30 @@ def ingerir_gsc(conn, credenciais_json, propriedade, dias=5, sessao=None):
     ini = fim - timedelta(days=dias - 1)
     cur = conn.cursor()
     criar_tabelas(cur)
-    linhas, inicio = 0, 0
-    while True:
-        r = s.post(f'{base}/searchAnalytics/query', json={
-            'startDate': ini.isoformat(), 'endDate': fim.isoformat(),
-            'dimensions': ['date', 'query', 'page'], 'rowLimit': 25000, 'startRow': inicio})
-        r.raise_for_status()
-        rows = r.json().get('rows', [])
-        for row in rows:
-            d, q, p = row['keys']
-            cur.execute("""INSERT INTO busca_consultas VALUES ('google', %s, %s, %s, %s, %s, %s)
-                           ON CONFLICT (fonte, data, consulta, pagina) DO UPDATE SET
-                           cliques = EXCLUDED.cliques, impressoes = EXCLUDED.impressoes,
-                           posicao = EXCLUDED.posicao""",
-                        (d, q[:500], p.replace(SITE, '') or '/', int(row.get('clicks', 0)),
-                         int(row.get('impressions', 0)), float(row.get('position', 0))))
-        linhas += len(rows)
-        if len(rows) < 25000:
-            break
-        inicio += 25000
+    # Duas passadas: por consulta × página (o Google esconde as consultas raras,
+    # que no site são a maioria: em 09/11, 70 de 1.497 cliques tinham consulta)
+    # e por página com consulta '*', que traz o total real de cada página.
+    linhas = 0
+    for dimensoes in (['date', 'query', 'page'], ['date', 'page']):
+        inicio = 0
+        while True:
+            r = s.post(f'{base}/searchAnalytics/query', json={
+                'startDate': ini.isoformat(), 'endDate': fim.isoformat(),
+                'dimensions': dimensoes, 'rowLimit': 25000, 'startRow': inicio})
+            r.raise_for_status()
+            rows = r.json().get('rows', [])
+            for row in rows:
+                d, q, p = row['keys'] if len(row['keys']) == 3 else (row['keys'][0], '*', row['keys'][1])
+                cur.execute("""INSERT INTO busca_consultas VALUES ('google', %s, %s, %s, %s, %s, %s)
+                               ON CONFLICT (fonte, data, consulta, pagina) DO UPDATE SET
+                               cliques = EXCLUDED.cliques, impressoes = EXCLUDED.impressoes,
+                               posicao = EXCLUDED.posicao""",
+                            (d, q[:500], p.replace(SITE, '') or '/', int(row.get('clicks', 0)),
+                             int(row.get('impressions', 0)), float(row.get('position', 0))))
+            linhas += len(rows)
+            if len(rows) < 25000:
+                break
+            inicio += 25000
     r = s.get(f'{base}/sitemaps')
     r.raise_for_status()
     hoje = date.today()
@@ -208,17 +213,25 @@ def dados_painel(cur):
     d['gsc'] = _existe(cur, 'busca_consultas') and _q(
         cur, "SELECT COUNT(*) AS n FROM busca_consultas WHERE fonte = 'google'")[0]['n'] > 0
     if d['gsc']:
+        # consulta = '*' é o total da página (inclui as consultas que o Google esconde)
+        d['gsc_total'] = _q(cur, """
+            SELECT COALESCE(SUM(cliques), 0) AS cli, COALESCE(SUM(impressoes), 0) AS imp,
+                   SUM(posicao * impressoes) / NULLIF(SUM(impressoes), 0) AS pos
+            FROM busca_consultas WHERE fonte = 'google' AND consulta = '*'
+              AND data >= current_date - 28""")[0]
         d['oportunidades'] = _q(cur, """
             SELECT consulta, pagina, SUM(impressoes) AS imp, SUM(cliques) AS cli,
                    SUM(posicao * impressoes) / NULLIF(SUM(impressoes), 0) AS pos
-            FROM busca_consultas WHERE fonte = 'google' AND data >= current_date - 28
+            FROM busca_consultas WHERE fonte = 'google' AND consulta <> '*'
+              AND data >= current_date - 28
             GROUP BY 1, 2 HAVING SUM(impressoes) >= 20
                AND SUM(posicao * impressoes) / NULLIF(SUM(impressoes), 0) BETWEEN 4 AND 15
             ORDER BY imp DESC LIMIT 30""")
         ctr = _q(cur, """
             SELECT pagina, SUM(impressoes) AS imp, SUM(cliques) AS cli,
                    SUM(posicao * impressoes) / NULLIF(SUM(impressoes), 0) AS pos
-            FROM busca_consultas WHERE fonte = 'google' AND data >= current_date - 28
+            FROM busca_consultas WHERE fonte = 'google' AND consulta = '*'
+              AND data >= current_date - 28
             GROUP BY 1 HAVING SUM(impressoes) >= 100""")
         d['ctr_baixo'] = [r for r in ctr if r['pos'] and round(r['pos']) in CTR_ESPERADO
                           and r['cli'] / r['imp'] < 0.6 * CTR_ESPERADO[round(r['pos'])]][:20]

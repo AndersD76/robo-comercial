@@ -29,7 +29,7 @@
 
   {% if d %}
   <div class="cards">
-    <div class="card"><b>{{ d.entradas.atual }}</b><span>entradas vindas de buscadores (28 dias anteriores: {{ d.entradas.anterior }})</span></div>
+    <div class="card"><b>{{ d.entradas.atual }}</b><span>entradas vindas de buscadores, telemetria própria (28 dias anteriores: {{ d.entradas.anterior }}). Até 09/11 contava páginas só pré-carregadas pelo Chrome; o número oficial de cliques é o do Search Console abaixo</span></div>
     <div class="card"><b>{{ d.entradas_ia }}</b><span>entradas vindas de assistentes de IA</span></div>
     <div class="card"><b>{{ d.cadastros|sum(attribute='n') }}</b><span>cadastros no período</span></div>
     {% if d.sov %}<div class="card"><b>{{ d.sov[0].citado or 0 }} de {{ d.sov[0].perguntas }}</b><span>citações em IA (rodada de {{ d.sov[0].rodada.strftime('%d/%m') }})</span></div>{% endif %}
@@ -65,6 +65,11 @@
 
   <h2>Search Console</h2>
   {% if d.gsc %}
+  <div class="cards">
+    <div class="card"><b>{{ d.gsc_total.cli }}</b><span>cliques no Google (28 dias, Search Console)</span></div>
+    <div class="card"><b>{{ d.gsc_total.imp }}</b><span>vezes que o site apareceu no Google</span></div>
+    <div class="card"><b>{{ '%.1f'|format(d.gsc_total.pos or 0) }}</b><span>posição média</span></div>
+  </div>
   <div class="grid2">
     <div>
       <h3>Posição 4–15 (empurrar para o top 3)</h3>
@@ -79,7 +84,8 @@
   </div>
   <h3>Indexação</h3>
   <table><tr><th>Sitemap</th><th class="n">Enviadas</th><th class="n">Indexadas</th></tr>
-    {% for r in d.indexacao %}<tr><td>{{ r.sitemap }}</td><td class="n">{{ r.enviadas }}</td><td class="n">{{ r.indexadas }}</td></tr>{% endfor %}</table>
+    {% for r in d.indexacao %}<tr><td>{{ r.sitemap }}</td><td class="n">{{ r.enviadas }}</td><td class="n">{{ r.indexadas or '—' }}</td></tr>{% endfor %}</table>
+  <p class="sub">A API do Google não informa mais quantas páginas de cada sitemap foram indexadas (vem zero); o total está no Search Console, em Indexação → Páginas.</p>
   <table><tr><th>URL prioritária</th><th>Veredito</th><th>Situação</th><th>Último rastreio</th></tr>
     {% for r in d.inspecao %}<tr><td>{{ r.url }}</td><td>{{ r.veredito }}</td><td>{{ r.estado }}</td><td>{{ r.ultimo_rastreio }}</td></tr>{% endfor %}</table>
   {% else %}
