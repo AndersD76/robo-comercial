@@ -138,7 +138,7 @@ As programáticas e ferramentas caíram para 1,2–1,3 s. As páginas que usam �
 2. **Search Console → Configurações → Estatísticas de rastreamento** (5 min): ver se o Googlebot vinha recebendo 429 antes de 08/11 e se a curva de rastreio sobe agora.
 3. **Search Console por API** (15 min): criar uma conta de serviço no Google Cloud, adicionar o e-mail dela como usuário (leitura) da propriedade e configurar no Railway `GSC_CREDENCIAIS_JSON` (conteúdo do JSON) e `GSC_PROPRIEDADE` (ex.: `sc-domain:turbovenda.com.br`). O `/admin/organico` passa a mostrar consultas, posição, CTR e indexação no dia seguinte.
 3.1. **Bing por API** (5 min): Bing Webmaster → Configurações → Acesso à API → gerar chave → `BING_API_KEY` no Railway.
-4. **DNS sem www** (30 min): `turbovenda.com.br` ainda não resolve. Passo a passo no README de tráfego (`docs/trafego/README.md`).
+4. ~~DNS sem www~~ **feito em 09/11:** ALIAS `@` na Hostinger para o Railway (porta 5000) + TXT `_railway-verify`; `https://turbovenda.com.br/<caminho>` responde 301 para o www com o mesmo caminho.
 5. ~~Railway "Wait for CI"~~ **feito em 09/11** pela API (o deploy só acontece se o CI passar). O healthcheck no `/health` (300 s) ficou gravado direto nas configurações do serviço: o `railway.toml` foi descontinuado pelo Railway (deixa de valer em 01/12/2026) e saiu do repositório.
 6. **Perfis em B2B Stack, G2/Capterra/GetApp e SaaSHub**: são as fontes que mais aparecem quando se pergunta "melhor ferramenta de prospecção B2B". Checklist com status em `growth/diretorios.md`.
 7. **Imprensa e links**: usar `growth/alvos-link.csv` e o `/imprensa` para as primeiras abordagens (Contábeis e Base dos Dados primeiro).
