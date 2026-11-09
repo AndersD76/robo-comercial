@@ -110,3 +110,28 @@ def test_paginacao_canonical_proprio_e_noindex(client, sitemap_programatico):
 
 def test_combinacao_inexistente_da_404(client):
     assert client.get('/empresas/segmento-que-nao-existe/cidade-xx').status_code == 404
+
+
+def test_cta_leva_segmento_e_cidade_ao_cadastro(client, sitemap_programatico):
+    """Quem clica numa página de segmento × cidade chega ao cadastro com o
+    alvo, e a conta nasce com o robô buscando exatamente aquelas empresas."""
+    urls, _ = sitemap_programatico
+    url = next(u for u in urls if re.match(rf'^{BASE}/empresas/(?!cidade/)[^/]+/(?!estado)[^/]+$', u))
+    seg_slug, mun_slug = url.replace(BASE + '/empresas/', '').split('/')
+    html = client.get(url.replace(BASE, '')).get_data(as_text=True)
+    for cta in ('pseo-topo', 'pseo-rodape'):
+        assert f'data-cta="{cta}"' in html
+    assert f'alvo={seg_slug}&amp;cidade={mun_slug}' in html
+
+    alvo = A._alvo_pseo(seg_slug, mun_slug)
+    assert alvo and alvo['seg_slug'] == seg_slug and alvo['n'] >= A.PSEO_MIN_EMPRESAS
+    cadastro = client.get(f'/cadastro?alvo={seg_slug}&cidade={mun_slug}').get_data(as_text=True)
+    assert 'Seu robô começa por' in cadastro and alvo['municipio'] in cadastro
+    assert f'name="alvo" value="{seg_slug}"' in cadastro
+
+    termos = A._termos_do_alvo(alvo)
+    assert len(termos) == len(set(termos)) >= 10
+    assert all(alvo['municipio'] in t or alvo['uf'] in t for t in termos)
+    # alvo inválido não quebra o cadastro
+    assert A._alvo_pseo('nao-existe', mun_slug) is None
+    assert 'Seu robô começa por' not in client.get('/cadastro?alvo=x&cidade=y').get_data(as_text=True)

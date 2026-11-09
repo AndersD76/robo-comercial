@@ -98,12 +98,22 @@
     <span class="benefit"><i class="fa fa-check"></i> 2 min para configurar</span>
   </div>
 
+  {% if alvo %}
+  <div style="background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.3);border-radius:12px;
+      padding:14px 16px;margin:0 0 18px;font-size:14px;line-height:1.6;color:#cbd5e1">
+    <strong style="color:#fff">Seu robô começa por: {{ alvo.segmento }} em {{ alvo.municipio }} - {{ alvo.uf }}</strong><br>
+    São {{ alvo.n }} empresas ativas. Ele busca telefone, e-mail e o sócio de cada uma; no teste grátis, as primeiras 50 com contato.
+  </div>
+  {% endif %}
+
   {% if error %}
   <div class="error"><i class="fa fa-circle-exclamation"></i> {{ error }}</div>
   {% endif %}
 
   <form method="POST">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    {% if alvo %}<input type="hidden" name="alvo" value="{{ alvo.seg_slug }}">
+    <input type="hidden" name="cidade" value="{{ alvo.mun_slug }}">{% endif %}
     <input type="hidden" name="utm_source" id="utm_source">
     <input type="hidden" name="utm_medium" id="utm_medium">
     <input type="hidden" name="utm_campaign" id="utm_campaign">
@@ -119,7 +129,7 @@
       <label>Segmento que vende <small>(opcional)</small></label>
       <input type="text" name="segmento" placeholder="Ex: consultoria, equipamentos industriais, software">
     </div>
-    <div class="field">
+    <div class="field"{% if alvo %} hidden{% endif %}>
       <label>Região de atuação <small>(opcional)</small></label>
       <select name="regiao" style="width:100%;background:#111d35;border:1px solid rgba(255,255,255,.08);
           border-radius:10px;padding:12px 14px;color:#f1f5f9;font-size:15px;

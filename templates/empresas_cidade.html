@@ -76,6 +76,8 @@
     td{padding:11px 14px;border-top:1px solid rgba(255,255,255,.05);color:#e2e8f0}
     td small{display:block;color:#64748b}
     tr:hover td{background:rgba(99,102,241,.04)}
+    .linha-cta td{background:rgba(99,102,241,.1);color:#cbd5e1;font-size:13.5px;text-align:center}
+    .linha-cta a{color:#a5b4fc;font-weight:700;text-decoration:none;margin-left:4px}
     .pager{display:flex;gap:8px;justify-content:center;margin:22px 0;flex-wrap:wrap}
     .pager a,.pager span{padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;
         text-decoration:none;border:1px solid rgba(255,255,255,.08);color:#94a3b8}
@@ -138,11 +140,12 @@
   </div>
 
   <div class="cta-box">
-    <p><strong>Chega de copiar CNPJ um por um.</strong><br>
-       A IA do TurboVenda enriquece essas empresas com telefone, e-mail e site — e escreve a abordagem.</p>
-    <a href="{{ cta_url }}" class="cta-btn"
+    <p><strong>Você vende para {{ seg.label|lower }}?</strong><br>
+       O robô do TurboVenda busca telefone, e-mail e o sócio de cada uma dessas {{ n }} empresas
+       de {{ municipio }} e escreve a primeira mensagem. Teste grátis com 50, sem cartão.</p>
+    <a href="{{ cta_url }}" class="cta-btn" data-cta="pseo-topo"
        onclick="if(typeof gtag==='function')gtag('event','pseo_cta_click',{cnae_slug:'{{ seg.slug }}',cidade:'{{ combo.mun_slug }}',empresas:{{ n }}})">
-      Prospectar essas {{ n }} empresas com IA — grátis
+      Quero o contato dessas empresas
     </a>
   </div>
 
@@ -160,6 +163,12 @@
           <td>{{ e.porte }}</td>
           <td>{{ e.ano }}</td>
         </tr>
+        {% if loop.index == 10 and not loop.last %}
+        <tr class="linha-cta"><td colspan="4">
+          Telefone, e-mail e sócio destas empresas:
+          <a href="{{ cta_url }}" data-cta="pseo-tabela">ver grátis no TurboVenda →</a>
+        </td></tr>
+        {% endif %}
         {% endfor %}
       </tbody>
     </table>
@@ -210,9 +219,9 @@
   </div>
 
   <div style="margin:32px 0;padding:20px;background:rgba(99,102,241,.08);border-radius:12px;border:1px solid rgba(99,102,241,.15)">
-    <h3 style="font-size:15px;margin-bottom:8px;color:#a5b4fc">Quer prospectar essas empresas automaticamente?</h3>
-    <p style="font-size:13px;color:#94a3b8;margin-bottom:12px">O TurboVenda encontra o telefone e e-mail do decisor, envia mensagens com IA e organiza tudo no CRM.</p>
-    <a href="/cadastro?utm_source=pseo&utm_medium=cta&utm_campaign={{ seg.slug }}-{{ combo.mun_slug }}" style="display:inline-block;padding:8px 20px;background:#6366f1;color:#fff;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">Testar grátis — 50 leads</a>
+    <h3 style="font-size:15px;margin-bottom:8px;color:#a5b4fc">Vende para {{ seg.label|lower }} em {{ municipio }}?</h3>
+    <p style="font-size:13px;color:#94a3b8;margin-bottom:12px">Crie a conta e o robô já começa por estas {{ n }} empresas: encontra telefone, e-mail e o sócio, escreve a abordagem e organiza tudo no CRM.</p>
+    <a href="{{ cta_url }}" data-cta="pseo-rodape" style="display:inline-block;padding:8px 20px;background:#6366f1;color:#fff;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">Testar grátis com estas empresas</a>
   </div>
 
   <div style="margin:24px 0">

@@ -1497,12 +1497,46 @@ def login():
     return render_template('login.html', error=error)
 
 
+def _alvo_pseo(seg_slug, mun_slug):
+    """Segmento × cidade de onde a pessoa veio (botões das páginas
+    /empresas/<segmento>/<cidade>): {segmento, municipio, uf, n, ...} ou None."""
+    seg = CNAE_POR_SLUG.get((seg_slug or '').strip()[:80])
+    mun_slug = (mun_slug or '').strip()[:120]
+    if not seg or not mun_slug:
+        return None
+    try:
+        combo = _pseo_agg()['combos'].get((seg['slug'], mun_slug))
+    except Exception:
+        return None
+    if not combo:
+        return None
+    return {'seg_slug': seg['slug'], 'mun_slug': mun_slug, 'segmento': seg['label'],
+            'municipio': combo['municipio'], 'uf': combo['uf'], 'n': combo['n']}
+
+
+_PADROES_ALVO = ('{seg} {loc} telefone email', 'empresas de {seg} {loc}',
+                 '{seg} {loc} contato', '{seg} {loc} CNPJ contato', 'lista {seg} {loc}',
+                 '{seg} {loc} endereco telefone', '{seg} {loc} quem somos',
+                 'diretorio {seg} {loc}')
+
+
+def _termos_do_alvo(alvo):
+    """Termos para o robô começar exatamente pelas empresas da página de origem."""
+    seg = alvo['segmento'].lower()
+    locais = (f"{alvo['municipio']} {alvo['uf']}", alvo['municipio'])
+    termos = [p.format(seg=seg, loc=loc) for loc in locais for p in _PADROES_ALVO]
+    termos.append(f"{seg} {alvo['uf']} contato site:.com.br")
+    return list(dict.fromkeys(termos))
+
+
 @app.route('/cadastro', methods=['GET', 'POST'])
 @limiter.limit("5 per minute", methods=["POST"])
 def cadastro():
     if session.get('user_id'):
         return redirect(url_for('dashboard'))
     error = None
+    fonte = request.form if request.method == 'POST' else request.args
+    alvo = _alvo_pseo(fonte.get('alvo'), fonte.get('cidade'))
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
         pw = request.form.get('senha', '')
@@ -1554,11 +1588,15 @@ def cadastro():
                             estados_atuacao.extend(ufs)
                     elif regiao in _REGIAO_UFS:
                         estados_atuacao = _REGIAO_UFS[regiao]
+                    # Veio de uma página de empresas: o robô já começa por elas
+                    termos = _termos_do_alvo(alvo) if alvo else []
+                    if alvo:
+                        estados_atuacao = [alvo['uf']]
                     c2.execute("""INSERT INTO bot_config (empresa_nome, website, descricao, termos_busca, estados_atuacao)
                                   VALUES (%s,%s,%s,%s,%s)""",
                                (empresa, website or None,
                                 segmento or None,
-                                '[]',
+                                psycopg2.extras.Json(termos),
                                 psycopg2.extras.Json(estados_atuacao)))
                     conn2.commit()
                     session['user_id'] = uid
@@ -1578,7 +1616,7 @@ def cadastro():
                         conn2.close()
                     except Exception:
                         pass
-    return render_template('register.html', error=error, ga_id=GA_MEASUREMENT_ID)
+    return render_template('register.html', error=error, alvo=alvo, ga_id=GA_MEASUREMENT_ID)
 
 
 @app.route('/admin/users')
@@ -3453,7 +3491,8 @@ def pseo_cidade(cnae_slug, mun_slug):
                        f"{n} empresas ativas de {seg['nome']} em {mun} - {uf}, "
                        f"com dados abertos do CNPJ."], DESCRICAO_MAX)
     cta_url = (f"/cadastro?utm_source=pseo&utm_medium=organic"
-               f"&utm_campaign={cnae_slug}-{mun_slug}")
+               f"&utm_campaign={cnae_slug}-{mun_slug}"
+               f"&alvo={cnae_slug}&cidade={mun_slug}")
 
     return render_template('empresas_cidade.html', seg=seg, combo=combo,
                            n=n, municipio=mun, uf=uf,
