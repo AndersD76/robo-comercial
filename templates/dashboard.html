@@ -3182,6 +3182,7 @@ function upgradeProPlano(){
   </div>`;
   ov.style.display='flex';
   selectPlan('pro');
+  try{navigator.sendBeacon('/api/t/evento',new Blob([JSON.stringify({nome:'paywall_viewed',origem:'modal_painel'})],{type:'application/json'}))}catch(e){}
   if(typeof gtag==='function')gtag('event','checkout_started',{currency:'BRL',value:297});
 }
 function selectPlan(p){

@@ -625,6 +625,10 @@ def _init_public_schema_safe():
             "ON pagamentos (mp_payment_id)",
             # quando o plano foi liberado por este pagamento (uma vez só)
             "ALTER TABLE pagamentos ADD COLUMN IF NOT EXISTS aplicado_em TIMESTAMP",
+            # atribuição (primeiro e último toque) e momento aha (1º lead com contato)
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS first_touch JSONB",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_touch JSONB",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS aha_em TIMESTAMPTZ",
         ]:
             try:
                 c.execute(stmt)
@@ -1572,6 +1576,18 @@ def cadastro():
                     schema = f'emp_{uid}'
                     c.execute('UPDATE users SET schema_name=%s WHERE id=%s', (schema, uid))
                     conn.commit()
+                    primeiro, ultimo = _toques_do_visitante()
+                    try:
+                        c.execute('UPDATE users SET first_touch=%s, last_touch=%s WHERE id=%s',
+                                  (psycopg2.extras.Json(primeiro) if primeiro else None,
+                                   psycopg2.extras.Json(ultimo) if ultimo else None, uid))
+                        conn.commit()
+                    except Exception:
+                        conn.rollback()
+                        logger.exception('cadastro: atribuição não gravada')
+                    _evento('signup_completed', uid, alvo=(alvo or {}).get('seg_slug', ''),
+                            cidade=(alvo or {}).get('mun_slug', ''), utm_source=utm_source or '',
+                            entrada=(primeiro or {}).get('lp', ''), origem=(primeiro or {}).get('ref', ''))
                     conn.close()
                     conn = None
                     _init_user_schema(schema)
@@ -1601,6 +1617,10 @@ def cadastro():
                                 psycopg2.extras.Json(termos),
                                 psycopg2.extras.Json(estados_atuacao)))
                     conn2.commit()
+                    # Com alvo ou "o que vende" preenchido, o robô já sai buscando
+                    # (antes só ligava ao abrir o painel ou salvar a configuração)
+                    if termos or segmento:
+                        _ligar_robo_primeira_vez_ao_fundo(schema)
                     session['user_id'] = uid
                     session['just_registered'] = True
                     return redirect(url_for('config_page'))
@@ -9443,6 +9463,8 @@ def _mp_aplicar(pay, uid_esperado=None):
         conn.close()
     if ativou:
         logger.info(f"MP: user {uid} -> plano {plano} (payment {pay.get('id')})")
+        _evento('payment_succeeded', uid, plano=plano, valor=valor,
+                metodo=str(pay.get('payment_method_id') or ''), payment_id=str(pay.get('id')))
     return status, plano
 
 
@@ -9530,6 +9552,7 @@ def api_checkout():
         return jsonify({'error': 'Plano inválido'}), 400
 
     user = get_current_user()
+    _evento('checkout_started', user['id'], plano=plano_id, metodo='checkout_mp')
     base = os.environ.get('BASE_URL', '')
     if not base:
         base = request.url_root.rstrip('/')
@@ -9582,33 +9605,35 @@ def api_checkout():
 @app.route('/webhook/mercadopago', methods=['POST'])
 @limiter.limit("30 per minute")
 def webhook_mercadopago():
-    """Webhook do Mercado Pago — atualiza plano do user."""
-    # Verificar assinatura do webhook (x-signature header do MP)
-    # Fail-closed: se MP_WEBHOOK_SECRET nao estiver configurado, rejeita
+    """Webhook do Mercado Pago. O aviso é só um gatilho: o pagamento é sempre
+    lido no próprio MP com o nosso token (_mp_consultar) antes de liberar o
+    plano, então um aviso forjado não libera nada. Com MP_WEBHOOK_SECRET
+    configurado, a assinatura x-signature também é exigida."""
     mp_webhook_secret = os.environ.get('MP_WEBHOOK_SECRET', '')
-    if not mp_webhook_secret:
-        logger.warning("[MP] MP_WEBHOOK_SECRET nao configurado — webhook rejeitado")
-        return jsonify({'error': 'webhook not configured'}), 403
-    x_sig = request.headers.get('x-signature', '')
-    x_req_id = request.headers.get('x-request-id', '')
-    # MP envia ts=xxx,v1=hash no x-signature
-    sig_parts = dict(p.split('=', 1) for p in x_sig.split(',') if '=' in p)
-    ts = sig_parts.get('ts', '')
-    v1 = sig_parts.get('v1', '')
-    data_id = request.args.get('data.id', request.args.get('id', ''))
-    manifest = f'id:{data_id};request-id:{x_req_id};ts:{ts};'
-    expected = _hmac.new(mp_webhook_secret.encode(), manifest.encode(),
-                         'sha256').hexdigest()
-    if not _hmac.compare_digest(v1, expected):
-        logger.warning('MP webhook assinatura invalida')
-        return jsonify({'error': 'invalid signature'}), 401
+    if mp_webhook_secret:
+        x_sig = request.headers.get('x-signature', '')
+        x_req_id = request.headers.get('x-request-id', '')
+        # MP envia ts=xxx,v1=hash no x-signature
+        sig_parts = dict(p.split('=', 1) for p in x_sig.split(',') if '=' in p)
+        ts = sig_parts.get('ts', '')
+        v1 = sig_parts.get('v1', '')
+        data_id = request.args.get('data.id', request.args.get('id', ''))
+        manifest = f'id:{data_id};request-id:{x_req_id};ts:{ts};'
+        expected = _hmac.new(mp_webhook_secret.encode(), manifest.encode(),
+                             'sha256').hexdigest()
+        if not _hmac.compare_digest(v1, expected):
+            logger.warning('MP webhook assinatura invalida')
+            return jsonify({'error': 'invalid signature'}), 401
 
     data = request.get_json(silent=True) or {}
-    if data.get('type') != 'payment':
+    # Formato novo: {"type": "payment", "data": {"id": ...}}; antigo: ?topic=payment&id=...
+    if data.get('type') == 'payment':
+        payment_id = str((data.get('data') or {}).get('id') or '')
+    elif request.args.get('topic') == 'payment' or request.args.get('type') == 'payment':
+        payment_id = request.args.get('data.id') or request.args.get('id') or ''
+    else:
         return jsonify({'ok': True})
-
-    payment_id = data.get('data', {}).get('id')
-    if not payment_id or not MP_ACCESS_TOKEN:
+    if not payment_id.isdigit() or not MP_ACCESS_TOKEN:
         return jsonify({'ok': True})
 
     try:
@@ -9636,6 +9661,7 @@ def api_pagamento_pix():
     if not plano:
         return jsonify({'error': 'Plano inválido'}), 400
     user = get_current_user()
+    _evento('checkout_started', user['id'], plano=plano_id, metodo='pix')
     try:
         r = http.post(
             'https://api.mercadopago.com/v1/payments',
@@ -9695,6 +9721,7 @@ def api_pagamento_cartao():
     if not plano:
         return jsonify({'error': 'Plano inválido'}), 400
     user = get_current_user()
+    _evento('checkout_started', user['id'], plano=plano_id, metodo='cartao')
     card_token = data.get('token', '').strip()
     payment_method = data.get('payment_method_id', 'visa')
     cpf = data.get('cpf', '').replace('.', '').replace('-', '')
@@ -9961,7 +9988,52 @@ CREATE TABLE IF NOT EXISTS cta_cliques (
     created_at   TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_cta_cliques_created ON cta_cliques(created_at);
+CREATE TABLE IF NOT EXISTS eventos (
+    id         BIGSERIAL PRIMARY KEY,
+    nome       TEXT NOT NULL,
+    user_id    BIGINT,
+    props      JSONB DEFAULT '{}',
+    criado_em  TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_eventos_nome ON eventos(nome, criado_em);
+CREATE INDEX IF NOT EXISTS idx_eventos_user ON eventos(user_id);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS first_touch JSONB;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_touch JSONB;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS aha_em TIMESTAMPTZ;
 """
+
+# Eventos do funil (objeto_ação), gravados no servidor; ver growth/eventos.md.
+# Os que o navegador pode mandar (/api/t/evento) são só os desta lista.
+EVENTOS_DO_NAVEGADOR = {'paywall_viewed'}
+
+
+def _evento(nome, user_id=None, **props):
+    """Best-effort, pela mesma fila da telemetria: nunca atrasa a resposta."""
+    _traf_enfileirar('ev', (nome, user_id, psycopg2.extras.Json(props)))
+
+
+# Atribuição: primeiro e último toque externo, em cookies próprios, sem dado
+# pessoal (página de entrada, domínio de origem e utm). Não grava se o
+# visitante recusou cookies no banner (tv_consent=rejected) e apaga o que havia.
+_TOQUE_DIAS = 90
+
+
+def _toque_atual(ref):
+    a = request.args
+    return {'lp': request.path[:120], 'ref': _urlparse(ref).netloc.lower()[:60] if ref else '',
+            'us': a.get('utm_source', '')[:40], 'um': a.get('utm_medium', '')[:40],
+            'uc': a.get('utm_campaign', '')[:80], 't': int(time.time())}
+
+
+def _toques_do_visitante():
+    """(first_touch, last_touch) dos cookies, ou None."""
+    def ler(nome):
+        try:
+            v = json.loads(request.cookies.get(nome) or 'null')
+            return v if isinstance(v, dict) else None
+        except ValueError:
+            return None
+    return ler('tv_ft'), ler('tv_lt')
 # Guarda a UTM da chegada e avisa o servidor a cada clique em CTA (link para
 # /cadastro ou elemento com data-cta); sendBeacon não atrasa a navegação
 # Página pré-carregada pelo navegador (o Chrome busca os primeiros resultados
@@ -10021,6 +10093,10 @@ def _traf_gravador(fila):
                     tabelas_ok = True
                 pvs = [v for t, v in itens if t == 'pv']
                 ctas = [v for t, v in itens if t == 'cta']
+                evs = [v for t, v in itens if t == 'ev']
+                if evs:
+                    psycopg2.extras.execute_values(
+                        c, "INSERT INTO eventos (nome, user_id, props) VALUES %s", evs)
                 if pvs:
                     psycopg2.extras.execute_values(
                         c, "INSERT INTO pageviews (path, referrer, utm_source, "
@@ -10084,6 +10160,21 @@ def _trafego_pageview(resp):
             'precarregamento' if pre else robo, verificado, resp.status_code))
         if not pagina_html:
             return resp
+        if not robo and not pre:
+            if request.cookies.get('tv_consent') == 'rejected':
+                for nome in ('tv_ft', 'tv_lt'):
+                    if nome in request.cookies:
+                        resp.delete_cookie(nome)
+            else:
+                externo = (not interno and ref) or a.get('utm_source')
+                if externo or 'tv_ft' not in request.cookies:
+                    toque = json.dumps(_toque_atual('' if interno else ref), separators=(',', ':'))
+                    opcoes = dict(max_age=_TOQUE_DIAS * 86400, secure=request.is_secure,
+                                  httponly=True, samesite='Lax')
+                    if 'tv_ft' not in request.cookies:
+                        resp.set_cookie('tv_ft', toque, **opcoes)
+                    if externo:
+                        resp.set_cookie('tv_lt', toque, **opcoes)
         html = resp.get_data(as_text=True)
         if '</body>' in html and '/api/t/cta' not in html:
             extra = (_TRAF_PRE_SCRIPT if pre else '') + _TRAF_SCRIPT
@@ -10105,6 +10196,49 @@ def api_trafego_cta():
                                  g('utm_source', 120), g('utm_medium', 120),
                                  g('utm_campaign', 120)))
     return ('', 204)
+
+
+@app.route('/api/t/evento', methods=['POST'])
+@limiter.limit("30 per minute", key_func=_ip_cliente)
+def api_trafego_evento():
+    """Eventos que só o navegador vê (ex.: paywall_viewed); lista fechada."""
+    d = request.get_json(silent=True, force=True) or {}
+    nome = str(d.get('nome') or '')
+    if nome in EVENTOS_DO_NAVEGADOR:
+        _evento(nome, session.get('user_id'), origem=str(d.get('origem') or '')[:40],
+                plano=str(d.get('plano') or '')[:20])
+    return ('', 204)
+
+
+def _marcar_aha():
+    """Momento aha = 1º lead com telefone ou e-mail no painel. Marca users.aha_em
+    e grava aha_reached com as horas desde o cadastro (contas dos últimos 30 dias)."""
+    marcados = 0
+    conn = _conn()
+    try:
+        c = conn.cursor()
+        c.execute("""SELECT id, schema_name, criado_em FROM users WHERE aha_em IS NULL
+                     AND schema_name ~ '^emp_[0-9]+$' AND criado_em > NOW() - INTERVAL '30 days'""")
+        for u in c.fetchall():
+            try:
+                c.execute(f"""SELECT MIN(encontrado_em) AS em FROM {u['schema_name']}.empresas
+                              WHERE COALESCE(telefone, '') <> '' OR COALESCE(email, '') <> ''""")
+                em = c.fetchone()['em']
+            except Exception:
+                conn.rollback()
+                continue
+            if em:
+                c.execute('UPDATE users SET aha_em = %s WHERE id = %s', (em, u['id']))
+                conn.commit()
+                try:
+                    horas = max(0.0, (em - u['criado_em']).total_seconds() / 3600)
+                except Exception:   # um com fuso e outro sem, ou criado_em vazio
+                    horas = None
+                _evento('aha_reached', u['id'], horas_ate_aha=round(horas, 1) if horas is not None else None)
+                marcados += 1
+    finally:
+        conn.close()
+    return marcados
 
 
 @app.route('/api/t/pv', methods=['POST'])
@@ -10223,6 +10357,11 @@ def _medicao_passada(agora_br):
             if agora_br.weekday() == 0 and agora_br.hour == 8:
                 semana, _ = medicao.salvar_relatorio_semanal(conn, agora_br.date())
                 logger.info(f'medicao: relatório semanal de {semana} gerado')
+            conn.rollback()
+            try:
+                _marcar_aha()
+            except Exception:
+                logger.exception('medicao: marcação do aha falhou')
             if (agora_br.hour == 7 and os.environ.get('ANTHROPIC_API_KEY')
                     and _sov_pendente(c, agora_br.date())):
                 conn.rollback()

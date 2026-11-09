@@ -41,14 +41,24 @@
     settingsBtn.style.display = 'block';
   }
 
+  // O servidor só enxerga cookie: espelha a escolha para ele respeitar a
+  // recusa (não grava a origem da visita e apaga o que havia)
+  function espelhar(v) {
+    document.cookie = 'tv_consent=' + v + ';path=/;max-age=31536000;samesite=lax' +
+      (location.protocol === 'https:' ? ';secure' : '');
+  }
+  if (consent) espelhar(consent);
+
   document.getElementById('cookie-accept').addEventListener('click', function() {
     localStorage.setItem('cookie_consent', 'accepted');
+    espelhar('accepted');
     hideBanner();
     if(typeof loadGA4==='function') loadGA4();
   });
 
   document.getElementById('cookie-reject').addEventListener('click', function() {
     localStorage.setItem('cookie_consent', 'rejected');
+    espelhar('rejected');
     hideBanner();
   });
 
