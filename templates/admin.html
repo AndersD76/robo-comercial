@@ -319,6 +319,12 @@
 <div class="toast" id="toast"></div>
 
 <script>
+// Escape de dados que vêm da internet ou de outros usuários antes de virar HTML
+// (QA-SEC-003: nome/e-mail/site de empresa raspados de sites de terceiros).
+function esc(v){return String(v==null?'':v).replace(/[&<>"'`]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;'}[c]))}
+function escOu(v,html){return v?esc(v):html}
+function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//i.test(u))u='https://'+u;return /^https?:\/\/[^\s"'<>`]+$/i.test(u)?esc(u):'#'}
+
 // Todo POST/PUT/DELETE nosso leva o token CSRF. Antes isso dependia de
 // cada chamada lembrar de mandar Content-Type: application/json — quando
 // esquecia, o _check_csrf devolvia 403 e o front so dizia "erro de
@@ -419,8 +425,8 @@ function renderUsers(users) {
   tbody.innerHTML = users.map(u => `
     <tr>
       <td style="color:var(--muted)">#${u.id}</td>
-      <td style="color:var(--text);font-weight:500">${u.email}</td>
-      <td>${u.empresa_nome || '--'}</td>
+      <td style="color:var(--text);font-weight:500">${esc(u.email)}</td>
+      <td>${esc(u.empresa_nome || '--')}</td>
       <td>${planBadge(u.plano)}</td>
       <td style="font-size:12px">${fmtDate(u.plano_expira)}</td>
       <td>${ativoBadge(u.ativo)}</td>
@@ -515,14 +521,14 @@ function showUserDetails(id) {
   openModal(`
     <h3><i class="fas fa-user" style="color:var(--accent)"></i> Detalhes do Usuário</h3>
     <div class="modal-field"><label>ID</label><span>#${u.id}</span></div>
-    <div class="modal-field"><label>Email</label><span>${u.email}</span></div>
-    <div class="modal-field"><label>Empresa</label><span>${u.empresa_nome || '--'}</span></div>
-    <div class="modal-field"><label>Website</label><span>${u.website || '--'}</span></div>
+    <div class="modal-field"><label>Email</label><span>${esc(u.email)}</span></div>
+    <div class="modal-field"><label>Empresa</label><span>${esc(u.empresa_nome || '--')}</span></div>
+    <div class="modal-field"><label>Website</label><span>${esc(u.website || '--')}</span></div>
     <div class="modal-field"><label>Plano</label><span>${planBadge(u.plano)}</span></div>
     <div class="modal-field"><label>Plano Expira</label><span>${fmtDate(u.plano_expira)}</span></div>
     <div class="modal-field"><label>Ativo</label><span>${ativoBadge(u.ativo)}</span></div>
     <div class="modal-field"><label>Criado em</label><span>${fmtDate(u.criado_em)}</span></div>
-    <div class="modal-field"><label>Schema</label><span>${u.schema_name || '--'}</span></div>
+    <div class="modal-field"><label>Schema</label><span>${esc(u.schema_name || '--')}</span></div>
     <div class="modal-field"><label>Total Leads</label><span style="font-weight:700;color:var(--accent)">${fmtNum(u.lead_count)}</span></div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal()">Fechar</button>
@@ -556,7 +562,7 @@ async function loadPayments() {
       const stBadge = p.status === 'approved' ? 'badge-green' : (p.status === 'pending' ? 'badge-yellow' : 'badge-red');
       return `<tr>
         <td style="color:var(--muted)">#${p.id}</td>
-        <td style="color:var(--text)">${p.email || '#' + p.user_id}</td>
+        <td style="color:var(--text)">${esc(p.email || '#' + p.user_id)}</td>
         <td style="font-size:12px">${p.mp_payment_id || '--'}</td>
         <td><span class="badge ${stBadge}">${p.status || '--'}</span></td>
         <td style="font-weight:600">R$ ${Number(p.valor||0).toFixed(2)}</td>

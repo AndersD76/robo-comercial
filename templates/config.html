@@ -151,6 +151,12 @@
     .collapsible-body.collapsed{max-height:0 !important;overflow:hidden}
   </style>
   <script>
+// Escape de dados que vêm da internet ou de outros usuários antes de virar HTML
+// (QA-SEC-003: nome/e-mail/site de empresa raspados de sites de terceiros).
+function esc(v){return String(v==null?'':v).replace(/[&<>"'`]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;'}[c]))}
+function escOu(v,html){return v?esc(v):html}
+function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//i.test(u))u='https://'+u;return /^https?:\/\/[^\s"'<>`]+$/i.test(u)?esc(u):'#'}
+
   (function(){
     window.dataLayer=window.dataLayer||[];
     function gtag(){dataLayer.push(arguments);}
@@ -785,8 +791,8 @@ async function loadTokens() {
     list.innerHTML = tokens.map(t => `
       <div class="token-item" id="tk-${t.id}">
         <div>
-          <div class="token-label">${t.label || 'Token'}</div>
-          <div class="token-preview">${t.token_preview}</div>
+          <div class="token-label">${esc(t.label || 'Token')}</div>
+          <div class="token-preview">${esc(t.token_preview)}</div>
         </div>
         <div style="text-align:right">
           <div class="token-date">${new Date(t.criado_em).toLocaleDateString('pt-BR')}</div>

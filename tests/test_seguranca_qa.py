@@ -74,3 +74,21 @@ def test_relatorio_de_csp_aceito_sem_csrf(fila):
     ev = [v for t, v in fila if t == 'ev'][-1]
     assert ev[0] == 'csp_violation'
     assert ev[2].adapted == {'diretiva': 'script-src-elem', 'bloqueado': 'mal.example', 'pagina': '/precos'}
+
+
+# QA-SEC-003: XSS armazenado no painel (dados raspados de sites entravam no HTML sem escape)
+def test_nenhuma_interpolacao_de_dado_externo_sem_escape():
+    import glob
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'qa', 'ferramentas'))
+    import xss_interpolacoes
+    raiz = os.path.join(os.path.dirname(__file__), '..', 'templates')
+    achados = {os.path.basename(f): xss_interpolacoes.inseguras(f)
+               for f in glob.glob(os.path.join(raiz, '*.html')) if 'Notebook' not in f}
+    assert {f: r for f, r in achados.items() if r} == {}
+
+
+def test_painel_define_funcoes_de_escape():
+    raiz = os.path.join(os.path.dirname(__file__), '..', 'templates')
+    for nome in ('dashboard.html', 'index.html', 'admin.html', 'config.html', 'agendar.html'):
+        html = open(os.path.join(raiz, nome), encoding='utf-8').read()
+        assert 'function esc(v)' in html and 'function urlSegura(u)' in html, nome

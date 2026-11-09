@@ -79,6 +79,12 @@
   </div>
 
   <script>
+// Escape de dados que vêm da internet ou de outros usuários antes de virar HTML
+// (QA-SEC-003: nome/e-mail/site de empresa raspados de sites de terceiros).
+function esc(v){return String(v==null?'':v).replace(/[&<>"'`]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;'}[c]))}
+function escOu(v,html){return v?esc(v):html}
+function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//i.test(u))u='https://'+u;return /^https?:\/\/[^\s"'<>`]+$/i.test(u)?esc(u):'#'}
+
   const TOKEN = '{{ token }}';
   let selectedSlot = null;
 
@@ -144,7 +150,7 @@
           `${fmt} às ${d.hora}`;
       } else {
         const msg = document.getElementById('msg-box');
-        msg.innerHTML = `<div class="msg msg-err">${d.error || 'Erro ao agendar'}</div>`;
+        msg.innerHTML = `<div class="msg msg-err">${esc(d.error || 'Erro ao agendar')}</div>`;
         btn.disabled = false;
         btn.textContent = 'Confirmar agendamento';
         loadSlots(); // reload slots

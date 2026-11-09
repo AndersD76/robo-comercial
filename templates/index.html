@@ -620,6 +620,12 @@
 </div>
 
 <script>
+// Escape de dados que vêm da internet ou de outros usuários antes de virar HTML
+// (QA-SEC-003: nome/e-mail/site de empresa raspados de sites de terceiros).
+function esc(v){return String(v==null?'':v).replace(/[&<>"'`]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;'}[c]))}
+function escOu(v,html){return v?esc(v):html}
+function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//i.test(u))u='https://'+u;return /^https?:\/\/[^\s"'<>`]+$/i.test(u)?esc(u):'#'}
+
 // Clock
 function tick(){
   document.getElementById('clock').textContent=
@@ -672,8 +678,8 @@ function loadWA(bot){
       return;
     }
     tb.innerHTML=d.map(l=>`<tr>
-      <td><b>${l.nome_fantasia||'—'}</b></td>
-      <td style="color:var(--muted)">${l.segmento||'—'}</td>
+      <td><b>${esc(l.nome_fantasia||'—')}</b></td>
+      <td style="color:var(--muted)">${esc(l.segmento||'—')}</td>
       <td>${statusChip(l.status,l.demo_status)}</td>
       <td style="color:var(--muted)">${l.score||0}</td>
     </tr>`).join('');
@@ -692,9 +698,9 @@ function loadLI(bot){
       return;
     }
     tb.innerHTML=d.map(l=>`<tr>
-      <td><a href="${l.url_perfil||'#'}" target="_blank" rel="noopener" style="color:var(--text);font-weight:500;text-decoration:none">${l.nome||'—'}</a></td>
-      <td style="color:var(--muted);font-size:11px">${l.cargo||'—'}</td>
-      <td style="color:var(--muted);font-size:11px">${l.empresa||'—'}</td>
+      <td><a href="${urlSegura(l.url_perfil||'#')}" target="_blank" rel="noopener" style="color:var(--text);font-weight:500;text-decoration:none">${esc(l.nome||'—')}</a></td>
+      <td style="color:var(--muted);font-size:11px">${esc(l.cargo||'—')}</td>
+      <td style="color:var(--muted);font-size:11px">${esc(l.empresa||'—')}</td>
       <td>${liChip(l.status)}</td>
     </tr>`).join('');
   }).catch(()=>{
@@ -715,7 +721,7 @@ function loadLog(bot){
       const ts=l.timestamp?new Date(l.timestamp).toLocaleTimeString('pt-BR'):'';
       return `<li class="log-item">
         <span class="lb ${lbCls(l.tipo)}">${(l.tipo||'INFO').toUpperCase()}</span>
-        <span>${l.mensagem||''}</span>
+        <span>${esc(l.mensagem||'')}</span>
         <span class="log-ts">${ts}</span>
       </li>`;
     }).join('');
@@ -748,8 +754,8 @@ function renderPipe(data){
     if(!leads.length){ col.innerHTML='<div class="col-empty">—</div>'; return; }
     col.innerHTML=leads.map(l=>`
       <div class="lcard" onclick="openLead(${JSON.stringify(l).replace(/"/g,'&quot;')})">
-        <div class="lcard-name">${l.nome_fantasia||'—'}</div>
-        <div class="lcard-seg">${l.segmento||'—'}</div>
+        <div class="lcard-name">${esc(l.nome_fantasia||'—')}</div>
+        <div class="lcard-seg">${esc(l.segmento||'—')}</div>
         <div class="lcard-msgs">${l.msgs||0} msg${l.msgs!==1?'s':''}</div>
         <div class="lcard-foot">
           <span class="lcard-bot ${l.bot}">${l.bot==='prisma'?'Prisma':'Pili'}</span>
@@ -776,9 +782,9 @@ function openLead(l){
   const bc=l.bot==='prisma'?'var(--prisma)':'var(--pili)';
   document.getElementById('modal-content').innerHTML=`
     <div class="m-row"><span class="m-lbl">Bot</span><span class="m-val" style="color:${bc}">${l.bot==='prisma'?'Prisma':'Pili'}</span></div>
-    <div class="m-row"><span class="m-lbl">Segmento</span><span class="m-val">${l.segmento||'—'}</span></div>
-    <div class="m-row"><span class="m-lbl">Localização</span><span class="m-val">${[l.cidade,l.estado].filter(Boolean).join(', ')||'—'}</span></div>
-    <div class="m-row"><span class="m-lbl">WhatsApp</span><span class="m-val">${l.whatsapp||'—'}</span></div>
+    <div class="m-row"><span class="m-lbl">Segmento</span><span class="m-val">${esc(l.segmento||'—')}</span></div>
+    <div class="m-row"><span class="m-lbl">Localização</span><span class="m-val">${esc([l.cidade,l.estado].filter(Boolean).join(', ')||'—')}</span></div>
+    <div class="m-row"><span class="m-lbl">WhatsApp</span><span class="m-val">${esc(l.whatsapp||'—')}</span></div>
     <div class="m-row"><span class="m-lbl">Score</span><span class="m-val">★ ${l.score||0}</span></div>
     <div class="m-row"><span class="m-lbl">Status</span>${statusChip(l.status,l.demo_status)}</div>
     <div class="m-row"><span class="m-lbl">Mensagens</span><span class="m-val">${l.msgs||0}</span></div>

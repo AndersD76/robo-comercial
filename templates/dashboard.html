@@ -9,6 +9,12 @@
   <link rel="icon" href="/static/favicon-96.png" type="image/png" sizes="96x96">
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
   <script>
+// Escape de dados que vêm da internet ou de outros usuários antes de virar HTML
+// (QA-SEC-003: nome/e-mail/site de empresa raspados de sites de terceiros).
+function esc(v){return String(v==null?'':v).replace(/[&<>"'`]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;'}[c]))}
+function escOu(v,html){return v?esc(v):html}
+function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//i.test(u))u='https://'+u;return /^https?:\/\/[^\s"'<>`]+$/i.test(u)?esc(u):'#'}
+
   (function(){
     if(localStorage.getItem('cookie_consent')==='accepted'){
       var s=document.createElement('script');
@@ -1147,13 +1153,13 @@ function renderLeadsList(){
     if(l.encontrado_em){try{const d2=new Date(l.encontrado_em);dt=d2.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){}}
     const idx=start+i+1;
     return `<tr>
-    <td><input type="checkbox" class="lead-chk" value="${l.id}" data-email="${l.email||''}"></td>
+    <td><input type="checkbox" class="lead-chk" value="${l.id}" data-email="${esc(l.email||'')}"></td>
     <td style="color:var(--muted);font-size:11px">${idx}</td>
-    <td><b>${l.nome_fantasia||'—'}</b>${_ufChip(l)}${_situacaoBadge(l)}</td>
-    <td style="color:var(--muted);font-size:11px">${formatTel(l.whatsapp||l.telefone)||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
-    <td style="color:var(--muted);font-size:11px">${l.email||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
-    <td style="color:var(--muted);font-size:11px">${l.cnpj||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
-    <td style="color:var(--muted);font-size:11px">${l._decisor||'<span style="color:#555;font-size:9px">não encontrado</span>'}</td>
+    <td><b>${esc(l.nome_fantasia||'—')}</b>${_ufChip(l)}${_situacaoBadge(l)}</td>
+    <td style="color:var(--muted);font-size:11px">${escOu(formatTel(l.whatsapp||l.telefone),'<span style="color:#555;font-size:9px">não encontrado</span>')}</td>
+    <td style="color:var(--muted);font-size:11px">${escOu(l.email,'<span style="color:#555;font-size:9px">não encontrado</span>')}</td>
+    <td style="color:var(--muted);font-size:11px">${escOu(l.cnpj,'<span style="color:#555;font-size:9px">não encontrado</span>')}</td>
+    <td style="color:var(--muted);font-size:11px">${escOu(l._decisor,'<span style="color:#555;font-size:9px">não encontrado</span>')}</td>
     <td style="white-space:nowrap">${statusChip(l.status,l.demo_status)}${l.email_enviado?' <span class="chip c-email" title="Email enviado"><i class="fa fa-envelope" style="font-size:9px"></i></span>':''}${l.wa_enviado?' <span class="chip" style="background:#22c55e;color:#1a1a2e;padding:2px 5px;font-size:10px" title="WhatsApp enviado"><i class="fab fa-whatsapp" style="font-size:9px"></i></span>':''}</td>
     <td style="color:var(--muted)">${l.score||0}</td>
     <td style="color:var(--muted);font-size:11px;white-space:nowrap">${dt}</td>
@@ -1424,7 +1430,7 @@ function loadLog(){
     if(!d.length){ ul.innerHTML='<li style="color:var(--muted);padding:20px;text-align:center;font-size:12px">Sem logs</li>'; return; }
     ul.innerHTML=d.map(l=>{
       const ts=l.timestamp?new Date(l.timestamp).toLocaleTimeString('pt-BR'):'';
-      return `<li class="log-item"><span class="lb ${lbCls(l.tipo)}">${(l.tipo||'INFO').toUpperCase()}</span><span>${l.mensagem||''}</span><span class="log-ts">${ts}</span></li>`;
+      return `<li class="log-item"><span class="lb ${lbCls(l.tipo)}">${(l.tipo||'INFO').toUpperCase()}</span><span>${esc(l.mensagem||'')}</span><span class="log-ts">${ts}</span></li>`;
     }).join('');
   }).catch(()=>{});
 }
@@ -1487,10 +1493,10 @@ function loadPipe(){
           ondragstart="event.dataTransfer.setData('text/plain','${l.id}');this.classList.add('dragging')"
           ondragend="this.classList.remove('dragging')"
           onclick="openLead(${JSON.stringify(l).replace(/"/g,'&quot;')})">
-          <div class="lcard-name"><i class="fa fa-building" style="color:#6366f1;font-size:11px"></i> ${l.nome_fantasia||'—'} ${canalIcons}</div>
-          ${l._decisor?`<div style="font-size:10px;color:#a78bfa;margin-top:2px"><i class="fa fa-user-tie" style="font-size:9px"></i> ${l._decisor}</div>`:''}
+          <div class="lcard-name"><i class="fa fa-building" style="color:#6366f1;font-size:11px"></i> ${esc(l.nome_fantasia||'—')} ${canalIcons}</div>
+          ${l._decisor?`<div style="font-size:10px;color:#a78bfa;margin-top:2px"><i class="fa fa-user-tie" style="font-size:9px"></i> ${esc(l._decisor)}</div>`:''}
           ${fone?`<div style="font-size:10px;color:var(--muted);margin-top:2px"><i class="fa fa-phone" style="font-size:8px"></i> ${fone}</div>`:''}
-          ${l.email?`<div style="font-size:10px;color:var(--muted)"><i class="fa fa-envelope" style="font-size:8px"></i> ${l.email}</div>`:''}
+          ${l.email?`<div style="font-size:10px;color:var(--muted)"><i class="fa fa-envelope" style="font-size:8px"></i> ${esc(l.email)}</div>`:''}
           ${obsPreview?`<div style="font-size:9px;color:#fbbf24;margin-top:3px;font-style:italic">${obsPreview}</div>`:''}
           <div class="lcard-foot">
             <span class="lcard-score"><span style="color:#fbbf24">★</span> ${l.score||0}</span>
@@ -1631,7 +1637,7 @@ function openLead(l){
   document.getElementById('modal-title').textContent=l.nome_fantasia||'Lead';
   document.getElementById('modal-subtitle').innerHTML=
     [l.segmento,l.cidade,l.estado].filter(Boolean).join(' · ')+
-    (l.fonte?` <span style="background:rgba(99,102,241,.12);color:#818cf8;font-size:9px;padding:1px 6px;border-radius:4px;font-weight:600">${l.fonte}</span>`:'');
+    (l.fonte?` <span style="background:rgba(99,102,241,.12);color:#818cf8;font-size:9px;padding:1px 6px;border-radius:4px;font-weight:600">${esc(l.fonte)}</span>`:'');
 
   // Reset tabs to Info
   document.querySelectorAll('.modal-tab').forEach((t,i)=>t.classList.toggle('active',i===0));
@@ -1643,14 +1649,14 @@ function openLead(l){
   // INFO TAB
   document.getElementById('modal-tab-info').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;margin-bottom:16px">
-      <div class="m-row"><span class="m-lbl">Telefone</span><span class="m-val">${formatTel(l.telefone)||'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
-      <div class="m-row"><span class="m-lbl">WhatsApp</span><span class="m-val">${formatTel(l.whatsapp)||'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
-      <div class="m-row"><span class="m-lbl">Email</span><span class="m-val" style="font-size:11px;word-break:break-all">${l.email||'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
-      <div class="m-row"><span class="m-lbl">Website</span><span class="m-val" style="font-size:11px">${l.website?`<a href="${l.website.startsWith('http')?l.website:'https://'+l.website}" target="_blank" rel="noopener" style="color:#60a5fa">${l.website}</a>`:'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
-      <div class="m-row"><span class="m-lbl">CNPJ</span><span class="m-val" style="font-size:11px">${l.cnpj||'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
-      <div class="m-row"><span class="m-lbl">Local</span><span class="m-val">${[l.cidade,l.estado].filter(Boolean).join(', ')||'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
-      <div class="m-row"><span class="m-lbl">Situação</span><span class="m-val" style="font-size:11px">${l.situacao_cadastral?(_situacaoClasse(l.situacao_cadastral)==='ativa'?'<span style="color:#22c55e">🟢 '+l.situacao_cadastral+'</span>':'<span style="color:#f87171">🔴 '+l.situacao_cadastral+'</span>'):'<span style="color:#666;font-size:10px">não enriquecido</span>'}</span></div>
-      <div class="m-row"><span class="m-lbl">Decisor</span><span class="m-val" style="font-size:11px;color:#a78bfa">${l._decisor||'<span style="color:#666;font-size:10px">não encontrado</span>'}${l._decisor_linkedin?` <a href="${l._decisor_linkedin}" target="_blank" rel="noopener" title="LinkedIn do decisor" style="color:#0a66c2;margin-left:4px"><i class="fab fa-linkedin"></i></a>`:''}${l._decisor_instagram?` <a href="${l._decisor_instagram}" target="_blank" rel="noopener" title="Instagram do decisor" style="color:#e1306c;margin-left:2px"><i class="fab fa-instagram"></i></a>`:''}</span></div>
+      <div class="m-row"><span class="m-lbl">Telefone</span><span class="m-val">${escOu(formatTel(l.telefone),'<span style="color:#666;font-size:10px">não encontrado</span>')}</span></div>
+      <div class="m-row"><span class="m-lbl">WhatsApp</span><span class="m-val">${escOu(formatTel(l.whatsapp),'<span style="color:#666;font-size:10px">não encontrado</span>')}</span></div>
+      <div class="m-row"><span class="m-lbl">Email</span><span class="m-val" style="font-size:11px;word-break:break-all">${escOu(l.email,'<span style="color:#666;font-size:10px">não encontrado</span>')}</span></div>
+      <div class="m-row"><span class="m-lbl">Website</span><span class="m-val" style="font-size:11px">${l.website?`<a href="${urlSegura(l.website)}" target="_blank" rel="noopener" style="color:#60a5fa">${esc(l.website)}</a>`:'<span style="color:#666;font-size:10px">não encontrado</span>'}</span></div>
+      <div class="m-row"><span class="m-lbl">CNPJ</span><span class="m-val" style="font-size:11px">${escOu(l.cnpj,'<span style="color:#666;font-size:10px">não encontrado</span>')}</span></div>
+      <div class="m-row"><span class="m-lbl">Local</span><span class="m-val">${escOu([l.cidade,l.estado].filter(Boolean).join(', '),'<span style="color:#666;font-size:10px">não encontrado</span>')}</span></div>
+      <div class="m-row"><span class="m-lbl">Situação</span><span class="m-val" style="font-size:11px">${l.situacao_cadastral?(_situacaoClasse(l.situacao_cadastral)==='ativa'?'<span style="color:#22c55e">🟢 '+esc(l.situacao_cadastral)+'</span>':'<span style="color:#f87171">🔴 '+esc(l.situacao_cadastral)+'</span>'):'<span style="color:#666;font-size:10px">não enriquecido</span>'}</span></div>
+      <div class="m-row"><span class="m-lbl">Decisor</span><span class="m-val" style="font-size:11px;color:#a78bfa">${escOu(l._decisor,'<span style="color:#666;font-size:10px">não encontrado</span>')}${l._decisor_linkedin?` <a href="${urlSegura(l._decisor_linkedin)}" target="_blank" rel="noopener" title="LinkedIn do decisor" style="color:#0a66c2;margin-left:4px"><i class="fab fa-linkedin"></i></a>`:''}${l._decisor_instagram?` <a href="${l._decisor_instagram}" target="_blank" rel="noopener" title="Instagram do decisor" style="color:#e1306c;margin-left:2px"><i class="fab fa-instagram"></i></a>`:''}</span></div>
       <div class="m-row"><span class="m-lbl">Score</span><span class="m-val"><span style="color:#fbbf24">★</span> ${l.score||0}</span></div>
     </div>
 
@@ -1722,7 +1728,7 @@ function loadTimeline(leadId){
       return `<div class="tl-item">
         <div class="tl-icon ${cls}"><i class="fa ${fa}"></i></div>
         <div class="tl-body">
-          <div class="tl-desc">${(a.descricao||'').replace(/</g,'&lt;')}</div>
+          <div class="tl-desc">${esc(a.descricao||'')}</div>
           <div class="tl-time">${dt}</div>
         </div>
       </div>`;
@@ -1871,7 +1877,7 @@ function loadTarefas(leadId){
         <input type="checkbox" class="task-check" ${t.concluida?'checked':''}
           onchange="toggleTask(${t.id},this.checked,${leadId})">
         <span class="task-type ${typeColors[t.tipo]||'tt-outro'}">${t.tipo||'outro'}</span>
-        <span class="task-desc">${(t.descricao||'').replace(/</g,'&lt;')}</span>
+        <span class="task-desc">${esc(t.descricao||'')}</span>
         ${dueStr?`<span class="task-due${isOverdue?' overdue':''}">${isOverdue?'⚠ ':''}${dueStr}</span>`:''}
         <button onclick="deleteTask(${t.id},${leadId})" class="row-btn row-btn-del" style="width:22px;height:22px"><i class="fa fa-times" style="font-size:9px"></i></button>
       </div>`;
@@ -1950,8 +1956,8 @@ function loadPendingTasks(){
       return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px">
         <input type="checkbox" class="task-check" onchange="toggleTask(${t.id},this.checked,${t.empresa_id})">
         <span class="task-type ${typeColors[t.tipo]||'tt-outro'}">${t.tipo}</span>
-        <span style="color:var(--text);flex:1">${t.descricao}</span>
-        <span style="color:var(--muted);font-size:11px">${t.nome_fantasia||''}</span>
+        <span style="color:var(--text);flex:1">${esc(t.descricao)}</span>
+        <span style="color:var(--muted);font-size:11px">${esc(t.nome_fantasia||'')}</span>
         ${dueStr?`<span class="task-due${isOverdue?' overdue':''}">${dueStr}</span>`:''}
       </div>`;
     }).join('');
@@ -2196,8 +2202,8 @@ function loadWaStats(){
           const envChip=l.wa_enviado?'<span style="color:#22c55e"><i class="fab fa-whatsapp"></i> '+waEnv+'</span>'
             :'<span style="color:var(--muted)">Pendente WA</span>';
           return `<tr style="${l.wa_enviado?'opacity:.45':''}">
-            <td><b>${l.nome_fantasia||'—'}</b><br><small style="color:var(--muted)">${l.segmento||''}</small></td>
-            <td style="font-size:12px;color:var(--muted)">${l.whatsapp||'—'}</td>
+            <td><b>${esc(l.nome_fantasia||'—')}</b><br><small style="color:var(--muted)">${esc(l.segmento||'')}</small></td>
+            <td style="font-size:12px;color:var(--muted)">${esc(l.whatsapp||'—')}</td>
             <td>${statusChip(l.status,l.demo_status)} ${emailEnv}</td>
             <td style="font-size:11px;color:var(--muted)">${envChip}</td>
           </tr>`;
@@ -2396,7 +2402,7 @@ function loadRespostas(){
         :(l.email_enviado?new Date(l.email_enviado).toLocaleDateString('pt-BR')
         :(l.encontrado_em?new Date(l.encontrado_em).toLocaleDateString('pt-BR'):'—')));
       return `<tr>
-        <td><b>${l.nome_fantasia||'—'}</b><br><small style="color:var(--muted)">${l.segmento||''}</small></td>
+        <td><b>${esc(l.nome_fantasia||'—')}</b><br><small style="color:var(--muted)">${esc(l.segmento||'')}</small></td>
         <td>${canal}</td>
         <td style="font-size:11px;color:var(--muted)">${contato}</td>
         <td>${_trackingChip(l)}</td>
@@ -2448,8 +2454,8 @@ function loadEmailLeads(){
         :'<span style="color:var(--muted);font-size:11px">Pendente</span>';
       return `<tr style="${l.email_enviado?'opacity:.45':''}">
         <td><input type="checkbox" class="email-chk" value="${l.id}" ${l.email_enviado?'':'checked'}></td>
-        <td><b>${l.nome_fantasia||'—'}</b><br><small style="color:var(--muted)">${l.segmento||''} ${l.cidade?'- '+l.cidade:''}</small></td>
-        <td style="font-size:12px;color:var(--muted)">${l.email}</td>
+        <td><b>${esc(l.nome_fantasia||'—')}</b><br><small style="color:var(--muted)">${esc(l.segmento||'')} ${esc(l.cidade?'- '+l.cidade:'')}</small></td>
+        <td style="font-size:12px;color:var(--muted)">${esc(l.email)}</td>
         <td>${statusChip(l.status,l.demo_status)} ${waEnv}</td>
         <td>${envChip}</td>
       </tr>`;
@@ -2595,7 +2601,7 @@ function renderCalendar(year, month, eventos){
     html+=`<div class="cal-day${isToday?' today':''}" onclick="agendaClickDay(${year},${month},${d})">`;
     html+=`<div class="cal-day-num">${d}</div>`;
     dayEvts.slice(0,2).forEach(e=>{
-      html+=`<div class="cal-evt tipo-${e.tipo||'outro'}">${e.titulo}</div>`;
+      html+=`<div class="cal-evt tipo-${e.tipo||'outro'}">${esc(e.titulo)}</div>`;
     });
     if(dayEvts.length>2) html+=`<div style="font-size:9px;color:var(--muted)">+${dayEvts.length-2} mais</div>`;
     html+='</div>';
@@ -2630,10 +2636,10 @@ function renderAgendaList(eventos){
         <i class="fa ${icon}" style="font-size:13px;color:${color}"></i>
       </div>
       <div class="agenda-body">
-        <div class="agenda-title">${e.titulo}</div>
+        <div class="agenda-title">${esc(e.titulo)}</div>
         <div class="agenda-meta">
-          ${e.nome_fantasia?'<i class="fa fa-building" style="font-size:9px"></i> '+e.nome_fantasia+' · ':''}
-          ${e.local||''}${e.descricao?' — '+e.descricao:''}
+          ${e.nome_fantasia?'<i class="fa fa-building" style="font-size:9px"></i> '+esc(e.nome_fantasia)+' · ':''}
+          ${esc(e.local||'')}${e.descricao?' — '+esc(e.descricao):''}
         </div>
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0">
@@ -2665,7 +2671,7 @@ function deleteEvento(id){
 
 function openAddEvento(dateStr){
   const hoje=dateStr||new Date().toISOString().slice(0,10);
-  const leadOpts=_waLeads.map(l=>`<option value="${l.id}">${l.nome_fantasia||'Lead #'+l.id}</option>`).join('');
+  const leadOpts=_waLeads.map(l=>`<option value="${l.id}">${esc(l.nome_fantasia||'Lead #'+l.id)}</option>`).join('');
   const html=`<div style="padding:24px">
     <h3 style="font-size:17px;font-weight:700;margin-bottom:16px"><i class="fa fa-calendar-plus" style="color:#3b82f6"></i> Novo Evento</h3>
     <div style="display:flex;flex-direction:column;gap:12px">
@@ -2788,7 +2794,7 @@ async function loadRelatorios(){
   try{
     const r=await fetch(`/api/${BOT}/relatorios`);
     const d=await r.json();
-    if(d.error){box.innerHTML=`<p style="color:#f87171">${d.error}</p>`;return;}
+    if(d.error){box.innerHTML=`<p style="color:#f87171">${esc(d.error)}</p>`;return;}
     const total=d.total_leads||1;
     const cores={novo:'#818cf8',contactada:'#fb923c',respondeu:'#22c55e',qualificado:'#eab308',demo:'#3b82f6',convertido:'#10b981'};
     let h=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px">`;
@@ -2805,7 +2811,7 @@ async function loadRelatorios(){
       h+=`<div style="background:rgba(30,41,59,.8);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:16px;text-align:center">
         <i class="fa ${k.icon}" style="color:${k.color};font-size:20px;margin-bottom:6px"></i>
         <div style="font-size:28px;font-weight:700;color:${k.color}">${k.val}${k.suffix||''}</div>
-        <div style="font-size:11px;color:var(--muted)">${k.label}</div></div>`;
+        <div style="font-size:11px;color:var(--muted)">${esc(k.label)}</div></div>`;
     });
     h+=`</div>`;
     // Funil
@@ -2842,7 +2848,7 @@ async function loadRelatorios(){
       d.top_termos.slice(0,10).forEach(t=>{
         const pct=Math.round((t.total_resultados/maxT)*100);
         h+=`<div style="margin-bottom:6px"><div style="display:flex;justify-content:space-between;font-size:11px;color:#e2e8f0;margin-bottom:2px">
-          <span>${t.termo.substring(0,50)}</span><span>${t.total_resultados} results | ${t.vezes_buscado}x</span></div>
+          <span>${esc(t.termo.substring(0,50))}</span><span>${t.total_resultados} results | ${t.vezes_buscado}x</span></div>
           <div style="background:rgba(255,255,255,.06);border-radius:3px;height:8px"><div style="background:#22c55e;height:100%;width:${pct}%;border-radius:3px"></div></div></div>`;
       });
       h+=`</div>`;
@@ -2853,7 +2859,7 @@ async function loadRelatorios(){
         <h4 style="margin:0 0 12px;color:#e2e8f0"><i class="fa fa-globe"></i> Leads por Fonte</h4>`;
       d.por_fonte.forEach(f=>{
         h+=`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:#e2e8f0;border-bottom:1px solid rgba(255,255,255,.04)">
-          <span>${f.fonte}</span><span style="color:#818cf8;font-weight:600">${f.total}</span></div>`;
+          <span>${esc(f.fonte)}</span><span style="color:#818cf8;font-weight:600">${f.total}</span></div>`;
       });
       h+=`</div>`;
     }
@@ -2880,7 +2886,7 @@ async function loadSequencias(){
       const passos=typeof s.passos==='string'?JSON.parse(s.passos):s.passos||[];
       h+=`<div style="background:rgba(30,41,59,.8);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:16px;margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <div><h4 style="margin:0;color:#e2e8f0">${s.nome}</h4>
+          <div><h4 style="margin:0;color:#e2e8f0">${esc(s.nome)}</h4>
             <small style="color:var(--muted)">${passos.length} passo(s) | ${s.leads_ativos||0} leads ativos | ${s.leads_total||0} total</small></div>
           <div style="display:flex;gap:6px">
             <button class="btn-cfg" onclick="toggleSeq(${s.id},${!s.ativo})" style="font-size:10px;${s.ativo?'color:#22c55e':'color:#f87171'}">${s.ativo?'Ativa':'Pausada'}</button>
@@ -2891,7 +2897,7 @@ async function loadSequencias(){
       passos.forEach((p,i)=>{
         h+=`<div style="background:rgba(244,114,182,.08);border:1px solid rgba(244,114,182,.15);border-radius:6px;padding:8px 12px;font-size:11px">
           <div style="color:#f472b6;font-weight:600">Dia ${p.dia}</div>
-          <div style="color:#e2e8f0">${p.assunto||'(sem assunto)'}</div></div>`;
+          <div style="color:#e2e8f0">${esc(p.assunto||'(sem assunto)')}</div></div>`;
         if(i<passos.length-1) h+=`<div style="color:var(--muted);align-self:center">→</div>`;
       });
       h+=`</div></div>`;
@@ -2936,7 +2942,7 @@ function _seqPassoHtml(i,p){
       <div style="flex:0 0 70px"><label style="font-size:10px;color:var(--muted)">Enviar no dia</label>
         <input type="number" class="sp-dia" value="${p.dia}" min="0" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px"></div>
       <div style="flex:1"><label style="font-size:10px;color:var(--muted)">Assunto</label>
-        <input class="sp-assunto" value="${(p.assunto||'').replace(/"/g,'&quot;')}" placeholder="Ex: Acompanhamento - {nome}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px"></div>
+        <input class="sp-assunto" value="${esc((p.assunto||'').replace(/"/g,'&quot;'))}" placeholder="Ex: Acompanhamento - {nome}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px"></div>
       <button onclick="this.closest('.seq-passo').remove()" style="background:none;border:none;color:#f87171;cursor:pointer;align-self:flex-end;padding:6px" title="Remover"><i class="fa fa-trash" style="font-size:11px"></i></button>
     </div>
     <label style="font-size:10px;color:var(--muted)">Mensagem do email</label>
@@ -3047,7 +3053,7 @@ async function requalificarLead(id){
     if(!d.ok){
       const p=d.passos||{};
       let msg=(p.cnpj&&!p.cnpj.ok)?p.cnpj.error:(p.enriquecimento&&p.enriquecimento.error)||'Não foi possível requalificar';
-      if(p.cnpj&&p.cnpj.cnpj_sugerido) msg+=`\n\nCNPJ sugerido (NÃO confirmado): ${p.cnpj.cnpj_sugerido}\nConfira na Receita e preencha manualmente se for o correto.`;
+      if(p.cnpj&&p.cnpj.cnpj_sugerido) msg+=`\n\nCNPJ sugerido (NÃO confirmado): ${esc(p.cnpj.cnpj_sugerido)}\nConfira na Receita e preencha manualmente se for o correto.`;
       alert('⚠️ '+msg);
     }
   }catch(e){alert('Erro ao requalificar');}
@@ -3277,7 +3283,7 @@ async function gerarPix(){
         </div>`;
       if(d.payment_id)_pixAcompanhar(d.payment_id);
     }else{
-      document.getElementById('pix-result').innerHTML=`<p style="color:#f87171">${d.error||'Erro'}</p>`;
+      document.getElementById('pix-result').innerHTML=`<p style="color:#f87171">${esc(d.error||'Erro')}</p>`;
     }
   }catch(e){document.getElementById('pix-result').innerHTML='<p style="color:#f87171">Erro de conexão</p>';}
 }
@@ -3320,7 +3326,7 @@ async function pagarCartao(){
       if(typeof gtag==='function')gtag('event','purchase',{currency:'BRL',value:_selectedPlan==='pro'?297:97,transaction_id:'card_'+Date.now(),items:[{item_name:_selectedPlan}]});
       setTimeout(()=>{location.reload()},2000);
     }else{
-      document.getElementById('card-result').innerHTML=`<span style="color:#f87171">${d.error||'Pagamento recusado'}</span>`;
+      document.getElementById('card-result').innerHTML=`<span style="color:#f87171">${esc(d.error||'Pagamento recusado')}</span>`;
     }
   }catch(e){document.getElementById('card-result').innerHTML='<span style="color:#f87171">Erro ao processar cartão: '+(e.message||'erro de conexão')+'</span>';}
 }
