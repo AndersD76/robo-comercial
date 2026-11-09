@@ -2680,8 +2680,7 @@ def _llms_resumo():
         "- Comparativos com Econodata, Speedio, Leads2b e Apollo: "
         "https://www.turbovenda.com.br/alternativas\n"
         "- Empresas ativas no Brasil por estado, ano de abertura e segmento (relatório): "
-        "https://www.turbovenda.com.br/dados/empresas-ativas-no-brasil
-"
+        "https://www.turbovenda.com.br/dados/empresas-ativas-no-brasil\n"
         "- Conteúdo completo (ferramentas, comparativos e artigos em texto): "
         "https://www.turbovenda.com.br/llms-full.txt\n"
     )
