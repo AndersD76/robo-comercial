@@ -623,6 +623,8 @@ def _init_public_schema_safe():
             "trial_email_expired_sent BOOLEAN DEFAULT FALSE",
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_pagamentos_mp_id "
             "ON pagamentos (mp_payment_id)",
+            # quando o plano foi liberado por este pagamento (uma vez só)
+            "ALTER TABLE pagamentos ADD COLUMN IF NOT EXISTS aplicado_em TIMESTAMP",
         ]:
             try:
                 c.execute(stmt)
@@ -9375,6 +9377,132 @@ MP_PLANOS = {
 }
 
 
+_MP_BASE = os.environ.get('BASE_URL', '').rstrip('/') or 'https://www.turbovenda.com.br'
+_MP_TRAVA = 7700504   # pg advisory lock da conciliação (funil 7700501, medição 7700502)
+
+
+def _mp_consultar(payment_id):
+    """O pagamento como o Mercado Pago vê (fonte da verdade da compra)."""
+    import requests as http
+    r = http.get(f'https://api.mercadopago.com/v1/payments/{int(payment_id)}',
+                 headers={'Authorization': f'Bearer {MP_ACCESS_TOKEN}'}, timeout=10)
+    return r.json() if r.status_code == 200 else None
+
+
+def _mp_dono(pay):
+    """(user_id, plano) gravados por nós na criação do pagamento: metadata,
+    ou external_reference "user_<id>_<plano>" do checkout. Sem plano conhecido,
+    deduz pelo valor; sem nada, (None, None)."""
+    meta = pay.get('metadata') or {}
+    uid, plano = meta.get('user_id'), meta.get('plano')
+    ref = pay.get('external_reference') or ''
+    if not uid and ref.startswith('user_'):
+        partes = ref.split('_')
+        uid = partes[1] if len(partes) > 1 else None
+        plano = plano or (partes[2] if len(partes) > 2 else None)
+    try:
+        uid = int(uid)
+    except (TypeError, ValueError):
+        return None, None
+    if plano not in MP_PLANOS:
+        valor = float(pay.get('transaction_amount') or 0)
+        plano = next((k for k, p in MP_PLANOS.items() if abs(p['valor'] - valor) < 0.01), None)
+    return uid, plano
+
+
+def _mp_aplicar(pay, uid_esperado=None):
+    """Grava o pagamento e, se aprovado, libera o plano UMA vez (aplicado_em).
+    Os 30 dias contam do fim do plano pago em vigor (renovação antecipada não
+    perde dias) ou de agora, se estava no teste ou vencido. Usado pelo webhook,
+    pela tela do Pix, pela volta do checkout e pela conciliação. → (status, plano)"""
+    uid, plano = _mp_dono(pay)
+    status = str(pay.get('status') or '')
+    if not uid or (uid_esperado is not None and uid != int(uid_esperado)):
+        return status, None
+    valor = float(pay.get('transaction_amount') or 0)
+    conn = _conn()
+    try:
+        c = conn.cursor()
+        c.execute("""INSERT INTO pagamentos (user_id, mp_payment_id, status, valor, plano)
+                     VALUES (%s,%s,%s,%s,%s)
+                     ON CONFLICT (mp_payment_id) DO UPDATE SET status = EXCLUDED.status""",
+                  (uid, str(pay.get('id')), status, valor, plano))
+        ativou = False
+        if (status == 'approved' and plano in MP_PLANOS
+                and valor >= MP_PLANOS[plano]['valor'] - 0.01):
+            c.execute("UPDATE pagamentos SET aplicado_em = NOW() WHERE mp_payment_id = %s "
+                      "AND aplicado_em IS NULL RETURNING id", (str(pay.get('id')),))
+            if c.fetchone():
+                c.execute("""UPDATE users SET plano = %s, plano_expira =
+                               CASE WHEN plano = 'trial' OR plano_expira IS NULL OR plano_expira < NOW()
+                                    THEN NOW() ELSE plano_expira END + INTERVAL '30 days'
+                             WHERE id = %s""", (plano, uid))
+                ativou = True
+        conn.commit()
+    finally:
+        conn.close()
+    if ativou:
+        logger.info(f"MP: user {uid} -> plano {plano} (payment {pay.get('id')})")
+    return status, plano
+
+
+def _mp_conciliar():
+    """Pix pago depois que a pessoa fechou a tela (ou sem webhook):
+    pergunta ao Mercado Pago pelos pendentes dos últimos 5 dias."""
+    conn = _conn()
+    try:
+        c = conn.cursor()
+        c.execute('SELECT pg_try_advisory_lock(%s) AS ok', (_MP_TRAVA,))
+        if not c.fetchone()['ok']:
+            return 0
+        try:
+            c.execute("""SELECT mp_payment_id FROM pagamentos
+                         WHERE criado_em > NOW() - INTERVAL '5 days'
+                           AND (status IN ('pending', 'in_process', 'authorized')
+                                OR (status = 'approved' AND aplicado_em IS NULL))""")
+            ids = [r['mp_payment_id'] for r in c.fetchall()]
+        finally:
+            c.execute('SELECT pg_advisory_unlock(%s)', (_MP_TRAVA,))
+            conn.commit()
+    finally:
+        conn.close()
+    for pid in ids:
+        try:
+            pay = _mp_consultar(pid)
+            if pay:
+                _mp_aplicar(pay)
+        except Exception:
+            logger.exception(f'MP: conciliação do pagamento {pid}')
+    return len(ids)
+
+
+def _mp_conciliar_loop():
+    time.sleep(120)
+    while True:
+        try:
+            _mp_conciliar()
+        except Exception:
+            logger.exception('MP: conciliação falhou')
+        time.sleep(600)
+
+
+if DATABASE_URL and MP_ACCESS_TOKEN and os.environ.get('RAILWAY_ENVIRONMENT_ID'):
+    threading.Thread(target=_mp_conciliar_loop, daemon=True).start()
+
+
+@app.route('/api/pagamento/status/<int:payment_id>')
+@login_required
+def api_pagamento_status(payment_id):
+    """A tela do Pix pergunta aqui; o servidor confirma com o Mercado Pago."""
+    if not MP_ACCESS_TOKEN:
+        return jsonify({'status': 'indisponivel'}), 503
+    pay = _mp_consultar(payment_id)
+    if not pay:
+        return jsonify({'status': 'desconhecido'}), 404
+    status, plano = _mp_aplicar(pay, session.get('user_id'))
+    return jsonify({'status': status, 'plano': plano})
+
+
 @app.route('/api/planos')
 def api_planos():
     """Retorna planos disponíveis."""
@@ -9455,7 +9583,6 @@ def api_checkout():
 @limiter.limit("30 per minute")
 def webhook_mercadopago():
     """Webhook do Mercado Pago — atualiza plano do user."""
-    import requests as http
     # Verificar assinatura do webhook (x-signature header do MP)
     # Fail-closed: se MP_WEBHOOK_SECRET nao estiver configurado, rejeita
     mp_webhook_secret = os.environ.get('MP_WEBHOOK_SECRET', '')
@@ -9485,52 +9612,10 @@ def webhook_mercadopago():
         return jsonify({'ok': True})
 
     try:
-        r = http.get(
-            f'https://api.mercadopago.com/v1/payments/{payment_id}',
-            headers={
-                'Authorization': f'Bearer {MP_ACCESS_TOKEN}'},
-            timeout=10)
-        pay = r.json()
-        status = pay.get('status')
-        ext_ref = pay.get('external_reference', '')
-        valor = pay.get('transaction_amount', 0)
-        meta = pay.get('metadata', {})
-        user_id = meta.get('user_id')
-        plano = meta.get('plano', 'pro')
-
-        if not user_id and ext_ref.startswith('user_'):
-            parts = ext_ref.split('_')
-            if len(parts) >= 2:
-                user_id = int(parts[1])
-                if len(parts) >= 3:
-                    plano = parts[2]
-
-        if not user_id:
-            return jsonify({'ok': True})
-
-        conn = _conn()
-        try:
-            c = conn.cursor()
-
-            c.execute("""INSERT INTO pagamentos
-                (user_id, mp_payment_id, status, valor, plano)
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (mp_payment_id) DO UPDATE SET status = EXCLUDED.status""",
-                (user_id, str(payment_id), status, valor, plano))
-
-            if status == 'approved':
-                c.execute("""UPDATE users SET
-                    plano = %s,
-                    plano_expira = NOW() + INTERVAL '30 days',
-                    mp_subscription_id = %s
-                    WHERE id = %s""",
-                    (plano, str(payment_id), user_id))
-                logger.info(f'MP: user {user_id} -> plano {plano} (payment {payment_id})')
-
-            conn.commit()
-        finally:
-            conn.close()
-    except Exception as e:
+        pay = _mp_consultar(payment_id)
+        if pay:
+            _mp_aplicar(pay)
+    except Exception:
         logger.exception("Erro no webhook Mercado Pago")
         return jsonify({'error': 'internal'}), 500
 
@@ -9566,6 +9651,8 @@ def api_pagamento_pix():
                 'description': plano['nome'],
                 'payment_method_id': 'pix',
                 'payer': {'email': user['email']},
+                'external_reference': f"user_{user['id']}_{plano_id}",
+                'notification_url': f'{_MP_BASE}/webhook/mercadopago',
                 'metadata': {
                     'user_id': user['id'],
                     'plano': plano_id,
@@ -9576,33 +9663,10 @@ def api_pagamento_pix():
             pix_data = pay.get(
                 'point_of_interaction', {}).get(
                 'transaction_data', {})
-            conn = None
             try:
-                conn = _conn()
-                c = conn.cursor()
-                c.execute("""INSERT INTO pagamentos
-                    (user_id, mp_payment_id, status,
-                     valor, plano)
-                    VALUES (%s,%s,%s,%s,%s)
-                    ON CONFLICT (mp_payment_id) DO UPDATE SET status = EXCLUDED.status""",
-                    (user['id'], str(pay.get('id')),
-                     pay.get('status'), plano['valor'],
-                     plano_id))
-                if pay.get('status') == 'approved':
-                    c.execute("""UPDATE users SET
-                        plano = %s,
-                        plano_expira = NOW() + INTERVAL '30 days'
-                        WHERE id = %s""",
-                        (plano_id, user['id']))
-                conn.commit()
+                _mp_aplicar(pay, user['id'])
             except Exception:
                 logger.exception("Erro ao registrar pagamento PIX")
-            finally:
-                if conn:
-                    try:
-                        conn.close()
-                    except Exception:
-                        pass
             return jsonify({
                 'ok': True,
                 'qr_code': pix_data.get('qr_code'),
@@ -9669,32 +9733,11 @@ def api_pagamento_cartao():
             }, timeout=15)
         pay = r.json()
         status = pay.get('status')
-        conn = None
-        try:
-            conn = _conn()
-            c = conn.cursor()
-            c.execute("""INSERT INTO pagamentos
-                (user_id, mp_payment_id, status,
-                 valor, plano)
-                VALUES (%s,%s,%s,%s,%s)
-                ON CONFLICT (mp_payment_id) DO UPDATE SET status = EXCLUDED.status""",
-                (user['id'], str(pay.get('id')),
-                 status, plano['valor'], plano_id))
-            if status == 'approved':
-                c.execute("""UPDATE users SET
-                    plano = %s,
-                    plano_expira = NOW() + INTERVAL '30 days'
-                    WHERE id = %s""",
-                    (plano_id, user['id']))
-            conn.commit()
-        except Exception:
-            logger.exception("Erro ao registrar pagamento cartao")
-        finally:
-            if conn:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
+        if pay.get('id'):
+            try:
+                _mp_aplicar(pay, user['id'])
+            except Exception:
+                logger.exception("Erro ao registrar pagamento cartao")
         if status == 'approved':
             return jsonify({'ok': True, 'status': 'approved'})
         elif status == 'in_process':
@@ -9723,102 +9766,32 @@ def api_pagamento_cartao():
         logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
 
 
-@app.route('/api/pagamento/boleto', methods=['POST'])
-@limiter.limit("5 per minute")
-@login_required
-def api_pagamento_boleto():
-    """Gera boleto via Mercado Pago."""
-    import requests as http
-    if not MP_ACCESS_TOKEN:
-        return jsonify({'error': 'MP não configurado'}), 500
-    data = request.get_json(silent=True) or {}
-    plano_id = data.get('plano', 'pro')
-    plano = MP_PLANOS.get(plano_id)
-    if not plano:
-        return jsonify({'error': 'Plano inválido'}), 400
-    user = get_current_user()
-    try:
-        r = http.post(
-            'https://api.mercadopago.com/v1/payments',
-            headers={
-                'Authorization': f'Bearer {MP_ACCESS_TOKEN}',
-                'Content-Type': 'application/json',
-                # Chave única por tentativa: a fixa por cliente+plano fazia o MP
-                # devolver a cobrança anterior (já vencida) na 2ª tentativa
-                'X-Idempotency-Key': f"boleto_{user['id']}_{plano_id}_{secrets.token_hex(8)}",
-            },
-            json={
-                'transaction_amount': plano['valor'],
-                'description': plano['nome'],
-                'payment_method_id': 'bolbradesco',
-                'payer': {
-                    'email': user['email'],
-                    'first_name': user.get('empresa_nome', 'Cliente'),
-                    'last_name': 'TurboVenda',
-                },
-                'metadata': {
-                    'user_id': user['id'],
-                    'plano': plano_id,
-                },
-            }, timeout=15)
-        pay = r.json()
-        if r.status_code in (200, 201):
-            boleto_url = pay.get(
-                'transaction_details', {}).get(
-                'external_resource_url', '')
-            conn = None
-            try:
-                conn = _conn()
-                c = conn.cursor()
-                c.execute("""INSERT INTO pagamentos
-                    (user_id, mp_payment_id, status,
-                     valor, plano)
-                    VALUES (%s,%s,%s,%s,%s)
-                    ON CONFLICT (mp_payment_id) DO UPDATE SET status = EXCLUDED.status""",
-                    (user['id'], str(pay.get('id')),
-                     pay.get('status'), plano['valor'],
-                     plano_id))
-                if pay.get('status') == 'approved':
-                    c.execute("""UPDATE users SET
-                        plano = %s,
-                        plano_expira = NOW() + INTERVAL '30 days'
-                        WHERE id = %s""",
-                        (plano_id, user['id']))
-                conn.commit()
-            except Exception:
-                logger.exception("Erro ao registrar pagamento boleto")
-            finally:
-                if conn:
-                    try:
-                        conn.close()
-                    except Exception:
-                        pass
-            return jsonify({
-                'ok': True,
-                'boleto_url': boleto_url,
-                'payment_id': pay.get('id'),
-            })
-        return jsonify({
-            'error': pay.get('message',
-                str(pay.get('cause', 'Erro')))}), 400
-    except Exception as e:
-        logger.exception(f'{request.path}'); return jsonify({'error': 'Erro interno'}), 500
-
-
 @app.route('/pagamento/<resultado>')
 @login_required
 def pagamento_resultado(resultado):
-    """Página de resultado do pagamento."""
-    msgs = {
-        'sucesso': ('Pagamento aprovado!',
-                     'Seu plano Pro já está ativo.', '#22c55e'),
-        'falha': ('Pagamento não aprovado',
-                   'Tente novamente ou use outro método.', '#f87171'),
-        'pendente': ('Pagamento pendente',
-                      'Aguardando confirmação.', '#fbbf24'),
-    }
-    titulo, desc, cor = msgs.get(
-        resultado, ('Pagamento', '', '#818cf8'))
+    """Volta do checkout do Mercado Pago: confere o pagamento no próprio MP
+    (payment_id na URL) e só então diz que o plano está ativo."""
+    status, plano = '', None
+    pid = request.args.get('payment_id') or request.args.get('collection_id') or ''
+    if pid.isdigit() and MP_ACCESS_TOKEN:
+        try:
+            pay = _mp_consultar(pid)
+            if pay:
+                status, plano = _mp_aplicar(pay, session.get('user_id'))
+        except Exception:
+            logger.exception('MP: conferência na volta do checkout')
+    nome = MP_PLANOS.get(plano or '', {}).get('nome', 'TurboVenda')
+    if status == 'approved':
+        titulo, desc, cor = 'Pagamento aprovado!', f'Seu plano {nome} está ativo.', '#22c55e'
+    elif status in ('pending', 'in_process', 'authorized'):
+        titulo, desc, cor = ('Pagamento em processamento',
+                             'Assim que o Mercado Pago confirmar, o plano é ativado sozinho.', '#fbbf24')
+    elif status in ('rejected', 'cancelled') or resultado == 'falha':
+        titulo, desc, cor = ('Pagamento não aprovado',
+                             'Tente novamente ou use outro método.', '#f87171')
+    else:
+        titulo, desc, cor = ('Recebemos seu retorno',
+                             'O plano é ativado assim que o Mercado Pago confirmar o pagamento.', '#818cf8')
     return f'''<!DOCTYPE html>
 <html><head><meta charset="UTF-8">
 <title>Pagamento - TurboVenda</title>
@@ -10606,7 +10579,7 @@ def cron_trial_emails():
 
 @app.route('/assinar')
 def assinar():
-    """Link dos e-mails: abre o pagamento (PIX, cartão ou boleto) direto,
+    """Link dos e-mails: abre o pagamento (PIX ou cartão) direto,
     passando pelo login se precisar."""
     plano = request.args.get('plano', 'starter')
     if plano not in MP_PLANOS:

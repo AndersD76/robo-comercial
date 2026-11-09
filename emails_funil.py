@@ -138,7 +138,7 @@ def email_cota(empresa, r, expira, app_url, preco):
         f'Ele pausou para não passar disso. Com o plano Starter, por {_reais(preco)} '
         'por mês, ele volta a buscar na hora, até 500 leads.',
     ], 'Continuar com o Starter', f'{app_url}/assinar',
-        'Pagamento por PIX, cartão ou boleto. Com PIX, libera na hora.')
+        'Pagamento por PIX ou cartão. Com PIX, libera na hora.')
     return assunto, html
 
 
@@ -151,7 +151,7 @@ def email_2dias(empresa, r, expira, app_url, preco):
         f'Seu teste grátis vai até <strong>{_data_br(expira)}</strong>. {achados}',
         'Depois dessa data o robô para de buscar. O que ele já encontrou continua salvo.',
     ], f'Assinar o Starter por {_reais(preco)}/mês', f'{app_url}/assinar',
-        'Pagamento por PIX, cartão ou boleto. Com PIX, libera na hora.')
+        'Pagamento por PIX ou cartão. Com PIX, libera na hora.')
     return assunto, html
 
 
@@ -167,7 +167,7 @@ def email_acabou(empresa, r, expira, app_url, preco):
         primeiro,
         f'Para voltar a buscar, assine o Starter: {_reais(preco)} por mês, até 500 leads.',
     ], 'Pagar com PIX e continuar', f'{app_url}/assinar',
-        'Também aceitamos cartão e boleto.')
+        'Também aceitamos cartão.')
     return assunto, html
 
 
