@@ -275,6 +275,8 @@ MARCA = {
     'cnpj': os.environ.get('MARCA_CNPJ', '').strip(),
 }
 app.jinja_env.globals['marca'] = MARCA
+app.jinja_env.filters['data_br'] = lambda iso: (
+    f"{iso[8:10]}/{iso[5:7]}/{iso[:4]}" if isinstance(iso, str) and len(iso) >= 10 else iso)
 app.jinja_env.filters['trilha_itens'] = lambda itens: [
     {'@type': 'ListItem', 'position': i, 'name': nome, 'item': _SITE + caminho}
     for i, (nome, caminho) in enumerate(itens, start=2)]
@@ -2308,6 +2310,11 @@ TITULOS_SEO_BLOG = {
 for _post in BLOG_POSTS:
     _post.setdefault('titulo_seo', TITULOS_SEO_BLOG.get(_post['slug']) or _post['titulo'])
 
+import links_internos  # noqa: E402
+# Pilar + satélites por cluster e similaridade de texto (antes cada post
+# listava os outros 29 como "relacionados")
+_LINKS_BLOG = links_internos.montar(BLOG_POSTS)
+
 
 @app.route('/')
 def landing():
@@ -2343,6 +2350,7 @@ def blog_post(slug):
     return render_template('blog_post.html',
                            post=post,
                            posts=BLOG_POSTS,
+                           links=_LINKS_BLOG.get(slug),
                            segmentos=SEGMENTOS,
                            ga_id=GA_MEASUREMENT_ID)
 

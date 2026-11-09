@@ -187,3 +187,22 @@ def test_buscador_so_isento_com_dns_confirmado(monkeypatch):
                                     environ_base={'REMOTE_ADDR': '66.249.66.1'}):
         A._buscador_verificado()
     assert chamadas.count('66.249.66.1') == 1   # cache: DNS uma vez por IP
+
+
+def test_links_internos_do_blog(client):
+    """Todo post linka o pilar do seu tema e nenhum post fica órfão
+    (antes cada post listava os outros 29, sem contexto)."""
+    import links_internos
+    mapa = A._LINKS_BLOG
+    assert not links_internos.orfaos(mapa)
+    for p in A.BLOG_POSTS:
+        html = client.get(f"/blog/{p['slug']}").get_data(as_text=True)
+        bloco = html.split('class="related"', 1)[1]
+        alvos = set(re.findall(r'href="/blog/([^"]+)"', bloco))
+        info = mapa[p['slug']]
+        assert p['slug'] not in alvos
+        assert 1 <= len(alvos) <= 15, (p['slug'], len(alvos))
+        if info['pilar']:
+            assert info['pilar']['slug'] in alvos, p['slug']
+        for _, url in info['paginas']:
+            assert f'href="{url}"' in bloco, (p['slug'], url)

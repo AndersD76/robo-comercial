@@ -1,6 +1,6 @@
 # Relatório do motor de visibilidade orgânica — TurboVenda
 
-Atualizado em 09/11/2026. Fases 0 e 1 concluídas e em produção; Fases 2 a 6 pendentes (ver seção 5).
+Atualizado em 09/11/2026. Fases 0 e 1 concluídas e em produção; Fase 2 com a parte técnica no ar e o conteúdo aguardando revisão; Fases 3 a 6 pendentes (ver seção 5).
 
 ## 1. O que foi implementado
 
@@ -23,6 +23,18 @@ Atualizado em 09/11/2026. Fases 0 e 1 concluídas e em produção; Fases 2 a 6 p
 | `lastmod` real nas 10 mil programáticas (data da base da Receita) e hubs de segmento indexáveis no sitemap; IndexNow reenvia quando a base muda (no deploy: 10.099 URLs enviadas, todas aceitas) | `app.py` |
 | Paginação com canonical próprio; H1 no cadastro; `Blog` e `BreadcrumbList` no JSON-LD de todas as páginas públicas menos a home; `Organization` com `@id`, logo quadrado e espaço para CNPJ/perfis | `app.py`, `templates/*` |
 | Guarda no CI: `tests/test_seo.py` (48 páginas fixas) e `tests/test_seo_pseo.py` (programáticas sobre base sintética) num passo próprio do `ci.yml`; Lighthouse diário em produção (`lighthouse.yml`, `lighthouserc.json`) | `.github/workflows/`, `tests/` |
+
+### Fase 2 — Conteúdo e links internos (branch `growth/fase-2-conteudo`)
+| Mudança | Arquivos |
+|---|---|
+| Motor de links internos: 6 clusters do mapa de intenção, cada um com pilar e satélites; cada post linka o pilar, os 3 satélites mais parecidos (TF-IDF) e 1 post de outro tema, e as ferramentas/dados do tema. O pilar lista todos os satélites. Antes, cada post listava os outros 29 | `links_internos.py`, `templates/blog_post.html` |
+| Zero post órfão, garantido por teste (todo post é linkado por outro post, além do índice do blog) | `tests/test_seo.py` |
+| Data visível "Publicado em dd/mm/aaaa" e "atualizado em" (campo `atualizado` no post), com `dateModified` no JSON-LD | `templates/blog_post.html`, `app.py` |
+| Fila de frescor com a telemetria própria (Google/Bing por página, 28 contra 28 dias), até haver dados do Search Console | `growth/ferramentas/frescor.py`, `growth/fila-atualizacao.md` |
+| 4 briefs para buscas sem página: empresas abertas recentemente, WhatsApp, comparativo de ferramentas, sócios pelo CNPJ | `growth/briefs/` |
+| Rascunhos de página Sobre e política editorial (não publicados: dependem de TODO-VALIDAR) | `growth/rascunhos/` |
+
+Já existiam e cumprem a Fase 2: limiar de conteúdo com noindex automático nas programáticas, FAQ específica por página, contagem por porte, bairro e ano de abertura, links para segmentos e cidades vizinhas.
 
 ## 2. Antes e depois (produção)
 
@@ -65,7 +77,10 @@ As programáticas e ferramentas caíram para 1,2–1,3 s. As páginas que usam �
 
 1. **CNPJ da empresa dona da marca** e **perfis oficiais** (LinkedIn, Instagram, YouTube…). Entram no JSON-LD pelas variáveis `MARCA_CNPJ` e `MARCA_PERFIS` (URLs separadas por espaço) no Railway; vazias, não aparecem.
 2. **Crawlers só de treino** (CCBot, Bytespider, Applebot-Extended, meta-externalagent): hoje liberados pelo `*`. Decidir se bloqueia.
-3. **Texto do `/llms.txt`**: diz "Starter: 500 leads/mês", enquanto o checkout diz "até 500 leads". Confirmar qual vale antes da Fase 3.
+3. **Página de autor:** quem assina os artigos (nome, função, experiência real). Hoje o autor é a organização; o E-E-A-T pede uma pessoa com página própria.
+4. **Briefs em `growth/briefs/`:** aprovar quais viram página. O de sócios pelo CNPJ exige subir os 8,6 mi registros de sócios para o banco (custo de armazenamento); o de empresas recém-abertas exige atualizar a base de produção.
+5. **Rascunhos em `growth/rascunhos/`:** completar CNPJ, endereço, fundadores e uso de IA na página Sobre e na política editorial.
+6. **Texto do `/llms.txt`**: diz "Starter: 500 leads/mês", enquanto o checkout diz "até 500 leads". Confirmar qual vale antes da Fase 3.
 
 ## 4. Ações manuais (só você pode fazer), em ordem de prioridade
 
@@ -80,7 +95,7 @@ As programáticas e ferramentas caíram para 1,2–1,3 s. As páginas que usam �
 
 | Fase | Situação | Próximo passo |
 |---|---|---|
-| 2 — Conteúdo e programático | Limiar com noindex já existia; base do Postgres é de ~jul/2026 (abertura mais recente: 14/06) | Atualizar a base de produção para out/2026, dado único por página (abertas no último mês, ranking), motor de links internos, briefs, páginas Sobre e autor |
+| 2 — Conteúdo e programático | Links internos, datas, fila de frescor, briefs e rascunhos feitos | **Atualizar a base do Postgres** (é de ~jul/2026; a de out/2026 está no PC) — pré-requisito do brief de empresas recém-abertas; publicar Sobre, autor e política editorial depois dos TODO-VALIDAR; produzir os briefs aprovados |
 | 3 — GEO | `llms.txt` existe; robots liberado | `llms-full.txt`, resposta direta de 40–60 palavras nas páginas de conteúdo, `growth/entidade.md`, monitor de crawlers de IA (a tabela de visitas não guarda user-agent), painel de share of voice |
 | 4 — Ativos que ganham link | 3 ferramentas já existem | Resultado compartilhável por URL, relatório de dados com embed, kit de imprensa, `alvos-link.csv` |
 | 5 — Distribuição | Textos de LinkedIn, diretórios e grupos já existem em `docs/trafego/` | Pipeline de rascunhos por página nova, checklist de diretórios com status, mapa de comunidades, páginas de vídeo |

@@ -29,7 +29,7 @@
     "headline": "{{ post.titulo }}",
     "description": "{{ post.desc }}",
     "datePublished": "{{ post.data }}",
-    "dateModified": "{{ post.data }}",
+    "dateModified": "{{ post.atualizado or post.data }}",
     "author": {"@type": "Organization", "name": "TurboVenda", "url": "https://www.turbovenda.com.br"},
     "publisher": {
       "@type": "Organization",
@@ -133,6 +133,9 @@
 
     .related{max-width:720px;margin:40px auto;padding:0 24px 60px}
     .related h3{font-size:1.1rem;font-weight:700;margin-bottom:16px;color:var(--muted2)}
+    .related-pilar{margin:0 0 24px;color:var(--muted2)}
+    .related-pilar a{color:var(--accent);font-weight:600}
+    .related h3 + .related-list + h3{margin-top:28px}
     .related-list{display:flex;flex-direction:column;gap:12px}
     .related-list a{background:var(--surface);border:1px solid var(--border);border-radius:12px;
         padding:20px 24px;text-decoration:none;color:var(--text);font-weight:600;
@@ -168,7 +171,7 @@
   </div>
   <h1>{{ post.titulo }}</h1>
   <div class="post-meta">
-    <span><i class="fa fa-calendar"></i> {{ post.data }}</span>
+    <span><i class="fa fa-calendar"></i> Publicado em <time datetime="{{ post.data }}">{{ post.data|data_br }}</time>{% if post.atualizado and post.atualizado != post.data %} · atualizado em <time datetime="{{ post.atualizado }}">{{ post.atualizado|data_br }}</time>{% endif %}</span>
     <span><i class="fa fa-clock"></i> {{ post.tempo }} de leitura</span>
   </div>
 </header>
@@ -206,15 +209,27 @@
 </div>
 
 <div class="related">
-  <h3>Artigos relacionados</h3>
+  {% if links and links.pilar %}
+  <p class="related-pilar">Guia principal deste tema:
+    <a href="/blog/{{ links.pilar.slug }}">{{ links.pilar.titulo }}</a></p>
+  {% endif %}
+  <h3>{% if links and links.hub %}Todos os artigos do tema {{ links.cluster }}{% else %}Continue lendo{% endif %}</h3>
   <div class="related-list">
-    {% for p in posts if p.slug != post.slug %}
+    {% for p in (links.relacionados if links else posts[:4]) if p.slug != post.slug %}
     <a href="/blog/{{ p.slug }}">
       {{ p.titulo }}
       <span>{{ p.tempo }} de leitura</span>
     </a>
     {% endfor %}
   </div>
+  {% if links and links.paginas %}
+  <h3>Ferramentas e dados sobre o tema</h3>
+  <div class="related-list">
+    {% for titulo, url in links.paginas %}
+    <a href="{{ url }}">{{ titulo }}<span>sem login</span></a>
+    {% endfor %}
+  </div>
+  {% endif %}
 </div>
 
 </main>
