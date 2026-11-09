@@ -1,0 +1,64 @@
+{% extends '_publico_base.html' %}
+{% block estilo %}
+    .bloco{background:#0d1526;border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:20px;margin:0 0 24px}
+    .bloco h2{margin-top:0}
+    .frase{border-left:3px solid #6366f1;padding:6px 14px;margin:12px 0;color:#e2e8f0}
+    .marca{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+    .marca img{background:#fff;border-radius:12px;padding:8px}
+    table.dados{width:100%;border-collapse:collapse;font-size:14.5px}
+    table.dados td{padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.06)}
+    table.dados td.num{text-align:right;font-variant-numeric:tabular-nums;color:#fff}
+{% endblock %}
+{% block conteudo %}
+  <div class="crumbs"><a href="/">Home</a> › Imprensa</div>
+  <h1>Kit de imprensa do TurboVenda</h1>
+  <p class="resposta-direta" style="margin:16px 0 28px">O TurboVenda é um software brasileiro de prospecção B2B: encontra
+    empresas para vender a partir dos dados abertos do CNPJ da Receita Federal e de buscadores, completa telefone, e-mail,
+    CNPJ e o nome do sócio que decide, e escreve com IA a primeira mensagem de WhatsApp ou e-mail. Aqui estão os números,
+    gráficos e materiais que você pode usar, com a fonte.</p>
+
+  {% if d %}
+  <div class="bloco">
+    <h2>Números para citar</h2>
+    <table class="dados"><tbody>
+      <tr><td>Empresas ativas com telefone ou e-mail cadastrado na Receita</td><td class="num">{{ fmt(d.total) }}</td></tr>
+      <tr><td>Com o sócio que administra identificado no quadro de sócios</td><td class="num">{{ fmt(d.com_socio) }} ({{ pct_socio }}%)</td></tr>
+      {% if abertas_ano_passado %}<tr><td>Abertas em {{ ano_passado }} e ainda ativas</td><td class="num">{{ fmt(abertas_ano_passado) }}</td></tr>{% endif %}
+      {% for e in d.por_uf[:3] %}<tr><td>Empresas ativas em {{ e.nome }}</td><td class="num">{{ fmt(e.n) }}</td></tr>{% endfor %}
+    </tbody></table>
+    <p style="margin-top:14px"><b>Como citar:</b> {{ citacao }} Relatório completo, com metodologia:
+      <a href="{{ url }}">turbovenda.com.br{{ url }}</a>.</p>
+    <h3>Frases prontas</h3>
+    <p class="frase">Segundo levantamento do TurboVenda com dados abertos da Receita Federal (base de {{ mes_br }}), o Brasil tem {{ fmt(d.total) }} empresas ativas com telefone ou e-mail cadastrado.</p>
+    <p class="frase">Em {{ pct_socio }}% das empresas ativas com contato, o sócio que administra aparece no quadro de sócios publicado pela Receita, segundo o TurboVenda.</p>
+    {% if segmento_top %}<p class="frase">Entre 54 atividades de venda para empresas acompanhadas pelo TurboVenda, a com mais empresas ativas é {{ segmento_top.nome|lower }}: {{ fmt(segmento_top.n) }}.</p>{% endif %}
+  </div>
+
+  <div class="bloco">
+    <h2>Gráficos para incorporar</h2>
+    <p>Cada gráfico do relatório tem um código para incorporar no seu site, com a fonte já incluída:</p>
+    <ul>
+      {% for chave, g in graficos.items() %}<li><a href="{{ url }}#{{ chave }}">{{ g.titulo }}</a></li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <div class="bloco">
+    <h2>Marca</h2>
+    <div class="marca">
+      <img src="/static/icon-512.png" alt="Logo do TurboVenda" width="96" height="96">
+      <div>
+        <p>Nome: <b>TurboVenda</b> (uma palavra, T e V maiúsculos).</p>
+        <p><a href="/static/icon-512.png" download>Baixar o logo (PNG, 512 × 512)</a> ·
+           <a href="/static/og-image.png" download>Baixar a imagem de capa (PNG)</a></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="bloco">
+    <h2>Contato</h2>
+    <p>Pedidos de entrevista, dados ou esclarecimentos: <a href="mailto:suporte@turbovenda.com.br?subject=Imprensa">suporte@turbovenda.com.br</a>
+       (assunto "Imprensa").</p>
+    <p>Sobre os dados e pedidos de remoção: <a href="/empresas/sobre-os-dados">sobre os dados</a>.</p>
+  </div>
+{% endblock %}

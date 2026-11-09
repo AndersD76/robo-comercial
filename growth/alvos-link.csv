@@ -1,0 +1,29 @@
+prioridade,alvo,tipo,site,por_que_cita_o_tema,angulo_de_abordagem,ativo_para_oferecer,status
+1,B2B Stack,diretório de software,https://www.b2bstack.com.br,catálogo de software B2B citado pelas IAs em "melhor ferramenta de prospecção",cadastro do produto + pedir avaliações a clientes reais,perfil com texto de growth/entidade.md,não iniciado
+1,Capterra Brasil,diretório de software,https://www.capterra.com.br,comparadores de software aparecem nas respostas de IA,cadastro do produto na categoria de geração de leads / CRM,perfil + capturas de tela,não iniciado
+1,GetApp Brasil,diretório de software,https://www.getapp.com.br,mesmo grupo do Capterra; listas por categoria,cadastro do produto,perfil,não iniciado
+1,SaaSHub,diretório de software,https://www.saashub.com,páginas de "alternativas a" citadas por IAs,cadastro como alternativa a Econodata/Apollo,perfil,não iniciado
+1,Base dos Dados,catálogo de dados abertos,https://basedosdados.org,publica e organiza dados públicos brasileiros,oferecer o relatório de empresas ativas como fonte derivada com metodologia aberta,/dados/empresas-ativas-no-brasil,não iniciado
+1,Contábeis,portal e fórum de contabilidade,https://www.contabeis.com.br,cobre abertura de empresas e CNPJ; fórum discute dados da Receita,pauta: quantas empresas abriram em 2025 e seguem ativas por estado,relatório + gráficos para incorporar,não iniciado
+2,Pequenas Empresas & Grandes Negócios,veículo de negócios,https://revistapegn.globo.com,pauta frequente de abertura de empresas e vendas para PMEs,pauta com números por estado e segmento (fonte e metodologia prontas),kit de imprensa /imprensa,não iniciado
+2,Exame (PME),veículo de negócios,https://exame.com,editoria de pequenas empresas usa dados de abertura de CNPJ,pauta de dados: segmentos B2B que mais têm empresas ativas,kit de imprensa,não iniciado
+2,GZH (Economia),veículo regional RS,https://gauchazh.clicrbs.com.br,cobre economia gaúcha,números do RS: empresas ativas e aberturas por ano,relatório filtrado para RS (a produzir),não iniciado
+2,NSC Total (Economia),veículo regional SC,https://www.nsctotal.com.br,cobre economia catarinense,números de SC,relatório filtrado para SC (a produzir),não iniciado
+2,Gazeta do Povo (Economia),veículo regional PR,https://www.gazetadopovo.com.br,cobre economia paranaense,números do PR,relatório filtrado para PR (a produzir),não iniciado
+2,Sebrae,apoio a pequenas empresas,https://sebrae.com.br,conteúdo e eventos sobre vendas e abertura de empresas,oferecer as ferramentas grátis (lista de empresas e calculadora) como material para consultores,/ferramentas,não iniciado
+2,FIERGS,federação das indústrias RS,https://www.fiergs.org.br,atende indústrias que vendem B2B,palestra ou conteúdo: como achar compradores industriais com dados públicos,guia /blog/como-vender-para-industrias,não iniciado
+2,FIESC,federação das indústrias SC,https://fiesc.com.br,idem,idem,idem,não iniciado
+2,FIEP,federação das indústrias PR,https://www.fiepr.org.br,idem,idem,idem,não iniciado
+2,Federasul,federação de associações comerciais RS,https://www.federasul.com.br,rede de associações comerciais do interior,parceria com associações comerciais: oficina de prospecção com a ferramenta grátis,ferramentas + guia de prospecção,não iniciado
+2,Associações comerciais locais (Passo Fundo e Caxias do Sul),associação comercial,(verificar site de cada uma),base atual de clientes está no RS,oficina presencial ou online de prospecção B2B,ferramentas grátis,não iniciado
+3,Brasil.IO,comunidade de dados abertos,https://brasil.io,comunidade que trabalha com dados do CNPJ,mostrar o relatório e a metodologia; pedir menção na lista de usos dos dados,relatório,não iniciado
+3,Open Knowledge Brasil,organização de dados abertos,https://ok.org.br,promove uso de dados abertos públicos,caso de uso de dados abertos da Receita em pequenas empresas,relatório + post,não iniciado
+3,Escola de Dados,formação em dados,https://escoladedados.org,ensina a usar dados públicos,material didático: como contar empresas por CNAE e cidade,guia /blog/o-que-e-cnae-prospeccao,não iniciado
+3,UFRGS (Administração),universidade,https://www.ufrgs.br,pesquisas e disciplinas de empreendedorismo e vendas,oferecer os dados agregados para trabalhos acadêmicos com citação,relatório + JSON agregado sob pedido,não iniciado
+3,UPF (Passo Fundo),universidade,https://www.upf.br,mesma cidade-base; projetos de extensão com empresas locais,parceria de extensão: oficina de prospecção para alunos e empresas,ferramentas grátis,não iniciado
+3,UFSC (Administração),universidade,https://ufsc.br,idem,idem,relatório,não iniciado
+3,UFPR (Administração),universidade,https://www.ufpr.br,idem,idem,relatório,não iniciado
+3,StartupBase (ABStartups),base de startups,https://startupbase.com.br,diretório de startups brasileiras,cadastro do TurboVenda como startup,perfil,não iniciado
+3,Startups.com.br,veículo de startups,https://startups.com.br,cobre ferramentas para PMEs,pauta: IA para prospecção em pequenas empresas com dados públicos,kit de imprensa,não iniciado
+3,AlternativeTo,diretório de alternativas,https://alternativeto.net,páginas de alternativas indexadas e citadas,cadastro como alternativa a Apollo e Econodata,perfil,não iniciado
+3,Product Hunt,lançamentos de produto,https://www.producthunt.com,audiência internacional (menos aderente ao ICP),lançamento só depois dos diretórios brasileiros,página de lançamento,não iniciado

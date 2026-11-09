@@ -1,0 +1,81 @@
+{% extends '_publico_base.html' %}
+{% block estilo %}
+    .resposta-direta{margin:20px 0 28px;padding:16px 20px;border-left:4px solid #6366f1;background:#0d1526;border-radius:0 12px 12px 0;font-size:1.05rem;line-height:1.6}
+    .destaques{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:8px 0 32px}
+    .destaque{background:#0d1526;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:16px}
+    .destaque b{display:block;font-size:1.6rem;color:#fff;line-height:1.2}
+    .destaque span{color:#94a3b8;font-size:13.5px}
+    figure{margin:0 0 36px;background:#0d1526;border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:20px}
+    figcaption{font-weight:700;font-size:1.05rem;margin-bottom:12px;color:#fff}
+    figure .nota{color:#94a3b8;font-size:13px;margin:10px 0 0}
+    .grafico{overflow-x:auto}
+    .grafico svg{min-width:560px;display:block}
+    details{margin-top:12px}
+    summary{cursor:pointer;color:#a5b4fc;font-size:14px}
+    table.dados{width:100%;border-collapse:collapse;margin-top:10px;font-size:14px}
+    table.dados td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.06)}
+    table.dados td.num{text-align:right;font-variant-numeric:tabular-nums}
+    textarea.embed{width:100%;min-height:86px;margin-top:8px;background:#0b1220;color:#cbd5e1;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:10px;font:12.5px ui-monospace,monospace}
+    .metodologia li{margin-bottom:8px}
+{% endblock %}
+{% block conteudo %}
+  <div class="crumbs"><a href="/">Home</a> › <a href="/empresas">Empresas</a> › Empresas ativas no Brasil</div>
+  <h1>Empresas ativas no Brasil: os números da Receita Federal</h1>
+  <p class="resposta-direta">O Brasil tem {{ fmt(d.total) }} empresas ativas com telefone ou e-mail cadastrado na Receita
+    Federal, segundo a base de {{ mes_br }}. Em {{ pct_socio }}% delas o sócio que administra aparece no quadro de sócios.
+    São Paulo concentra {{ pct_sp }}% do total. Os números vêm dos dados abertos do CNPJ e são recalculados a cada base nova.</p>
+
+  <div class="destaques">
+    <div class="destaque"><b>{{ fmt(d.total) }}</b><span>empresas ativas com telefone ou e-mail</span></div>
+    <div class="destaque"><b>{{ fmt(d.com_socio) }}</b><span>com o sócio que administra identificado ({{ pct_socio }}%)</span></div>
+    {% if abertas_ano_passado %}<div class="destaque"><b>{{ fmt(abertas_ano_passado) }}</b><span>abertas em {{ ano_passado }} e ainda ativas</span></div>{% endif %}
+    {% if segmento_top %}<div class="destaque"><b>{{ fmt(segmento_top.n) }}</b><span>{{ segmento_top.nome }}: o segmento B2B com mais empresas</span></div>{% endif %}
+  </div>
+
+  {% set notas = {
+    'aberturas': 'Conta só as empresas que estão ativas hoje, pelo ano em que abriram: as que já fecharam não entram, por isso os anos recentes aparecem maiores. O ano corrente vai até a data da base.',
+    'segmentos': 'CNAE principal, entre as 54 atividades B2B acompanhadas pelo TurboVenda.',
+    'porte': 'Porte declarado no cadastro da Receita; microempresa inclui o MEI.'} %}
+  {% for chave, g in graficos.items() %}
+  <figure id="{{ chave }}">
+    <figcaption>{{ g.titulo }}</figcaption>
+    <div class="grafico">{{ g.svg|safe }}</div>
+    {% if notas.get(chave) %}<p class="nota">{{ notas[chave] }}</p>{% endif %}
+    <details><summary>Ver os números em tabela</summary>
+      <table class="dados"><tbody>
+        {% for rotulo, n in g.tabela %}<tr><td>{{ rotulo }}</td><td class="num">{{ fmt(n) }}</td></tr>{% endfor %}
+      </tbody></table>
+    </details>
+    <details><summary>Incorporar este gráfico no seu site</summary>
+      <textarea class="embed" readonly onclick="this.select()">&lt;iframe src="https://www.turbovenda.com.br{{ url }}/embed/{{ chave }}" width="100%" height="{{ 520 if chave in ('estados', 'segmentos') else 340 }}" style="border:0" loading="lazy" title="{{ g.titulo }}"&gt;&lt;/iframe&gt;
+&lt;p&gt;Fonte: &lt;a href="https://www.turbovenda.com.br{{ url }}"&gt;TurboVenda&lt;/a&gt;, com dados abertos da Receita Federal ({{ mes_br }}).&lt;/p&gt;</textarea>
+    </details>
+  </figure>
+  {% if chave == 'segmentos' %}
+  <p>Veja as empresas de cada segmento por estado e cidade:
+    {% for x in d.por_segmento[:8] %}<a href="/empresas/{{ x.slug }}">{{ x.nome|lower }}</a>{% if not loop.last %}, {% endif %}{% endfor %}.</p>
+  {% endif %}
+  {% endfor %}
+
+  <h2>Cidades com mais empresas ativas</h2>
+  <table class="dados"><tbody>
+    {% for c in cidades %}<tr><td>{% if c.url %}<a href="{{ c.url }}">{{ c.nome }} - {{ c.uf }}</a>{% else %}{{ c.nome }} - {{ c.uf }}{% endif %}</td><td class="num">{{ fmt(c.n) }}</td></tr>{% endfor %}
+  </tbody></table>
+
+  <h2>Metodologia</h2>
+  <ul class="metodologia">
+    <li><b>Fonte:</b> dados abertos do Cadastro Nacional da Pessoa Jurídica, publicados pela Receita Federal (base de {{ mes_br }}).</li>
+    <li><b>O que entra:</b> estabelecimentos com situação cadastral ativa e com telefone ou e-mail cadastrado. Empresas sem nenhum contato na Receita ficam de fora — por isso o total é menor que o número oficial de CNPJs ativos.</li>
+    <li><b>Ano de abertura:</b> conta as empresas ativas hoje; as que abriram e já fecharam não aparecem.</li>
+    <li><b>Sócio identificado:</b> empresas com sócio-administrador, presidente, administrador ou titular no quadro de sócios publicado pela Receita.</li>
+    <li><b>Atualização:</b> recalculado automaticamente a cada nova base mensal da Receita. Última atualização: {{ gerado_em.strftime('%d/%m/%Y') }}.</li>
+    <li><b>Como citar:</b> {{ citacao }}</li>
+  </ul>
+  <p>Detalhes sobre o uso dos dados e pedidos de remoção em <a href="/empresas/sobre-os-dados">sobre os dados</a>. Para jornalistas: <a href="/imprensa">kit de imprensa</a>.</p>
+
+  <div class="cta-box">
+    <p><strong>Quer a lista dessas empresas para vender?</strong><br>
+       O TurboVenda filtra por segmento, cidade e porte e entrega o contato de quem decide.</p>
+    <a href="/cadastro?utm_source=dados&utm_medium=organic&utm_campaign=relatorio" class="cta-btn" data-cta="relatorio-cadastro">Testar grátis com 50 leads</a>
+  </div>
+{% endblock %}

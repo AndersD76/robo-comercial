@@ -112,6 +112,21 @@ def descartar_zips_quebrados(pasta_mes):
             os.remove(caminho)
 
 
+def atualizar_relatorio(indice, dsn_arquivo):
+    """Recalcula /dados/empresas-ativas-no-brasil com a base nova. Falhar
+    aqui não desfaz a troca do índice: só avisa no log."""
+    if not dsn_arquivo or not os.path.exists(dsn_arquivo):
+        print('[aviso] sem arquivo de DSN: relatório de dados não atualizado')
+        return
+    sys.stdout.flush()
+    r = subprocess.run([sys.executable, '-u', os.path.join(AQUI, 'relatorio_dados.py'),
+                        '--indice', indice, '--dsn-arquivo', dsn_arquivo],
+                       stdout=sys.stdout, stderr=subprocess.STDOUT,
+                       creationflags=SEM_JANELA | PRIORIDADE_BAIXA)
+    if r.returncode != 0:
+        print(f'[aviso] relatório de dados falhou (código {r.returncode})')
+
+
 def limpar_meses_antigos(pasta_zips, manter=2):
     """Guarda o mês atual e o anterior (para remontar sem baixar de novo)."""
     meses = sorted(n for n in os.listdir(pasta_zips)
@@ -131,6 +146,9 @@ def main():
     ap.add_argument('--forcar', action='store_true',
                     help='remonta mesmo que o mês seja o mesmo do índice')
     ap.add_argument('--log', help='acrescenta a saída neste arquivo')
+    ap.add_argument('--dsn-arquivo', default=os.path.expandvars(
+        r'%LOCALAPPDATA%\TurboVenda\database_url.txt'),
+        help='DSN do banco para gravar o relatório de dados da base nova')
     args = ap.parse_args()
 
     if args.log:
@@ -184,6 +202,7 @@ def main():
     gravar_mes(args.indice, ultimo)
     print(f'[ok] indice atualizado para {ultimo}: {linhas:,} empresas')
     limpar_meses_antigos(args.zips)
+    atualizar_relatorio(args.indice, args.dsn_arquivo)
     return 0
 
 

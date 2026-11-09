@@ -10,6 +10,11 @@
     .etapa.destaque-final{border-color:rgba(99,102,241,.6);background:rgba(99,102,241,.12)}
     .etapa em{color:#818cf8;font-style:normal;font-size:13px;margin-left:8px}
     @media(max-width:700px){.calc-grid{grid-template-columns:1fr}}
+    .compartilhar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}
+    .compartilhar button{background:transparent;border:1px solid rgba(255,255,255,.18);color:#cbd5e1;border-radius:8px;padding:8px 14px;cursor:pointer;font:inherit;font-size:14px}
+    .compartilhar button:hover{border-color:#818cf8;color:#fff}
+    .cta-resultado{margin-top:12px;color:#cbd5e1;font-size:14.5px}
+    .cta-resultado a{color:#a5b4fc;font-weight:600}
 {% endblock %}
 {% block conteudo %}
   <div class="crumbs"><a href="/">Home</a> › <a href="/ferramentas">Ferramentas</a> › Calculadora de leads</div>
@@ -29,6 +34,9 @@
       <div><label for="dias">Dias úteis de prospecção no mês</label><input id="dias" type="number" min="1" max="31" value="21"></div>
     </div>
     <div class="funil" id="funil" aria-live="polite"></div>
+    <p class="cta-resultado" id="cta-resultado"></p>
+    <div class="compartilhar"><button type="button" onclick="copiarLink(this)">Copiar link do resultado</button>
+      <small style="color:#64748b">o link guarda os números que você digitou</small></div>
   </div>
 
   <div class="cta-box">
@@ -57,6 +65,9 @@
 <script>
 (function(){
   var ids=['meta','ticket','t_fech','t_prop','t_reun','t_resp','dias'];
+  // Valores vindos do link compartilhado (?meta=...&ticket=...)
+  var q=new URLSearchParams(location.search);
+  ids.forEach(function(id){var x=parseFloat(q.get(id));if(isFinite(x)&&x>0)document.getElementById(id).value=x});
   function v(id){var x=parseFloat(document.getElementById(id).value);return isFinite(x)&&x>0?x:0}
   function f(n){return Math.ceil(n).toLocaleString('pt-BR')}
   function calc(){
@@ -69,9 +80,18 @@
     var h=linhas.map(function(l){return '<div class="etapa"><span>'+l[0]+'</span><b>'+f(l[1])+'</b></div>'}).join('');
     h+='<div class="etapa destaque-final"><span>Leads para abordar por dia útil</span><b>'+f(leads/dias)+'<em>e '+f(conv/dias)+' conversas/dia</em></b></div>';
     el.innerHTML=h;
+    document.getElementById('cta-resultado').innerHTML='São <b>'+f(leads)+' empresas</b> para abordar no mês. '+
+      'O TurboVenda encontra essas empresas e o contato de quem decide: '+
+      '<a href="/cadastro?utm_source=ferramentas&utm_medium=organic&utm_campaign=calculadora-resultado" data-cta="calculadora-resultado">teste grátis com 50 leads</a>.';
+    var p=new URLSearchParams();ids.forEach(function(id){p.set(id,document.getElementById(id).value)});
+    if(window.history&&history.replaceState)history.replaceState(null,'','?'+p.toString());
   }
   ids.forEach(function(id){document.getElementById(id).addEventListener('input',calc)});
   calc();
 })();
+function copiarLink(btn){var u=location.href;
+  (navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(function(){
+    btn.textContent='Link copiado!';setTimeout(function(){btn.textContent='Copiar link do resultado'},1800)
+  },function(){prompt('Copie o link:',u)})}
 </script>
 {% endblock %}

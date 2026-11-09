@@ -237,3 +237,41 @@ def test_resposta_direta_nos_pilares(client):
         html = client.get(f"/blog/{c['pilar']}").get_data(as_text=True)
         cabecalho = html.split('<h1>', 1)[1].split('</header>', 1)[0]
         assert 'class="resposta-direta"' in cabecalho, c['pilar']
+
+
+def _relatorio_exemplo():
+    from datetime import datetime
+    return {'gerado_em': datetime(2026, 11, 9, 12, 0), 'base_mes': '2026-10-13', 'dados': {
+        'total': 1000, 'com_socio': 330, 'com_telefone': 980, 'com_email': 930,
+        'abertura_mais_recente': '2026-10-11',
+        'por_uf': [{'uf': 'SP', 'nome': 'São Paulo', 'n': 300}, {'uf': 'RS', 'nome': 'Rio Grande do Sul', 'n': 100}],
+        'por_ano': [{'ano': 2024, 'n': 90}, {'ano': 2025, 'n': 120}, {'ano': 2026, 'n': 110}],
+        'por_porte': [{'porte': 'Microempresa', 'n': 800}, {'porte': 'Pequena (EPP)', 'n': 200}],
+        'por_segmento': [{'codigo': '2512800', 'nome': 'Metalúrgicas', 'slug': 'metalurgicas', 'n': 50}],
+        'cidades': [{'municipio': 'SAO PAULO', 'uf': 'SP', 'n': 200}]}}
+
+
+def test_relatorio_de_dados_e_embed(client, monkeypatch):
+    monkeypatch.setattr(A, '_relatorio_dados', _relatorio_exemplo)
+    r = client.get('/dados/empresas-ativas-no-brasil')
+    assert r.status_code == 200
+    d = _extrair(r.get_data(as_text=True))
+    assert d['title'] and len(d['title']) <= A.TITULO_MAX and d['h1'] == 1
+    tipos = [json.loads(b).get('@type') for b in d['ld']]
+    assert 'Dataset' in tipos and 'BreadcrumbList' in tipos
+    html = r.get_data(as_text=True)
+    assert html.count('<svg') == 4 and 'outubro de 2026' in html and 'São Paulo' in html
+    e = client.get('/dados/empresas-ativas-no-brasil/embed/estados')
+    assert e.status_code == 200 and 'X-Frame-Options' not in e.headers
+    assert 'noindex' in e.get_data(as_text=True) and 'turbovenda.com.br/dados/empresas-ativas-no-brasil' in e.get_data(as_text=True)
+    assert client.get('/dados/empresas-ativas-no-brasil/embed/nao-existe').status_code == 404
+    assert client.get('/precos').headers.get('X-Frame-Options') == 'SAMEORIGIN'
+
+
+def test_kit_de_imprensa(client, monkeypatch):
+    monkeypatch.setattr(A, '_relatorio_dados', _relatorio_exemplo)
+    r = client.get('/imprensa')
+    html = r.get_data(as_text=True)
+    assert r.status_code == 200 and 'Fonte: TurboVenda' in html and '1.000' in html
+    monkeypatch.setattr(A, '_relatorio_dados', lambda: None)
+    assert client.get('/imprensa').status_code == 200   # sem relatório, sem números

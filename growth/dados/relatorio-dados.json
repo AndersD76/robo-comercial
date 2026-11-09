@@ -1,0 +1,661 @@
+{
+ "base_mes": "2026-10-13",
+ "total": 26223008,
+ "com_socio": 8635380,
+ "com_telefone": 25755827,
+ "com_email": 24437373,
+ "abertura_mais_recente": "2026-10-11",
+ "por_uf": [
+  {
+   "uf": "SP",
+   "nome": "São Paulo",
+   "n": 8173755
+  },
+  {
+   "uf": "MG",
+   "nome": "Minas Gerais",
+   "n": 2739374
+  },
+  {
+   "uf": "RJ",
+   "nome": "Rio de Janeiro",
+   "n": 2140910
+  },
+  {
+   "uf": "PR",
+   "nome": "Paraná",
+   "n": 1866949
+  },
+  {
+   "uf": "RS",
+   "nome": "Rio Grande do Sul",
+   "n": 1594018
+  },
+  {
+   "uf": "SC",
+   "nome": "Santa Catarina",
+   "n": 1442944
+  },
+  {
+   "uf": "BA",
+   "nome": "Bahia",
+   "n": 1181360
+  },
+  {
+   "uf": "GO",
+   "nome": "Goiás",
+   "n": 989378
+  },
+  {
+   "uf": "CE",
+   "nome": "Ceará",
+   "n": 694666
+  },
+  {
+   "uf": "PE",
+   "nome": "Pernambuco",
+   "n": 683864
+  },
+  {
+   "uf": "ES",
+   "nome": "Espírito Santo",
+   "n": 577088
+  },
+  {
+   "uf": "MT",
+   "nome": "Mato Grosso",
+   "n": 533309
+  },
+  {
+   "uf": "PA",
+   "nome": "Pará",
+   "n": 475980
+  },
+  {
+   "uf": "DF",
+   "nome": "Distrito Federal",
+   "n": 452931
+  },
+  {
+   "uf": "MS",
+   "nome": "Mato Grosso do Sul",
+   "n": 348459
+  },
+  {
+   "uf": "MA",
+   "nome": "Maranhão",
+   "n": 339990
+  },
+  {
+   "uf": "PB",
+   "nome": "Paraíba",
+   "n": 318214
+  },
+  {
+   "uf": "RN",
+   "nome": "Rio Grande do Norte",
+   "n": 284508
+  },
+  {
+   "uf": "AM",
+   "nome": "Amazonas",
+   "n": 268282
+  },
+  {
+   "uf": "AL",
+   "nome": "Alagoas",
+   "n": 217998
+  },
+  {
+   "uf": "PI",
+   "nome": "Piauí",
+   "n": 212532
+  },
+  {
+   "uf": "TO",
+   "nome": "Tocantins",
+   "n": 167500
+  },
+  {
+   "uf": "SE",
+   "nome": "Sergipe",
+   "n": 164312
+  },
+  {
+   "uf": "RO",
+   "nome": "Rondônia",
+   "n": 160755
+  },
+  {
+   "uf": "AC",
+   "nome": "Acre",
+   "n": 49286
+  },
+  {
+   "uf": "AP",
+   "nome": "Amapá",
+   "n": 46649
+  },
+  {
+   "uf": "RR",
+   "nome": "Roraima",
+   "n": 46190
+  }
+ ],
+ "por_ano": [
+  {
+   "ano": 2010,
+   "n": 369368
+  },
+  {
+   "ano": 2011,
+   "n": 431568
+  },
+  {
+   "ano": 2012,
+   "n": 438836
+  },
+  {
+   "ano": 2013,
+   "n": 486303
+  },
+  {
+   "ano": 2014,
+   "n": 504846
+  },
+  {
+   "ano": 2015,
+   "n": 601625
+  },
+  {
+   "ano": 2016,
+   "n": 650526
+  },
+  {
+   "ano": 2017,
+   "n": 750665
+  },
+  {
+   "ano": 2018,
+   "n": 924279
+  },
+  {
+   "ano": 2019,
+   "n": 1194988
+  },
+  {
+   "ano": 2020,
+   "n": 1301204
+  },
+  {
+   "ano": 2021,
+   "n": 1670371
+  },
+  {
+   "ano": 2022,
+   "n": 1824298
+  },
+  {
+   "ano": 2023,
+   "n": 2329656
+  },
+  {
+   "ano": 2024,
+   "n": 2547985
+  },
+  {
+   "ano": 2025,
+   "n": 3834495
+  },
+  {
+   "ano": 2026,
+   "n": 4107065
+  }
+ ],
+ "por_porte": [
+  {
+   "porte": "Microempresa",
+   "n": 22030697
+  },
+  {
+   "porte": "Média/Grande",
+   "n": 2776281
+  },
+  {
+   "porte": "Pequena (EPP)",
+   "n": 1411969
+  },
+  {
+   "porte": "Não informado",
+   "n": 4061
+  }
+ ],
+ "por_segmento": [
+  {
+   "codigo": "4930201",
+   "nome": "Transportadoras (municipal)",
+   "slug": "transporte-de-cargas-municipal",
+   "n": 501252
+  },
+  {
+   "codigo": "4930202",
+   "nome": "Transportadoras",
+   "slug": "transportadoras",
+   "n": 439147
+  },
+  {
+   "codigo": "4321500",
+   "nome": "Empresas de instalações elétricas",
+   "slug": "instalacoes-eletricas",
+   "n": 327451
+  },
+  {
+   "codigo": "8630503",
+   "nome": "Consultórios médicos",
+   "slug": "consultorios-medicos",
+   "n": 215819
+  },
+  {
+   "codigo": "4120400",
+   "nome": "Construtoras",
+   "slug": "construtoras",
+   "n": 169767
+  },
+  {
+   "codigo": "7020400",
+   "nome": "Consultorias empresariais",
+   "slug": "consultoria-empresarial",
+   "n": 167266
+  },
+  {
+   "codigo": "7112000",
+   "nome": "Empresas de engenharia",
+   "slug": "engenharia",
+   "n": 155917
+  },
+  {
+   "codigo": "1412601",
+   "nome": "Confecções",
+   "slug": "confeccao-de-vestuario",
+   "n": 152460
+  },
+  {
+   "codigo": "8630504",
+   "nome": "Clínicas odontológicas",
+   "slug": "clinicas-odontologicas",
+   "n": 126456
+  },
+  {
+   "codigo": "3101200",
+   "nome": "Fabricantes de móveis",
+   "slug": "moveis-de-madeira",
+   "n": 123657
+  },
+  {
+   "codigo": "6920601",
+   "nome": "Escritórios de contabilidade",
+   "slug": "contabilidade",
+   "n": 107742
+  },
+  {
+   "codigo": "2542000",
+   "nome": "Serralherias",
+   "slug": "serralheria",
+   "n": 95321
+  },
+  {
+   "codigo": "2539001",
+   "nome": "Usinagens",
+   "slug": "usinagem",
+   "n": 80059
+  },
+  {
+   "codigo": "6209100",
+   "nome": "Suporte técnico de TI",
+   "slug": "suporte-tecnico-ti",
+   "n": 76315
+  },
+  {
+   "codigo": "0161003",
+   "nome": "Prestadoras de serviços agrícolas",
+   "slug": "servicos-agricolas",
+   "n": 71562
+  },
+  {
+   "codigo": "6204000",
+   "nome": "Consultorias de TI",
+   "slug": "consultoria-em-ti",
+   "n": 70215
+  },
+  {
+   "codigo": "6201501",
+   "nome": "Software houses",
+   "slug": "desenvolvimento-de-software",
+   "n": 67695
+  },
+  {
+   "codigo": "3321000",
+   "nome": "Instaladoras de máquinas industriais",
+   "slug": "instalacao-de-maquinas",
+   "n": 54050
+  },
+  {
+   "codigo": "1091101",
+   "nome": "Panificação industrial",
+   "slug": "panificacao-industrial",
+   "n": 39449
+  },
+  {
+   "codigo": "6202300",
+   "nome": "Desenvolvedoras de software customizável",
+   "slug": "software-customizavel",
+   "n": 37056
+  },
+  {
+   "codigo": "7311400",
+   "nome": "Agências de publicidade",
+   "slug": "agencias-de-publicidade",
+   "n": 32040
+  },
+  {
+   "codigo": "8630501",
+   "nome": "Clínicas médicas",
+   "slug": "clinicas-medicas",
+   "n": 30074
+  },
+  {
+   "codigo": "2512800",
+   "nome": "Fabricantes de esquadrias de metal",
+   "slug": "esquadrias-de-metal",
+   "n": 29961
+  },
+  {
+   "codigo": "1813001",
+   "nome": "Gráficas",
+   "slug": "graficas",
+   "n": 25766
+  },
+  {
+   "codigo": "4639701",
+   "nome": "Atacadistas de alimentos",
+   "slug": "atacado-de-alimentos",
+   "n": 17126
+  },
+  {
+   "codigo": "3314710",
+   "nome": "Manutenção de máquinas",
+   "slug": "manutencao-de-maquinas",
+   "n": 14159
+  },
+  {
+   "codigo": "8640202",
+   "nome": "Laboratórios clínicos",
+   "slug": "laboratorios-clinicos",
+   "n": 12695
+  },
+  {
+   "codigo": "4530701",
+   "nome": "Distribuidoras de autopeças",
+   "slug": "atacado-de-autopecas",
+   "n": 12390
+  },
+  {
+   "codigo": "4663000",
+   "nome": "Revendas de máquinas industriais",
+   "slug": "comercio-de-maquinas-industriais",
+   "n": 10938
+  },
+  {
+   "codigo": "4683400",
+   "nome": "Distribuidoras de defensivos e fertilizantes",
+   "slug": "defensivos-e-fertilizantes",
+   "n": 7820
+  },
+  {
+   "codigo": "1052000",
+   "nome": "Laticínios",
+   "slug": "laticinios",
+   "n": 7407
+  },
+  {
+   "codigo": "4661300",
+   "nome": "Revendas de máquinas agropecuárias",
+   "slug": "comercio-de-maquinas-agropecuarias",
+   "n": 6972
+  },
+  {
+   "codigo": "4679699",
+   "nome": "Atacadistas de materiais de construção",
+   "slug": "atacado-de-materiais-de-construcao",
+   "n": 6885
+  },
+  {
+   "codigo": "2511000",
+   "nome": "Fabricantes de estruturas metálicas",
+   "slug": "estruturas-metalicas",
+   "n": 6544
+  },
+  {
+   "codigo": "4644301",
+   "nome": "Distribuidoras de medicamentos",
+   "slug": "atacado-de-medicamentos",
+   "n": 5493
+  },
+  {
+   "codigo": "2222600",
+   "nome": "Fabricantes de embalagens plásticas",
+   "slug": "embalagens-plasticas",
+   "n": 5425
+  },
+  {
+   "codigo": "4672900",
+   "nome": "Atacadistas de ferragens",
+   "slug": "atacado-de-ferragens",
+   "n": 5238
+  },
+  {
+   "codigo": "4632001",
+   "nome": "Atacadistas de cereais",
+   "slug": "atacado-de-cereais",
+   "n": 4632
+  },
+  {
+   "codigo": "4649408",
+   "nome": "Atacadistas de produtos de limpeza",
+   "slug": "atacado-de-produtos-de-limpeza",
+   "n": 4313
+  },
+  {
+   "codigo": "4635499",
+   "nome": "Distribuidoras de bebidas",
+   "slug": "atacado-de-bebidas",
+   "n": 3949
+  },
+  {
+   "codigo": "4692300",
+   "nome": "Atacadistas de insumos agropecuários",
+   "slug": "insumos-agropecuarios",
+   "n": 3737
+  },
+  {
+   "codigo": "1731100",
+   "nome": "Fabricantes de embalagens de papel",
+   "slug": "embalagens-de-papel",
+   "n": 3504
+  },
+  {
+   "codigo": "2869100",
+   "nome": "Fabricantes de máquinas industriais",
+   "slug": "maquinas-industriais",
+   "n": 3492
+  },
+  {
+   "codigo": "2829199",
+   "nome": "Fabricantes de máquinas de uso geral",
+   "slug": "maquinas-uso-geral",
+   "n": 3456
+  },
+  {
+   "codigo": "1066000",
+   "nome": "Fábricas de ração",
+   "slug": "alimentos-para-animais",
+   "n": 3313
+  },
+  {
+   "codigo": "2833000",
+   "nome": "Fabricantes de máquinas agrícolas",
+   "slug": "maquinas-agricolas",
+   "n": 2854
+  },
+  {
+   "codigo": "5211701",
+   "nome": "Armazéns gerais",
+   "slug": "armazens-gerais",
+   "n": 2614
+  },
+  {
+   "codigo": "1011201",
+   "nome": "Frigoríficos (bovinos)",
+   "slug": "frigorificos",
+   "n": 1427
+  },
+  {
+   "codigo": "4646002",
+   "nome": "Atacadistas de higiene e cosméticos",
+   "slug": "atacado-de-higiene-e-cosmeticos",
+   "n": 1052
+  },
+  {
+   "codigo": "2451200",
+   "nome": "Fundições",
+   "slug": "fundicao",
+   "n": 635
+  },
+  {
+   "codigo": "1012101",
+   "nome": "Abatedouros de aves",
+   "slug": "abate-de-aves",
+   "n": 597
+  },
+  {
+   "codigo": "1061901",
+   "nome": "Beneficiadoras de arroz",
+   "slug": "beneficiamento-de-arroz",
+   "n": 545
+  },
+  {
+   "codigo": "1041400",
+   "nome": "Indústrias de óleos vegetais",
+   "slug": "oleos-vegetais",
+   "n": 425
+  },
+  {
+   "codigo": "2029100",
+   "nome": "Indústrias químicas",
+   "slug": "produtos-quimicos",
+   "n": 355
+  }
+ ],
+ "cidades": [
+  {
+   "municipio": "Sao Paulo",
+   "uf": "SP",
+   "n": 2600460
+  },
+  {
+   "municipio": "Rio De Janeiro",
+   "uf": "RJ",
+   "n": 986185
+  },
+  {
+   "municipio": "Belo Horizonte",
+   "uf": "MG",
+   "n": 507788
+  },
+  {
+   "municipio": "Brasilia",
+   "uf": "DF",
+   "n": 452931
+  },
+  {
+   "municipio": "Curitiba",
+   "uf": "PR",
+   "n": 450435
+  },
+  {
+   "municipio": "Fortaleza",
+   "uf": "CE",
+   "n": 323106
+  },
+  {
+   "municipio": "Salvador",
+   "uf": "BA",
+   "n": 318345
+  },
+  {
+   "municipio": "Goiania",
+   "uf": "GO",
+   "n": 309920
+  },
+  {
+   "municipio": "Porto Alegre",
+   "uf": "RS",
+   "n": 262064
+  },
+  {
+   "municipio": "Campinas",
+   "uf": "SP",
+   "n": 222962
+  },
+  {
+   "municipio": "Manaus",
+   "uf": "AM",
+   "n": 207075
+  },
+  {
+   "municipio": "Guarulhos",
+   "uf": "SP",
+   "n": 203449
+  },
+  {
+   "municipio": "Recife",
+   "uf": "PE",
+   "n": 195282
+  },
+  {
+   "municipio": "Ribeirao Preto",
+   "uf": "SP",
+   "n": 150674
+  },
+  {
+   "municipio": "Florianopolis",
+   "uf": "SC",
+   "n": 148862
+  },
+  {
+   "municipio": "Campo Grande",
+   "uf": "MS",
+   "n": 146102
+  },
+  {
+   "municipio": "Uberlandia",
+   "uf": "MG",
+   "n": 138676
+  },
+  {
+   "municipio": "Sorocaba",
+   "uf": "SP",
+   "n": 136256
+  },
+  {
+   "municipio": "Sao Bernardo Do Campo",
+   "uf": "SP",
+   "n": 129048
+  },
+  {
+   "municipio": "Joinville",
+   "uf": "SC",
+   "n": 125199
+  }
+ ]
+}

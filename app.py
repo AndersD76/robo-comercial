@@ -335,7 +335,8 @@ def _host_canonico():
 @app.after_request
 def _set_security_headers(resp):
     resp.headers['X-Content-Type-Options'] = 'nosniff'
-    resp.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    if not (request.path.startswith('/dados/') and '/embed/' in request.path):
+        resp.headers['X-Frame-Options'] = 'SAMEORIGIN'
     resp.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     resp.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
     resp.headers.pop('Server', None)
@@ -2562,6 +2563,11 @@ def _static_sitemap_urls():
     for f in FERRAMENTAS:
         urls.append((f"https://www.turbovenda.com.br/ferramentas/{f['slug']}",
                      rev, 'monthly', '0.9'))
+    urls.append(('https://www.turbovenda.com.br/imprensa', rev, 'monthly', '0.5'))
+    rel = _relatorio_dados()
+    if rel:
+        urls.append((f'https://www.turbovenda.com.br{RELATORIO_URL}',
+                     rel['gerado_em'].date().isoformat(), 'monthly', '0.8'))
     urls.append(('https://www.turbovenda.com.br/alternativas', rev, 'monthly', '0.7'))
     for a in ALTERNATIVAS:
         urls.append((f"https://www.turbovenda.com.br/alternativas/{a['slug']}",
@@ -2673,6 +2679,9 @@ def _llms_resumo():
         "https://www.turbovenda.com.br/ferramentas\n"
         "- Comparativos com Econodata, Speedio, Leads2b e Apollo: "
         "https://www.turbovenda.com.br/alternativas\n"
+        "- Empresas ativas no Brasil por estado, ano de abertura e segmento (relatório): "
+        "https://www.turbovenda.com.br/dados/empresas-ativas-no-brasil
+"
         "- Conteúdo completo (ferramentas, comparativos e artigos em texto): "
         "https://www.turbovenda.com.br/llms-full.txt\n"
     )
@@ -2714,6 +2723,9 @@ def _llms_completo():
                'Páginas com contagem de empresas ativas por segmento, estado e cidade, feitas '
                f'com os dados abertos do CNPJ publicados pela Receita Federal: {_SITE}/empresas '
                f'(fonte e metodologia: {_SITE}/empresas/sobre-os-dados).',
+               f'Relatório com as empresas ativas no Brasil por estado, ano de abertura, '
+               f'segmento e porte, com gráficos para incorporar: {_SITE}/dados/empresas-ativas-no-brasil. '
+               f'Kit de imprensa: {_SITE}/imprensa.',
                '', '# Artigos do blog']
     for post in BLOG_POSTS:
         partes += [f"\n## {post['titulo']}", f"{_SITE}/blog/{post['slug']}",
@@ -3951,6 +3963,152 @@ def ferramenta_calculadora():
                                  ("Calculadora de leads", canonical)]),
                  _ld_faq([(q, re.sub(r'<[^>]+>', '', a)) for q, a in faq])],
         ga_id=GA_MEASUREMENT_ID)
+
+
+# =============================================================================
+# Relatório de dados próprios (Fase 4 do growth): números agregados da base
+# completa da Receita, calculados no PC (scripts/relatorio_dados.py) e
+# gravados na tabela relatorio_dados. Gráficos incorporáveis por iframe.
+# =============================================================================
+
+import relatorio_graficos  # noqa: E402
+
+RELATORIO_URL = '/dados/empresas-ativas-no-brasil'
+_rel_cache = {'em': 0.0, 'linha': None}
+_MESES = ('janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho',
+          'agosto', 'setembro', 'outubro', 'novembro', 'dezembro')
+
+
+def _relatorio_dados():
+    if time.time() - _rel_cache['em'] < 3600:
+        return _rel_cache['linha']
+    linha = None
+    if DATABASE_URL:
+        try:
+            with _conn() as conn:
+                c = conn.cursor()
+                c.execute("SELECT to_regclass('public.relatorio_dados') AS t")
+                if c.fetchone()['t']:
+                    c.execute('SELECT gerado_em, base_mes, dados FROM relatorio_dados '
+                              'ORDER BY id DESC LIMIT 1')
+                    linha = c.fetchone()
+        except Exception:
+            logger.exception('relatorio_dados: falha ao ler')
+    _rel_cache.update(em=time.time(), linha=linha)
+    return linha
+
+
+def _relatorio_contexto(linha, tema):
+    d = linha['dados']
+    if isinstance(d, str):
+        d = json.loads(d)
+    mes = linha['base_mes'] or ''
+    mes_br = (f"{_MESES[int(mes[5:7]) - 1]} de {mes[:4]}" if len(mes) >= 7 else 'mês mais recente')
+    total = d['total']
+    pct = lambda n: round(100 * n / total) if total else 0  # noqa: E731
+    estados = d['por_uf'][:15]
+    anos = [a for a in d['por_ano'] if a['ano'] >= 2010]
+    ano_max = max(anos, key=lambda a: a['n']) if anos else None
+    segmentos = d['por_segmento'][:15]
+    graficos = {
+        'estados': {
+            'titulo': 'Empresas ativas por estado (15 maiores)',
+            'svg': relatorio_graficos.barras([(e['nome'], e['n']) for e in estados],
+                                             'Empresas ativas por estado', tema=tema),
+            'tabela': [(e['nome'], e['n']) for e in d['por_uf']]},
+        'aberturas': {
+            'titulo': 'Empresas ativas hoje, por ano de abertura',
+            'svg': relatorio_graficos.colunas(
+                [(a['ano'], a['n']) for a in anos], 'Empresas ativas por ano de abertura',
+                destacar={anos[-1]['ano'], ano_max['ano']} if anos else (), tema=tema),
+            'tabela': [(a['ano'], a['n']) for a in anos]},
+        'segmentos': {
+            'titulo': 'Segmentos B2B com mais empresas ativas',
+            'svg': relatorio_graficos.barras([(x['nome'], x['n']) for x in segmentos],
+                                             'Segmentos B2B com mais empresas ativas', tema=tema),
+            'tabela': [(x['nome'], x['n']) for x in d['por_segmento']]},
+        'porte': {
+            'titulo': 'Empresas ativas por porte',
+            'svg': relatorio_graficos.barras([(x['porte'], x['n']) for x in d['por_porte']],
+                                             'Empresas ativas por porte', tema=tema),
+            'tabela': [(x['porte'], x['n']) for x in d['por_porte']]},
+    }
+    agg = _pseo_agg() if DATABASE_URL or _PSEO_SQLITE else {'cidades': {}}
+    cidades = []
+    for x in d['cidades'][:10]:
+        nome = nome_municipio(x['municipio'], x['uf'])
+        slug = slugify(f"{x['municipio']}-{x['uf']}")
+        cidades.append({'nome': nome, 'uf': x['uf'], 'n': x['n'],
+                        'url': f'/empresas/cidade/{slug}' if slug in (agg or {}).get('cidades', {}) else None})
+    sp = next((e for e in d['por_uf'] if e['uf'] == 'SP'), None)
+    return {
+        'd': d, 'mes_br': mes_br, 'gerado_em': linha['gerado_em'], 'fmt': relatorio_graficos.fmt_n,
+        'pct_socio': pct(d['com_socio']), 'pct_sp': pct(sp['n']) if sp else 0,
+        'abertas_ano_passado': next((a['n'] for a in anos if a['ano'] == _dt.date.today().year - 1), None),
+        'ano_passado': _dt.date.today().year - 1,
+        'graficos': graficos, 'cidades': cidades, 'segmento_top': segmentos[0] if segmentos else None,
+        'citacao': (f'Fonte: TurboVenda, com dados abertos do CNPJ da Receita Federal '
+                    f'(base de {mes_br}).'),
+    }
+
+
+@app.route(RELATORIO_URL)
+def relatorio_dados_pagina():
+    linha = _relatorio_dados()
+    if not linha:
+        return render_template('404.html'), 404
+    ctx = _relatorio_contexto(linha, 'escuro')
+    canonical = f'{_SITE}{RELATORIO_URL}'
+    total_fmt = ctx['fmt'](ctx['d']['total'])
+    ld_dataset = json.dumps({
+        '@context': 'https://schema.org', '@type': 'Dataset',
+        'name': 'Empresas ativas no Brasil por estado, ano de abertura, segmento e porte',
+        'description': (f'Contagem de {total_fmt} empresas ativas com telefone ou e-mail '
+                        f'cadastrado, a partir dos dados abertos do CNPJ da Receita Federal '
+                        f'(base de {ctx["mes_br"]}).'),
+        'url': canonical, 'inLanguage': 'pt-BR', 'spatialCoverage': 'Brasil',
+        'creator': {'@id': f'{_SITE}/#organizacao'},
+        'isBasedOn': 'https://dados.gov.br/dados/conjuntos-dados/cadastro-nacional-da-pessoa-juridica---cnpj',
+        'dateModified': ctx['gerado_em'].date().isoformat(),
+    }, ensure_ascii=False)
+    return render_template(
+        'relatorio_dados.html', **ctx, url=RELATORIO_URL,
+        titulo=f'Empresas ativas no Brasil: {total_fmt} pela Receita | TurboVenda',
+        descricao=(f'{total_fmt} empresas ativas com contato na Receita Federal, por estado, '
+                   f'ano de abertura, segmento e porte. Base de {ctx["mes_br"]}, com gráficos '
+                   f'para incorporar.'),
+        canonical=canonical,
+        ld_json=[ld_dataset, _ld_breadcrumb([('Home', f'{_SITE}/'), ('Empresas', f'{_SITE}/empresas'),
+                                             ('Empresas ativas no Brasil', canonical)])],
+        ga_id=GA_MEASUREMENT_ID)
+
+
+@app.route('/imprensa')
+def imprensa():
+    linha = _relatorio_dados()
+    ctx = _relatorio_contexto(linha, 'escuro') if linha else {'d': None}
+    canonical = f'{_SITE}/imprensa'
+    return render_template(
+        'imprensa.html', **ctx, url=RELATORIO_URL,
+        titulo='Kit de imprensa: números, gráficos e marca | TurboVenda',
+        descricao=('Números sobre as empresas ativas no Brasil a partir dos dados abertos da '
+                   'Receita, gráficos para incorporar, logo e contato do TurboVenda.'),
+        canonical=canonical,
+        ld_json=[_ld_breadcrumb([('Home', f'{_SITE}/'), ('Imprensa', canonical)])],
+        ga_id=GA_MEASUREMENT_ID)
+
+
+@app.route(f'{RELATORIO_URL}/embed/<grafico>')
+def relatorio_dados_embed(grafico):
+    linha = _relatorio_dados()
+    if not linha:
+        return render_template('404.html'), 404
+    ctx = _relatorio_contexto(linha, 'claro')
+    g = ctx['graficos'].get(grafico)
+    if not g:
+        return render_template('404.html'), 404
+    return render_template('relatorio_embed.html', g=g, citacao=ctx['citacao'],
+                           url=f'{_SITE}{RELATORIO_URL}')
 
 
 # =============================================================================

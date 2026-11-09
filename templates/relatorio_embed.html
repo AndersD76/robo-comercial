@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, follow">
+  <link rel="canonical" href="{{ url }}">
+  <title>{{ g.titulo }} — TurboVenda</title>
+  <style>
+    html,body{margin:0;background:#fcfcfb;color:#0b0b0b;font-family:Inter,system-ui,-apple-system,'Segoe UI',sans-serif}
+    main{padding:16px 16px 12px;max-width:680px}
+    h1{font-size:16px;margin:0 0 12px;font-weight:700}
+    p{font-size:12.5px;color:#52514e;margin:10px 0 0}
+    a{color:#1c5cab}
+    .grafico{overflow-x:auto}
+    .grafico svg{min-width:520px;display:block}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>{{ g.titulo }}</h1>
+    <div class="grafico">{{ g.svg|safe }}</div>
+    <p>{{ citacao }} <a href="{{ url }}" target="_blank" rel="noopener">Ver o relatório completo</a>.</p>
+  </main>
+</body>
+</html>

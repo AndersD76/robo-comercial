@@ -7,6 +7,9 @@
     .linha-barra{margin-bottom:12px;font-size:14px;color:#cbd5e1}
     .linha-barra b{float:right;color:#fff}
     .resultado{margin-top:26px}
+    .compartilhar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}
+    .compartilhar button{background:transparent;border:1px solid rgba(255,255,255,.18);color:#cbd5e1;border-radius:8px;padding:8px 14px;cursor:pointer;font:inherit;font-size:14px}
+    .compartilhar button:hover{border-color:#818cf8;color:#fff}
     .aviso{background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:#fde68a;border-radius:10px;padding:12px 14px;font-size:14px;margin-top:16px}
     @media(max-width:700px){.form-grid{grid-template-columns:1fr}}
 {% endblock %}
@@ -57,6 +60,7 @@
     {% else %}
       {% set p = resultado.perfil %}
       <h2>{{ resultado.seg.label }} em {{ resultado.escopo }}</h2>
+      <div class="compartilhar"><button type="button" onclick="copiarLink(this)">Copiar link do resultado</button></div>
       <div class="destaques">
         <div class="destaque"><b>{{ fmt(resultado.n) }}</b><span>empresas ativas</span></div>
         {% if p %}
@@ -137,4 +141,11 @@
 
   <p class="fonte">Fonte: dados abertos do CNPJ — Receita Federal do Brasil. A ferramenta exibe contagens e dados
     cadastrais públicos; telefone e e-mail não são exibidos aqui. <a href="/empresas/sobre-os-dados">Sobre os dados e pedidos de remoção</a>.</p>
+{% endblock %}
+
+{% block scripts %}
+<script>function copiarLink(btn){var u=location.href;
+  (navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(function(){
+    btn.textContent='Link copiado!';setTimeout(function(){btn.textContent='Copiar link do resultado'},1800)
+  },function(){prompt('Copie o link:',u)})}</script>
 {% endblock %}
