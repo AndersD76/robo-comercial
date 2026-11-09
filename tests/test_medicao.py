@@ -107,3 +107,24 @@ def test_tipo_de_pagina():
     assert medicao.tipo_de_pagina('/empresas/usinagem/estado/rs') == 'segmento por estado'
     assert medicao.tipo_de_pagina('/empresas/cidade/passo-fundo-rs') == 'empresas por cidade'
     assert medicao.tipo_de_pagina('/blog/x') == 'blog' and medicao.tipo_de_pagina('/') == 'home'
+
+
+def test_share_of_voice_uma_rodada_por_mes():
+    import pytest
+    if not os.environ.get('DATABASE_URL'):
+        pytest.skip('precisa de DATABASE_URL (mesmo falsa) para importar o app')
+    import app
+
+    class C:
+        def __init__(self, existe, ultima):
+            self.r, self.existe, self.ultima = None, existe, ultima
+
+        def execute(self, sql, params=None):
+            self.r = {'t': 'share_of_voice' if self.existe else None} if 'to_regclass' in sql else {'r': self.ultima}
+
+        def fetchone(self):
+            return self.r
+    hoje = date(2026, 12, 1)
+    assert app._sov_pendente(C(False, None), hoje)                    # nunca rodou
+    assert app._sov_pendente(C(True, date(2026, 11, 9)), hoje)        # última no mês passado
+    assert not app._sov_pendente(C(True, date(2026, 12, 1)), hoje)    # já rodou neste mês

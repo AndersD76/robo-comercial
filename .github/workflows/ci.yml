@@ -33,7 +33,7 @@ jobs:
           # Porta fechada de propósito: as páginas renderizam sem banco e as
           # programáticas usam a base sintética do cnpj_ingest --sample
           DATABASE_URL: postgresql://ci:ci@127.0.0.1:1/ci
-        run: pytest tests/test_seo.py tests/test_seo_pseo.py tests/test_cota.py tests/test_indexnow.py tests/test_trafego.py -v --tb=short
+        run: pytest tests/test_seo.py tests/test_seo_pseo.py tests/test_cota.py tests/test_indexnow.py tests/test_trafego.py tests/test_medicao.py -v --tb=short
 
       - name: Validate templates
         run: |

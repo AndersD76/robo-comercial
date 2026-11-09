@@ -149,7 +149,7 @@ As programáticas e ferramentas caíram para 1,2–1,3 s. As páginas que usam �
 |---|---|---|
 | **Atualizar a base do Postgres** (jul/2026 → out/2026) | operação pesada no banco de produção (6,7 mi linhas) | 10 mil páginas `/empresas` com dados de 5 meses mais novos; destrava o brief de empresas recém-abertas |
 | **Subir os 8,6 mi sócios para o banco** | custo de armazenamento no Neon | destrava a ferramenta "sócios pelo CNPJ" (busca de volume alto) |
-| **Share of voice semanal** | ~US$ 4 por rodada na API da Anthropic | tendência semanal de citação em IA (hoje só a linha de base de 09/11) |
+| ~~Share of voice semanal~~ **mensal, aprovado em 09/11** | ~US$ 4 por rodada na API da Anthropic | roda sozinho no servidor às 7h do dia 1º de cada mês (ou na primeira manhã seguinte, se o servidor estiver fora) (`_sov_pendente`/`_rodar_share_of_voice` em `app.py`); resultado no `/admin/organico` |
 | **Gerador de mensagem com link compartilhável** | exigiria guardar o texto do usuário ou pagar a IA a cada visita | — |
 | **Respostas diretas nos outros 24 posts** | texto novo em cada post; os 6 pilares já têm | formato citável em todo o blog |
 

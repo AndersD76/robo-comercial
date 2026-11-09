@@ -10250,12 +10250,38 @@ def _medicao_passada(agora_br):
             if agora_br.weekday() == 0 and agora_br.hour == 8:
                 semana, _ = medicao.salvar_relatorio_semanal(conn, agora_br.date())
                 logger.info(f'medicao: relatório semanal de {semana} gerado')
+            if (agora_br.hour == 7 and os.environ.get('ANTHROPIC_API_KEY')
+                    and _sov_pendente(c, agora_br.date())):
+                conn.rollback()
+                _rodar_share_of_voice()
         finally:
             conn.rollback()
             c.execute('SELECT pg_advisory_unlock(%s)', (_MEDICAO_TRAVA,))
             conn.commit()
     finally:
         conn.close()
+
+
+def _sov_pendente(c, hoje):
+    """Medição de citação em IA: uma rodada por mês (decisão de 09/11/2026,
+    ~US$ 4 por rodada). Pendente se não houve rodada neste mês."""
+    c.execute("SELECT to_regclass('share_of_voice') AS t")
+    if not c.fetchone()['t']:
+        return True
+    c.execute('SELECT MAX(rodada) AS r FROM share_of_voice')
+    ultima = c.fetchone()['r']
+    return not ultima or ultima < hoje.replace(day=1)
+
+
+def _rodar_share_of_voice():
+    """As 30 perguntas fixas do ICP ao Claude com busca na web; grava em
+    share_of_voice (aparece no /admin/organico)."""
+    import subprocess
+    raiz = os.path.dirname(os.path.abspath(__file__))
+    r = subprocess.run([sys.executable, os.path.join('growth', 'ferramentas', 'share_of_voice.py')],
+                       cwd=raiz, capture_output=True, text=True, timeout=3600)
+    fim = (r.stdout or '').strip().splitlines()[-1:] or [(r.stderr or '')[-300:]]
+    logger.info(f'medicao: share of voice mensal (código {r.returncode}): {fim[0]}')
 
 
 def _medicao_loop():
