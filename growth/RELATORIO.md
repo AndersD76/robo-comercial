@@ -123,12 +123,12 @@ As programáticas e ferramentas caíram para 1,2–1,3 s. As páginas que usam �
 
 ## 3. TODO-VALIDAR (depende de você)
 
-1. **CNPJ da AndersTech** e **perfis oficiais** (LinkedIn, Instagram, YouTube…). Entram no JSON-LD pelas variáveis `MARCA_CNPJ` e `MARCA_PERFIS` (URLs separadas por espaço) no Railway; vazias, não aparecem.
+1. ~~CNPJ da AndersTech~~ **feito em 09/11:** `MARCA_CNPJ=42.073.416/0001-80` no Railway (ANDERS CONSULTORIA EM GESTAO EMPRESARIAL LTDA, nome fantasia ANDERSTECH, Passo Fundo/RS, na base da Receita de out/2026). **Falta:** perfis oficiais (LinkedIn, Instagram, YouTube…) em `MARCA_PERFIS` (URLs separadas por espaço); a página da empresa no LinkedIn ainda não existe.
 2. **Crawlers só de treino** (CCBot, Bytespider, Applebot-Extended, meta-externalagent): hoje liberados pelo `*`. Decidir se bloqueia.
 3. **Página de autor:** quem assina os artigos (nome, função, experiência real). Hoje o autor é a organização; o E-E-A-T pede uma pessoa com página própria.
 4. **Briefs em `growth/briefs/`:** aprovar quais viram página. O de sócios pelo CNPJ exige subir os 8,6 mi registros de sócios para o banco (custo de armazenamento); o de empresas recém-abertas exige atualizar a base de produção.
 5. **Rascunhos em `growth/rascunhos/`:** completar CNPJ, endereço, fundadores e uso de IA na página Sobre e na política editorial.
-6. **Texto do `/llms.txt`**: diz "Starter: 500 leads/mês", enquanto o checkout diz "até 500 leads". Confirmar qual vale.
+6. ~~Texto do `/llms.txt`~~ **resolvido em 09/11:** o site todo vende "500 leads/mês", mas a cota contava o total da conta (o cliente pagante travaria nos primeiros 500). A cota do Starter passou a contar os últimos 30 dias (`_sql_leads_na_cota`, `tests/test_cota.py`).
 7. **Rascunhos de distribuição** em `growth/fila-distribuicao/`: revisar e aprovar antes de publicar.
 8. **Textos dos diretórios** (out/2026) citam 6,7 mi CNPJs; o relatório novo usa 26,2 mi (base completa). Escolher qual número usar em cada lugar, sempre com a fonte.
 
@@ -139,7 +139,7 @@ As programáticas e ferramentas caíram para 1,2–1,3 s. As páginas que usam �
 3. **Search Console por API** (15 min): criar uma conta de serviço no Google Cloud, adicionar o e-mail dela como usuário (leitura) da propriedade e configurar no Railway `GSC_CREDENCIAIS_JSON` (conteúdo do JSON) e `GSC_PROPRIEDADE` (ex.: `sc-domain:turbovenda.com.br`). O `/admin/organico` passa a mostrar consultas, posição, CTR e indexação no dia seguinte.
 3.1. **Bing por API** (5 min): Bing Webmaster → Configurações → Acesso à API → gerar chave → `BING_API_KEY` no Railway.
 4. **DNS sem www** (30 min): `turbovenda.com.br` ainda não resolve. Passo a passo no README de tráfego (`docs/trafego/README.md`).
-5. **Railway → serviço → Settings → "Wait for CI"**: com isso o deploy só acontece se os testes (inclusive os de SEO) passarem. O healthcheck no `/health` já está ligado (`railway.toml`).
+5. ~~Railway "Wait for CI"~~ **feito em 09/11** pela API (o deploy só acontece se o CI passar). O healthcheck no `/health` (300 s) ficou gravado direto nas configurações do serviço: o `railway.toml` foi descontinuado pelo Railway (deixa de valer em 01/12/2026) e saiu do repositório.
 6. **Perfis em B2B Stack, G2/Capterra/GetApp e SaaSHub**: são as fontes que mais aparecem quando se pergunta "melhor ferramenta de prospecção B2B". Checklist com status em `growth/diretorios.md`.
 7. **Imprensa e links**: usar `growth/alvos-link.csv` e o `/imprensa` para as primeiras abordagens (Contábeis e Base dos Dados primeiro).
 
@@ -175,6 +175,6 @@ As metas são estimativas a partir da curva atual (tráfego de pessoas subiu de 
 - **Troca de títulos em ~10 mil páginas:** a palavra-chave e a contagem continuam no começo, e o H1 manteve a frase completa. Mesmo assim, o Google pode reordenar por algumas semanas. Acompanhar as entradas das programáticas na `/admin/trafego`.
 - **Velocidade medida em laboratório:** os números de campo (usuários reais) só estão no Search Console.
 - **A pesquisa de SERP** usou um índice que não é o Google Brasil: serve para formato e concorrência, não para posição.
-- **Queda de ~40 s em 09/11 (11:48):** um erro de sintaxe meu foi publicado porque o commit não esperou os testes. Corrigido em 80 s; desde então o deploy tem healthcheck no `/health` (versão que não sobe não substitui a que está no ar) e os módulos são conferidos em Python 3.10, a versão do container.
+- **Queda de ~40 s em 09/11 (11:48):** um erro de sintaxe meu foi publicado porque o commit não esperou os testes. Corrigido em 80 s; desde então o deploy tem healthcheck no `/health` (versão que não sobe não substitui a que está no ar), espera o CI passar ("Wait for CI") e os módulos são conferidos em Python 3.10, a versão do container.
 - **Relatório de dados depende do PC:** a base completa (26,2 mi) está no índice local; se o PC ficar desligado na virada do mês, o relatório fica com os números do mês anterior até a próxima atualização.
 - **Sócios (8,6 mi) estão só no índice local:** uma ferramenta pública de "sócios pelo CNPJ" exigiria subir esses dados para o banco (custo de armazenamento). Fica para decisão.

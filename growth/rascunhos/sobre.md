@@ -14,8 +14,8 @@ Donos e gerentes comerciais de pequenas e médias empresas que vendem para outra
 - Não vendemos listas de pessoas físicas nem dados de CPF.
 
 ## Quem está por trás
-- **TODO-VALIDAR:** razão social e CNPJ da empresa dona do TurboVenda.
-- **TODO-VALIDAR:** cidade/UF e endereço comercial (pode ser só cidade, se preferir não publicar o endereço).
+- AndersTech (ANDERS CONSULTORIA EM GESTAO EMPRESARIAL LTDA), CNPJ 42.073.416/0001-80 — conferido na base da Receita de out/2026.
+- Passo Fundo/RS (sem endereço completo, salvo se o dono quiser publicar).
 - **TODO-VALIDAR:** fundador(es) com nome, cargo e uma linha de experiência real (ex.: anos em vendas B2B ou em software).
 - Contato: suporte@turbovenda.com.br
 
