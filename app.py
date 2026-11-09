@@ -201,6 +201,8 @@ def _check_csrf():
         return
     if request.path.startswith('/t/'):
         return
+    if request.path == '/api/csp-report':   # o navegador manda application/csp-report, sem sessão útil
+        return
     token = request.form.get('_csrf') or request.headers.get('X-CSRF-Token', '')
     if not token or not _hmac.compare_digest(token, session.get('_csrf', '')):
         abort(403)
@@ -332,11 +334,33 @@ def _host_canonico():
                     + (f'?{qs}' if qs else ''), 301)
 
 
+# CSP em duas camadas (QA-SEC-004): o que não quebra nada vale já; a política
+# completa roda em Report-Only e as violações chegam em /api/csp-report
+# (eventos 'csp_violation') para ajustar antes de passar a valer.
+_CSP_VALENDO = "object-src 'none'; base-uri 'self'"
+_CSP_RELATORIO = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://cdnjs.cloudflare.com "
+    "https://sdk.mercadopago.com https://*.mercadopago.com https://*.mlstatic.com; "
+    "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+    "font-src 'self' data: https://cdnjs.cloudflare.com; img-src 'self' data: https:; "
+    "connect-src 'self' https://*.google-analytics.com https://*.googletagmanager.com "
+    "https://*.mercadopago.com https://*.mercadolibre.com; "
+    "frame-src https://www.youtube-nocookie.com https://*.mercadopago.com https://*.mercadolibre.com; "
+    "object-src 'none'; base-uri 'self'; form-action 'self'; report-uri /api/csp-report")
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024   # não há upload; o nginx já corta em 1 MB
+
+
 @app.after_request
 def _set_security_headers(resp):
     resp.headers['X-Content-Type-Options'] = 'nosniff'
-    if not (request.path.startswith('/dados/') and '/embed/' in request.path):
+    embed = request.path.startswith('/dados/') and '/embed/' in request.path
+    if not embed:
         resp.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    resp.headers['Content-Security-Policy'] = (
+        _CSP_VALENDO + ('' if embed else "; frame-ancestors 'self'"))
+    if 'text/html' in (resp.content_type or ''):
+        resp.headers['Content-Security-Policy-Report-Only'] = _CSP_RELATORIO
     resp.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     resp.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
     resp.headers.pop('Server', None)
@@ -6239,7 +6263,8 @@ def api_unipile_conectar(bot):
         'providers': '*:MAILING',
         'api_url': _UNIPILE_DSN,
         'expiresOn': expira,
-        'name': schema,                     # volta no webhook
+        # volta no webhook; assinado para ninguém trocar a conta de outro cliente
+        'name': _nome_unipile(schema),
         'notify_url': f'{base}/webhook/unipile',
         'success_redirect_url': f'{base}/configurar?email_ok=conectado',
         'failure_redirect_url': f'{base}/configurar?email_erro=negado',
@@ -6253,20 +6278,41 @@ def api_unipile_conectar(bot):
     return jsonify({'ok': True, 'url': (corpo or {}).get('url')})
 
 
+def _nome_unipile(schema, agora=None):
+    """'<schema>:<expira>:<assinatura>': o webhook só confia no schema se a
+    assinatura (HMAC com a SECRET_KEY) bater e o link não tiver vencido.
+    Antes ia o schema puro, e qualquer um podia trocar a conta de e-mail de
+    outro cliente com um POST (QA-SEC-001)."""
+    expira = int((agora or time.time()) + 2 * 3600)
+    assinatura = _hmac.new(str(app.secret_key).encode(), f'unipile:{schema}:{expira}'.encode(),
+                           'sha256').hexdigest()[:24]
+    return f'{schema}:{expira}:{assinatura}'
+
+
+def _schema_do_nome_unipile(nome, agora=None):
+    partes = (nome or '').strip().split(':')
+    if len(partes) != 3 or not partes[1].isdigit() or int(partes[1]) < (agora or time.time()):
+        return None
+    schema, expira, assinatura = partes
+    esperado = _hmac.new(str(app.secret_key).encode(), f'unipile:{schema}:{expira}'.encode(),
+                         'sha256').hexdigest()[:24]
+    return schema if _hmac.compare_digest(assinatura, esperado) and _safe_sql_name(schema) else None
+
+
 @app.route('/webhook/unipile', methods=['POST'])
 @limiter.limit("60 per minute")
 def webhook_unipile():
-    """Avisa qual conta foi conectada. O campo name traz o schema."""
+    """Avisa qual conta foi conectada. O campo name traz o schema, assinado."""
     data = request.get_json(silent=True) or {}
-    schema = (data.get('name') or '').strip()
     account_id = (data.get('account_id') or '').strip()
     status = (data.get('status') or '').upper()
     if status != 'CREATION_SUCCESS' or not account_id:
         logger.info('Unipile webhook ignorado: %s', str(data)[:200])
         return jsonify({'ok': True})
-    if not _safe_sql_name(schema):
-        logger.warning('Unipile webhook com schema invalido: %r', schema)
-        return jsonify({'ok': True})
+    schema = _schema_do_nome_unipile(data.get('name'))
+    if not schema:
+        logger.warning('Unipile webhook recusado: name sem assinatura válida')
+        return jsonify({'error': 'invalid name'}), 403
     email_conta = ''
     corpo, _ = _unipile('GET', f'/accounts/{account_id}')
     if isinstance(corpo, dict):
@@ -9303,6 +9349,7 @@ def _horarios_disponiveis(schema, data_str):
 
 
 @app.route('/agendar/<token>')
+@limiter.limit("30 per minute", key_func=_ip_cliente)  # cada acesso varre todos os clientes
 def pagina_agendar(token):
     lead, schema = _find_lead_by_token(token)
     if not lead:
@@ -9316,6 +9363,7 @@ def pagina_agendar(token):
 
 
 @app.route('/api/agendar/<token>/slots')
+@limiter.limit("30 per minute", key_func=_ip_cliente)  # cada acesso varre todos os clientes
 def api_agenda_slots(token):
     lead, schema = _find_lead_by_token(token)
     if not lead:
@@ -9328,6 +9376,7 @@ def api_agenda_slots(token):
 
 
 @app.route('/api/agendar/<token>/confirmar', methods=['POST'])
+@limiter.limit("30 per minute", key_func=_ip_cliente)  # cada acesso varre todos os clientes
 def api_agenda_confirmar(token):
     lead, schema = _find_lead_by_token(token)
     if not lead:
@@ -10269,6 +10318,19 @@ def api_trafego_cta():
         _traf_enfileirar('cta', (g('path', 300), g('cta', 80), g('destino', 300),
                                  g('utm_source', 120), g('utm_medium', 120),
                                  g('utm_campaign', 120)))
+    return ('', 204)
+
+
+@app.route('/api/csp-report', methods=['POST'])
+@limiter.limit("30 per minute", key_func=_ip_cliente)
+def api_csp_report():
+    """Violações da CSP em Report-Only: só host bloqueado, diretiva e página."""
+    d = (request.get_json(silent=True, force=True) or {}).get('csp-report') or {}
+    bloqueado = str(d.get('blocked-uri') or '')
+    _evento('csp_violation', None,
+            diretiva=str(d.get('effective-directive') or d.get('violated-directive') or '')[:60],
+            bloqueado=(_urlparse(bloqueado).netloc or bloqueado)[:80],
+            pagina=_urlparse(str(d.get('document-uri') or '')).path[:120])
     return ('', 204)
 
 
