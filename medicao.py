@@ -290,6 +290,9 @@ def gerar_relatorio_semanal(cur, hoje=None):
     if subiu and subiu[0]['atual'] - subiu[0]['anterior'] >= 5:
         acoes.append(f"Reaproveitar `{subiu[0]['path']}` (maior alta): gerar rascunhos com `growth/ferramentas/distribuicao.py`.")
     acoes.append('Publicar 1 dos rascunhos aprovados de `growth/fila-distribuicao/` no LinkedIn.')
+    import receita   # aqui dentro: receita importa este módulo
+    funil_linhas, acoes_dinheiro = receita.secao_relatorio(cur, ini, fim)
+    acoes = acoes_dinheiro + acoes
     linhas = [f'# Relatório semanal de busca orgânica — {ini:%d/%m} a {fim - timedelta(days=1):%d/%m/%Y}', '',
               f'- **Entradas vindas de buscadores:** {atual} (semana anterior: {anterior}'
               + (f', {var:+.0%})' if var is not None else ')'),
@@ -299,13 +302,15 @@ def gerar_relatorio_semanal(cur, hoje=None):
               f'- **Respostas 429 para robôs:** {bloq}']
     if sov:
         linhas.append(f"- **Share of voice em IA (rodada de {sov[0]['rodada']:%d/%m}):** citado em {sov[0]['c']} de {sov[0]['n']}")
+    linhas += funil_linhas
     linhas += ['', '## O que subiu', '', '| Página | Antes | Agora |', '|---|---|---|']
     linhas += [f"| `{r['path']}` | {r['anterior']} | {r['atual']} |" for r in subiu if r['atual'] > r['anterior']] or ['| — | | |']
     linhas += ['', '## O que caiu', '', '| Página | Antes | Agora |', '|---|---|---|']
     linhas += [f"| `{r['path']}` | {r['anterior']} | {r['atual']} |" for r in caiu if r['atual'] < r['anterior']] or ['| — | | |']
     linhas += ['', '## 5 ações recomendadas', ''] + [f'{i}. {a}' for i, a in enumerate(acoes[:5], 1)]
-    linhas += ['', 'Fonte: telemetria própria (`pageviews`, `users`, `share_of_voice`). '
-               'Cliques, impressões e posição entram quando o Search Console estiver conectado.']
+    linhas += ['', 'Fontes: Search Console (`busca_consultas`), telemetria própria (`pageviews`, '
+               '`cta_cliques`, `eventos`), `users`, `pagamentos` (compra conferida no Mercado Pago) e '
+               '`share_of_voice`. Entradas de `pageviews` anteriores a 09/11/2026 contam pré-carregamento do Chrome.']
     return ini, '\n'.join(linhas) + '\n'
 
 

@@ -126,8 +126,15 @@
       <input type="url" name="website" placeholder="https://suaempresa.com.br">
     </div>
     <div class="field">
-      <label>Segmento que vende <small>(opcional)</small></label>
-      <input type="text" name="segmento" placeholder="Ex: consultoria, equipamentos industriais, software">
+      {% if alvo %}
+      <label>O que você vende <small>(opcional)</small></label>
+      <input type="text" name="segmento" placeholder="Ex: material de construção, software de gestão">
+      {% else %}
+      <label>O que você vende e para quem <small>*</small></label>
+      <input type="text" name="segmento" required minlength="3"
+             placeholder="Ex: vendemos uniformes para indústrias e construtoras">
+      <small style="display:block;color:#64748b;font-size:12px;margin-top:6px">É daqui que o robô tira as buscas: ele começa a encontrar empresas logo depois do cadastro.</small>
+      {% endif %}
     </div>
     <div class="field"{% if alvo %} hidden{% endif %}>
       <label>Região de atuação <small>(opcional)</small></label>

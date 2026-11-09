@@ -309,3 +309,37 @@ def test_painel_organico_so_para_admin(client):
     assert 'noindex' in r.get_data(as_text=True)
     with client.session_transaction() as s:
         s.pop('admin_auth', None)
+
+
+def test_painel_de_receita_so_para_admin(client):
+    assert client.get('/admin/receita').status_code == 302
+    with client.session_transaction() as s:
+        s['admin_auth'] = True
+    r = client.get('/admin/receita')
+    html = r.get_data(as_text=True)
+    assert r.status_code == 200 and 'Receita orgânica' in html and 'noindex' in html
+    with client.session_transaction() as s:
+        s.pop('admin_auth', None)
+
+
+def test_receita_funil_e_taxas():
+    import receita
+
+    class Cur:
+        def execute(self, sql, params=None):
+            self.sql = ' '.join(sql.split())
+
+        def fetchall(self):
+            if 'to_regclass' in self.sql:
+                return [{'t': 'existe'}]
+            return [{'n': 3}]
+
+        def fetchone(self):
+            return self.fetchall()[0]
+    from datetime import date
+    f = receita.funil(Cur(), date(2026, 11, 2), date(2026, 11, 9))
+    assert set(f) == {'cliques_google', 'cliques_cta', 'cadastros', 'aha', 'viu_oferta',
+                      'iniciou_pagamento', 'pagou', 'receita'}
+    assert receita.taxa(1, 4) == '25%' and receita.taxa(1, 0) == '—'
+    linhas, acoes = receita.secao_relatorio(Cur(), date(2026, 11, 2), date(2026, 11, 9))
+    assert any('Funil até a compra' in x for x in linhas)

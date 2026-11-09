@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Receita orgânica — Admin TurboVenda</title>
+<style>
+  body{margin:0;background:#0b1220;color:#e2e8f0;font:15px/1.5 Inter,system-ui,sans-serif}
+  main{max-width:1100px;margin:0 auto;padding:24px 16px 60px}
+  h1{font-size:1.5rem;margin:0 0 4px} h2{font-size:1.1rem;margin:32px 0 10px}
+  .sub{color:#94a3b8;margin:0 0 20px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+  .card{background:#0d1526;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:14px}
+  .card b{display:block;font-size:1.5rem;color:#fff} .card span{color:#94a3b8;font-size:13px}
+  .tbl{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:14px;margin-top:6px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.06);white-space:nowrap}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+  .vazio{color:#94a3b8;background:#0d1526;border:1px dashed rgba(255,255,255,.12);border-radius:10px;padding:12px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:24px} @media(max-width:800px){.grid2{grid-template-columns:1fr}}
+  a{color:#a5b4fc} .erro{color:#fca5a5}
+</style>
+</head>
+<body><main>
+  <p><a href="/admin/dashboard">← Admin</a> · <a href="/admin/organico">Busca orgânica</a> · <a href="/admin/trafego">Tráfego</a></p>
+  <h1>Receita orgânica</h1>
+  <p class="sub">Do clique no Google à compra conferida no Mercado Pago. Eventos do funil gravados desde 09/11/2026.</p>
+  {% if erro %}<p class="erro">Erro ao ler os dados: {{ erro }}</p>{% endif %}
+
+  {% if d %}
+  {% set u = d.ult28 %}
+  <div class="cards">
+    <div class="card"><b>R$ {{ '%.0f'|format(d.mrr) }}</b><span>MRR ({{ d.pagantes }} pagante{{ '' if d.pagantes == 1 else 's' }} em vigor)</span></div>
+    <div class="card"><b>R$ {{ '%.0f'|format(u.receita) }}</b><span>receita nos últimos 28 dias</span></div>
+    <div class="card"><b>{{ 'R$ %.0f'|format(d.ticket) if d.ticket else '—' }}</b><span>ticket médio</span></div>
+    <div class="card"><b>{{ '%.0f%%'|format(100 * d.churn) if d.churn is not none else '—' }}</b><span>churn em 30 dias</span></div>
+    <div class="card"><b>{{ 'R$ %.0f'|format(d.ltv) if d.ltv else '—' }}</b><span>LTV (ticket ÷ churn)</span></div>
+  </div>
+
+  <h2>Funil dos últimos 28 dias</h2>
+  <div class="tbl"><table>
+    <tr><th>Etapa</th><th class="n">Total</th><th class="n">Taxa</th></tr>
+    <tr><td>Cliques do Google</td><td class="n">{{ u.cliques_google }}</td><td class="n"></td></tr>
+    <tr><td>Cliques em botão de cadastro</td><td class="n">{{ u.cliques_cta }}</td><td class="n">{{ taxa(u.cliques_cta, u.cliques_google) }}</td></tr>
+    <tr><td>Cadastros</td><td class="n">{{ u.cadastros }}</td><td class="n">{{ taxa(u.cadastros, u.cliques_cta) }}</td></tr>
+    <tr><td>Viram valor (1º lead com contato)</td><td class="n">{{ u.aha }}</td><td class="n">{{ taxa(u.aha, u.cadastros) }}</td></tr>
+    <tr><td>Viram a oferta paga</td><td class="n">{{ u.viu_oferta }}</td><td class="n">{{ taxa(u.viu_oferta, u.aha) }}</td></tr>
+    <tr><td>Iniciaram pagamento</td><td class="n">{{ u.iniciou_pagamento }}</td><td class="n">{{ taxa(u.iniciou_pagamento, u.viu_oferta) }}</td></tr>
+    <tr><td>Pagaram</td><td class="n">{{ u.pagou }}</td><td class="n">{{ taxa(u.pagou, u.iniciou_pagamento) }}</td></tr>
+  </table></div>
+
+  <h2>Por semana</h2>
+  <div class="tbl"><table>
+    <tr><th>Semana</th><th class="n">Google</th><th class="n">Botão</th><th class="n">Cadastro</th><th class="n">Valor</th><th class="n">Oferta</th><th class="n">Pagamento</th><th class="n">Pagou</th><th class="n">Receita</th></tr>
+    {% for s in d.semanas %}<tr><td>{{ s.ini.strftime('%d/%m') }}</td><td class="n">{{ s.cliques_google }}</td><td class="n">{{ s.cliques_cta }}</td><td class="n">{{ s.cadastros }}</td><td class="n">{{ s.aha }}</td><td class="n">{{ s.viu_oferta }}</td><td class="n">{{ s.iniciou_pagamento }}</td><td class="n">{{ s.pagou }}</td><td class="n">R$ {{ '%.0f'|format(s.receita) }}</td></tr>{% endfor %}
+  </table></div>
+
+  <div class="grid2">
+    <div>
+      <h2>Receita por página de entrada (1º toque)</h2>
+      {% if d.por_entrada %}<div class="tbl"><table><tr><th>Entrada</th><th>Tipo</th><th class="n">Compras</th><th class="n">Receita</th></tr>
+        {% for r in d.por_entrada %}<tr><td>{{ r.entrada }}</td><td>{{ r.tipo }}</td><td class="n">{{ r.compras }}</td><td class="n">R$ {{ '%.0f'|format(r.receita) }}</td></tr>{% endfor %}</table></div>
+      {% else %}<p class="vazio">Nenhuma compra conferida ainda.</p>{% endif %}
+    </div>
+    <div>
+      <h2>Cadastros por página de entrada (28 dias)</h2>
+      {% if d.cadastros_por_entrada %}<div class="tbl"><table><tr><th>Entrada</th><th class="n">Cadastros</th></tr>
+        {% for r in d.cadastros_por_entrada %}<tr><td>{{ r.entrada }}</td><td class="n">{{ r.n }}</td></tr>{% endfor %}</table></div>
+      {% else %}<p class="vazio">Sem cadastros no período.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div>
+      <h2>Páginas com cliques do Google e nenhum cadastro (alvo de otimização)</h2>
+      {% if d.sem_conversao %}<div class="tbl"><table><tr><th>Página</th><th class="n">Cliques (28 dias)</th></tr>
+        {% for r in d.sem_conversao %}<tr><td>{{ r.pagina }}</td><td class="n">{{ r.cliques }}</td></tr>{% endfor %}</table></div>
+      {% else %}<p class="vazio">Sem dados do Search Console.</p>{% endif %}
+    </div>
+    <div>
+      <h2>Cliques por botão (28 dias)</h2>
+      {% if d.cta %}<div class="tbl"><table><tr><th>Botão (data-cta)</th><th class="n">Cliques</th></tr>
+        {% for r in d.cta %}<tr><td>{{ r.cta }}</td><td class="n">{{ r.n }}</td></tr>{% endfor %}</table></div>
+      {% else %}<p class="vazio">Nenhum clique registrado.</p>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+</main></body>
+</html>

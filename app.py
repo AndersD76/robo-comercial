@@ -1555,6 +1555,9 @@ def cadastro():
         utm_campaign = request.form.get('utm_campaign', '').strip() or None
         if not email or not pw or not empresa:
             error = 'Preencha todos os campos obrigatórios'
+        elif not alvo and len(segmento) < 3:
+            # sem isso o robô não liga (56% dos cadastros até 09/11/2026)
+            error = 'Conte o que você vende e para quem: é daí que o robô tira as buscas'
         elif len(pw) < 6:
             error = 'Senha mínimo 6 caracteres'
         else:
@@ -10435,6 +10438,29 @@ def admin_organico():
             conn.close()
     return render_template('admin_organico.html', d=dados, relatorio=relatorio, erro=erro,
                            ctr_esperado=medicao.CTR_ESPERADO)
+
+
+@app.route('/admin/receita')
+@admin_required
+def admin_receita():
+    """Funil do visitante orgânico à compra, MRR e receita por página de entrada."""
+    import receita
+    dados, erro = {}, None
+    conn = None
+    try:
+        conn = _conn()
+        c = conn.cursor()
+        c.execute(_TRAF_SQL)
+        medicao.criar_tabelas(c)
+        conn.commit()
+        dados = receita.dados_receita(c)
+    except Exception as e:
+        logger.exception('admin_receita')
+        erro = str(e)
+    finally:
+        if conn:
+            conn.close()
+    return render_template('admin_receita.html', d=dados, erro=erro, taxa=receita.taxa)
 
 
 @app.route('/admin/api/stats')
