@@ -1,0 +1,26 @@
+# Auditoria semanal (fora do caminho do deploy, para uma falha recém-publicada
+# não travar uma correção urgente): dependências com CVE e segredos no histórico.
+name: Segurança (semanal)
+on:
+  schedule:
+    - cron: '0 10 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  auditoria:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Dependências com vulnerabilidade conhecida (pip-audit)
+        run: pip install pip-audit && pip-audit -r requirements.txt
+      - name: Segredos em todo o histórico do git (sem imprimir valores)
+        run: |
+          python qa/ferramentas/segredos_historico.py | tee segredos.txt
+          # o único achado conhecido é um token fixo de teste (falso positivo, ver qa/)
+          test "$(grep -c '^- ' segredos.txt)" -le 1
