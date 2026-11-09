@@ -157,18 +157,20 @@ As programáticas e ferramentas caíram para 1,2–1,3 s. As páginas que usam �
 
 | Métrica | Linha de base | Meta 90 dias (até 07/02/2027) | Fonte |
 |---|---|---|---|
-| Entradas orgânicas Google por semana | ~1.200 (3.680 em 3 semanas) | 3.000 | `pageviews` |
+| Cliques do Google por semana (Search Console) | **~350** (1.497 cliques e 83.495 aparições de 09/10 a 07/11)* | 900 | Search Console (`busca_consultas`, consulta `*`) |
 | Entradas vindas do Bing por semana | ~15 | 150 | `pageviews` |
 | Entradas e cadastros vindos de IA (ChatGPT, Perplexity, Copilot) | 57 entradas e 10 cadastros em 3 semanas | 300 entradas e 40 cadastros por trimestre | `pageviews`, `users.utm_source` |
 | Share of voice em IA (30 perguntas fixas) | 0 de 30 citações; 2 de 30 nos resultados | citado em 6 de 30 | `share_of_voice` |
 | Cadastros por semana | ~10 | 25 | `users` |
 | Títulos > 60 / descrições > 155 no crawl | 0 / 0 | manter 0 | `crawl.py` |
 | LCP mobile de laboratório nas 10 páginas | 1,2–2,8 s | todas < 2,5 s | Lighthouse diário |
-| Páginas indexadas / enviadas | sem acesso | ≥ 70% | Search Console (ação 3) |
+| Páginas indexadas / enviadas | 10.139 enviadas no sitemap; das 10 URLs prioritárias, 8 indexadas (`/dados/empresas-ativas-no-brasil` ainda desconhecida do Google; `/blog/base-de-dados-de-empresas-cnpj` descoberta e não indexada) | ≥ 70% | Search Console → Indexação → Páginas (a API não dá o total por sitemap) |
 | Acessos de robôs de IA de busca (OAI-SearchBot, Claude-SearchBot, PerplexityBot) por semana | 5 (OAI-SearchBot, só 09/11) | crescer semana a semana | `pageviews.robo` |
 | Sites que citam ou incorporam o relatório de dados | 0 | 5 | `alvos-link.csv` + Search Console (links) |
 
-As metas são estimativas a partir da curva atual (tráfego de pessoas subiu de 344 para 7.114 páginas vistas por semana em 3 semanas), não promessas.
+As metas são estimativas a partir da curva atual, não promessas.
+
+\* **Correção de 09/11 (Search Console conectado):** a telemetria própria contava ~2,4 vezes os cliques reais do Google (3.632 "entradas Google" contra 1.497 cliques no mesmo período). O Chrome pré-carrega os primeiros resultados da busca e cada pré-carga era gravada como visita. Desde 09/11 a pré-carga fica marcada como `precarregamento` e só a abertura real conta (`/api/t/pv`). Os números de "páginas vistas" e "entradas" anteriores a 09/11 neste relatório estão inflados por isso; o número oficial de cliques é o do Search Console.
 
 ## 7. Riscos e fora do escopo
 
