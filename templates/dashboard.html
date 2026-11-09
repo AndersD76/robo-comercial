@@ -580,6 +580,8 @@
 
 <main id="main">
 
+  <div id="faixa-plano" style="display:none"></div>
+
   <div class="sec-title"><i class="fa fa-robot" style="font-size:10px"></i>Agente</div>
   <div class="bot-card">
 
@@ -3129,10 +3131,53 @@ async function loadPlano(){
       badge.style.background='rgba(251,191,36,.15)';
       badge.style.color='#fbbf24';
     }
+    mostrarFaixa(d);
   }catch(e){}
 }
+// Oferta no momento de valor: cota do teste cheia, teste acabando ou acabado,
+// plano pago vencendo ou vencido. Sem contagem falsa: tudo vem de /api/meu-plano.
+function mostrarFaixa(d){
+  const f=document.getElementById('faixa-plano');
+  if(!f)return;
+  const used=d.total_leads||0, lim=d.limite_leads;
+  const exp=d.expira?new Date(String(d.expira).slice(0,19).replace(' ','T')+'Z'):null;
+  const dias=exp&&!isNaN(exp)?Math.ceil((exp-new Date())/864e5):null;
+  const quando=dias!==null&&dias<=1?'menos de 1 dia':dias+' dias';
+  let msg='',btn='',plano='starter',origem='';
+  if(!d.plano||d.plano==='trial'){
+    if(d.trial_expirado){
+      msg=`Seu teste acabou e o robô parou.${used?` Os ${used} leads que ele encontrou continuam salvos.`:''} Continue com o Starter por R$97/mês.`;
+      btn='Continuar com o Starter';origem='faixa_teste_acabou';
+    }else if(lim&&used>=lim){
+      msg=`Seu robô encontrou ${used} leads e pausou no limite do teste grátis. Com o Starter (R$97/mês) ele volta a buscar na hora, até 500 por mês.`;
+      btn='Continuar com o Starter';origem='faixa_cota';
+    }else if(used>=10&&dias!==null&&dias<=3){
+      msg=`Faltam ${quando} de teste e seu robô já encontrou ${used} leads. Assine o Starter para ele não parar.`;
+      btn='Assinar o Starter';origem='faixa_fim_teste';
+    }
+  }else if(d.plano==='starter'||d.plano==='pro'){
+    plano=d.plano;
+    const nome=d.plano==='pro'?'Pro':'Starter';
+    if(!d.ativo){
+      msg=`Seu plano ${nome} venceu e o robô pausou. Renove para ele voltar a buscar.`;
+      btn=`Renovar o ${nome}`;origem='faixa_vencido';
+    }else if(dias!==null&&dias<=3){
+      msg=`Seu plano ${nome} vence em ${quando}. Renove com PIX: os 30 dias novos contam do fim do plano atual.`;
+      btn=`Renovar o ${nome}`;origem='faixa_renovar';
+    }
+  }
+  if(!msg){f.style.display='none';return;}
+  f.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;background:linear-gradient(135deg,rgba(99,102,241,.16),rgba(139,92,246,.1));border:1px solid rgba(99,102,241,.35);border-radius:12px;padding:14px 18px;margin:0 0 16px">
+    <span style="color:#e2e8f0;font-size:14px;line-height:1.5;flex:1;min-width:220px">${msg}</span>
+    <button onclick="abrirPlano('${plano}','${origem}')" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-weight:700;cursor:pointer;white-space:nowrap">${btn}</button></div>`;
+  f.style.display='block';
+}
+function abrirPlano(plano,origem){
+  upgradeProPlano(origem);
+  selectPlan(plano);
+}
 var _selectedPlan='pro';
-function upgradeProPlano(){
+function upgradeProPlano(origem){
   const ov=document.getElementById('overlay');
   ov.innerHTML=`<div class="modal" style="max-width:520px;padding:28px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
@@ -3182,7 +3227,7 @@ function upgradeProPlano(){
   </div>`;
   ov.style.display='flex';
   selectPlan('pro');
-  try{navigator.sendBeacon('/api/t/evento',new Blob([JSON.stringify({nome:'paywall_viewed',origem:'modal_painel'})],{type:'application/json'}))}catch(e){}
+  try{navigator.sendBeacon('/api/t/evento',new Blob([JSON.stringify({nome:'paywall_viewed',origem:(typeof origem==='string'&&origem)||'modal_painel'})],{type:'application/json'}))}catch(e){}
   if(typeof gtag==='function')gtag('event','checkout_started',{currency:'BRL',value:297});
 }
 function selectPlan(p){
@@ -3330,7 +3375,7 @@ function dismissTrialBanner(){
   if(upgradePlan && (upgradePlan==='starter'||upgradePlan==='pro')){
     // Pequeno delay para garantir que o DOM esta pronto
     setTimeout(function(){
-      upgradeProPlano();
+      upgradeProPlano('link_assinar');
       selectPlan(upgradePlan);
     },300);
     // Limpar o param da URL sem recarregar

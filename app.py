@@ -10665,8 +10665,16 @@ def _funil_rodar():
         if not c.fetchone()['ok']:
             return None
         try:
-            return emails_funil.rodar(conn, _send_system_email, APP_URL,
-                                      MP_PLANOS['starter']['valor'])
+            res = emails_funil.rodar(conn, _send_system_email, APP_URL,
+                                     MP_PLANOS['starter']['valor'])
+            try:
+                res['pagantes'] = emails_funil.rodar_pagantes(
+                    conn, _send_system_email, APP_URL,
+                    {k: p['valor'] for k, p in MP_PLANOS.items()})
+            except Exception:
+                conn.rollback()
+                logger.exception('funil: avisos de pagantes falharam')
+            return res
         finally:
             conn.rollback()
             c.execute('SELECT pg_advisory_unlock(%s)', (_FUNIL_TRAVA,))

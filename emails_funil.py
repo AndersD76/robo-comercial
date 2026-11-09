@@ -39,7 +39,13 @@ MIGRACOES = [
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_email_leads_sent BOOLEAN DEFAULT FALSE',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS funil_ultimo_email_em TIMESTAMP',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS reativacao_enviada_em TIMESTAMP',
+    # pagantes: guarda para qual vencimento o aviso já saiu (um por ciclo)
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS renovacao_aviso_para TIMESTAMP',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS renovacao_vencido_para TIMESTAMP',
+    'ALTER TABLE pagamentos ADD COLUMN IF NOT EXISTS lembrete_em TIMESTAMP',
 ]
+DIAS_AVISO_RENOVACAO = 3
+NOMES_PLANO = {'starter': 'Starter', 'pro': 'Pro'}
 _EMAIL_OK = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 _SCHEMA_OK = re.compile(r'^emp_\d+$')
 # O banco grava em UTC; o cliente lê no horário de Brasília (sem horário de verão)
@@ -193,6 +199,47 @@ def email_reativacao(empresa, r, expira, app_url, preco):
     return assunto, html
 
 
+def _rodape_pagante(html):
+    return html.replace('Você recebe este e-mail porque criou uma conta de teste no TurboVenda.',
+                        'Você recebe este e-mail porque tem uma assinatura do TurboVenda.')
+
+
+def email_renova(empresa, plano, valor, expira, app_url):
+    nome = NOMES_PLANO.get(plano, plano)
+    assunto = f'Seu plano {nome} vence em {_data_br(expira)}'
+    html = _layout(empresa, [
+        f'Seu plano {nome} do TurboVenda vale até <strong>{_data_br(expira)}</strong>.',
+        f'Para o robô não parar, renove por {_reais(valor)}. Com PIX, libera na hora '
+        'e os 30 dias novos contam a partir do fim do plano atual, sem perder nenhum dia.',
+    ], f'Renovar o {nome}', f'{app_url}/assinar?plano={plano}',
+        'Não quer renovar? Não precisa fazer nada: nada é cobrado sem você pagar.')
+    return assunto, _rodape_pagante(html)
+
+
+def email_vencido(empresa, plano, valor, expira, app_url, r):
+    nome = NOMES_PLANO.get(plano, plano)
+    assunto = f'Seu plano {nome} venceu e o robô pausou'
+    html = _layout(empresa, [
+        f'Seu plano {nome} venceu em {_data_br(expira)} e o robô parou de buscar. '
+        + (f'Tudo o que ele encontrou continua salvo: {_numeros(r)}.' if r['validos'] else ''),
+        f'Para ele voltar a buscar, renove por {_reais(valor)}. Com PIX, libera na hora.',
+    ], f'Renovar o {nome}', f'{app_url}/assinar?plano={plano}')
+    return assunto, _rodape_pagante(html)
+
+
+def email_pix_pendente(empresa, plano, valor, app_url):
+    nome = NOMES_PLANO.get(plano, plano)
+    assunto = 'Seu PIX do TurboVenda não foi pago'
+    html = _layout(empresa, [
+        f'Você gerou um PIX de {_reais(valor)} para o plano {nome}, mas ele não foi pago '
+        '(o código vale 30 minutos).',
+        'Se ainda quiser continuar, gere um código novo: leva um minuto e o plano '
+        'libera assim que o PIX cair.',
+    ], 'Gerar um PIX novo', f'{app_url}/assinar?plano={plano}',
+        'Se você já pagou por outro meio, ignore este e-mail.')
+    return assunto, html
+
+
 MODELOS = {'leads': email_leads, 'cota': email_cota, '2dias': email_2dias,
            'acabou': email_acabou, 'reativacao': email_reativacao}
 
@@ -333,3 +380,86 @@ def reativar(conn, u, enviar, app_url, preco):
         return True
     conn.rollback()
     return False
+
+
+def rodar_pagantes(conn, enviar, app_url, precos, agora=None):
+    """Avisos de quem já pagou ou tentou pagar (uma passada).
+
+    - plano pago vencendo em até 3 dias: um aviso por vencimento
+      (renovacao_aviso_para guarda para qual plano_expira já saiu);
+    - plano pago vencido há até 3 dias: um aviso por vencimento;
+    - PIX gerado e não pago entre 1 h e 48 h atrás, sem pagamento aprovado
+      depois: um lembrete por cobrança (pagamentos.lembrete_em).
+    Mesma regra do funil: marca antes de enviar e desmarca se falhar.
+    `precos` = {'starter': 97.0, 'pro': 297.0}."""
+    cur = conn.cursor()
+    migrar(cur)
+    conn.commit()
+    cur.execute('SELECT NOW()::timestamp AS agora')
+    agora = agora or cur.fetchone()['agora']
+    res = {'renova': 0, 'vencido': 0, 'pix': 0, 'falhas': 0}
+
+    cur.execute("""SELECT id, email, empresa_nome, schema_name, plano, plano_expira,
+                          renovacao_aviso_para, renovacao_vencido_para
+                   FROM users WHERE plano IN ('starter', 'pro') AND ativo = TRUE
+                     AND plano_expira BETWEEN %s AND %s ORDER BY id""",
+                (agora - timedelta(days=3), agora + timedelta(days=DIAS_AVISO_RENOVACAO)))
+    for u in cur.fetchall():
+        if not _EMAIL_OK.match(u['email'] or ''):
+            continue
+        vencido = u['plano_expira'] <= agora
+        coluna = 'renovacao_vencido_para' if vencido else 'renovacao_aviso_para'
+        if u[coluna] == u['plano_expira']:
+            continue
+        cur.execute(f'UPDATE users SET {coluna} = %s WHERE id = %s AND '
+                    f'{coluna} IS DISTINCT FROM %s RETURNING id',
+                    (u['plano_expira'], u['id'], u['plano_expira']))
+        if not cur.fetchone():
+            conn.commit()
+            continue
+        conn.commit()
+        valor = precos.get(u['plano'], 0)
+        if vencido:
+            r = resumo_leads(cur, u['schema_name'] or f'emp_{u["id"]}')
+            assunto, html = email_vencido(u['empresa_nome'], u['plano'], valor,
+                                          u['plano_expira'], app_url, r)
+        else:
+            assunto, html = email_renova(u['empresa_nome'], u['plano'], valor,
+                                         u['plano_expira'], app_url)
+        if enviar(u['email'], assunto, html):
+            res['vencido' if vencido else 'renova'] += 1
+        else:
+            cur.execute(f'UPDATE users SET {coluna} = %s WHERE id = %s', (u[coluna], u['id']))
+            conn.commit()
+            res['falhas'] += 1
+
+    cur.execute("""SELECT p.mp_payment_id, p.plano, p.valor, u.id AS uid, u.email, u.empresa_nome
+                   FROM pagamentos p JOIN users u ON u.id = p.user_id
+                   WHERE p.status = 'pending' AND p.lembrete_em IS NULL
+                     AND p.criado_em BETWEEN %s AND %s
+                     AND NOT EXISTS (SELECT 1 FROM pagamentos q WHERE q.user_id = p.user_id
+                                     AND q.status = 'approved' AND q.criado_em >= p.criado_em)
+                   ORDER BY p.criado_em""", (agora - timedelta(hours=48), agora - timedelta(hours=1)))
+    avisados = set()
+    for p in cur.fetchall():
+        if p['uid'] in avisados or not _EMAIL_OK.match(p['email'] or ''):
+            continue
+        # um lembrete por pessoa: marca todos os PIX pendentes dela de uma vez
+        cur.execute("""UPDATE pagamentos SET lembrete_em = %s WHERE user_id = %s
+                       AND status = 'pending' AND lembrete_em IS NULL RETURNING mp_payment_id""",
+                    (agora, p['uid']))
+        marcados = [r['mp_payment_id'] for r in cur.fetchall()]
+        conn.commit()
+        if not marcados:
+            continue
+        avisados.add(p['uid'])
+        assunto, html = email_pix_pendente(p['empresa_nome'], p['plano'],
+                                           float(p['valor'] or 0), app_url)
+        if enviar(p['email'], assunto, html):
+            res['pix'] += 1
+        else:
+            cur.execute('UPDATE pagamentos SET lembrete_em = NULL WHERE mp_payment_id = ANY(%s)',
+                        (marcados,))
+            conn.commit()
+            res['falhas'] += 1
+    return res
