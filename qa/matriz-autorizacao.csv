@@ -1,0 +1,15 @@
+recurso,acao,visitante,cliente (sessao),cliente via token API,admin,lead (token de agendamento),provedor (webhook),como e garantido,teste
+paginas publicas e ferramentas,ler,sim,sim,nao se aplica,sim,sim,nao,rotas sem protecao; limites por IP nas ferramentas,tests/test_seo.py
+cadastro e login,criar sessao,sim,nao se aplica,nao,nao,nao,nao,limite 5/min (cadastro) e 10/min (login); CSRF,tests/test_templates_csrf.py
+recuperacao de senha,pedir e redefinir,sim (sem revelar se a conta existe),sim,nao,nao,nao,nao,token so como hash; 1 h; uso unico; 5/min e 20/h,tests/test_contas.py
+leads e configuracao do proprio cliente,"criar, ler, editar, apagar",nao,sim (so o proprio schema),"sim (so o proprio schema, campos em lista fechada)",sim (impersonar),nao,nao,schema sempre da sessao ou do token; colunas atualizaveis em lista fechada,tests/test_seguranca_qa.py (sessao revogada); IDOR coberto pelo isolamento por schema
+leads de outro cliente,qualquer,nao,nao,nao,sim (impersonar),nao,nao,nenhuma rota recebe schema ou user_id do cliente,revisao de codigo (qa/rotas.md); teste automatizado PENDENTE com banco real
+plano e validade (users.plano),editar,nao,nao (so pagando),nao,sim,nao,nao (o aviso so dispara consulta ao MP),_mp_aplicar: valor conferido no MP; liberacao unica,tests/test_pagamento.py
+pagamento,iniciar,nao,sim,nao,nao,nao,nao,login_required; limite 5/min,tests/test_pagamento.py
+whatsapp e linkedin (sessao e QR),ler e usar,nao,sim (so do proprio schema),nao,nao,nao,nao,caminhos por schema (robo_pili/regras.py),tests/test_seguranca_qa.py
+conta de e-mail conectada (Unipile),trocar,nao,sim (pelo link assinado),nao,nao,nao,sim (so com name assinado e no prazo),HMAC com SECRET_KEY,tests/test_seguranca_qa.py
+agendamento de reuniao,ler horarios e confirmar,nao,nao,nao,nao,sim (so o proprio lead),nao,token de 128 bits; 30/min por IP,tests/test_seguranca_qa.py
+descadastro de e-mails,executar,sim (com link assinado),sim,nao,nao,nao,nao,HMAC por usuario,tests/test_eventos.py
+paineis admin (/admin*),ler,nao,nao,nao,sim,nao,nao,ADMIN_KEY; 5 tentativas/min; comparacao em tempo constante,tests/test_seo.py
+exportar e excluir meus dados,executar,nao,sim (so os proprios),nao,nao,nao,nao,login_required,PENDENTE teste ponta a ponta com banco real
+telemetria do navegador,gravar,sim (lista fechada de eventos),sim,nao,nao,nao,nao,EVENTOS_DO_NAVEGADOR; compra nunca vem do navegador,tests/test_eventos.py
