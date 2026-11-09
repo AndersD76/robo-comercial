@@ -119,8 +119,8 @@ def test_cta_leva_segmento_e_cidade_ao_cadastro(client, sitemap_programatico):
     url = next(u for u in urls if re.match(rf'^{BASE}/empresas/(?!cidade/)[^/]+/(?!estado)[^/]+$', u))
     seg_slug, mun_slug = url.replace(BASE + '/empresas/', '').split('/')
     html = client.get(url.replace(BASE, '')).get_data(as_text=True)
-    for cta in ('pseo-topo', 'pseo-rodape'):
-        assert f'data-cta="{cta}"' in html
+    assert 'data-cta="pseo-topo-a"' in html or 'data-cta="pseo-topo-b"' in html
+    assert 'data-cta="pseo-rodape"' in html
     assert f'alvo={seg_slug}&amp;cidade={mun_slug}' in html
 
     alvo = A._alvo_pseo(seg_slug, mun_slug)

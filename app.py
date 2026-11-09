@@ -26,7 +26,7 @@ import psycopg2.pool
 from psycopg2 import sql as psql
 from functools import lru_cache, wraps
 import logging
-from flask import (Flask, abort, jsonify, make_response, redirect,
+from flask import (Flask, abort, g, jsonify, make_response, redirect,
                    render_template, request, send_file, session, url_for)
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -1590,7 +1590,8 @@ def cadastro():
                         logger.exception('cadastro: atribuição não gravada')
                     _evento('signup_completed', uid, alvo=(alvo or {}).get('seg_slug', ''),
                             cidade=(alvo or {}).get('mun_slug', ''), utm_source=utm_source or '',
-                            entrada=(primeiro or {}).get('lp', ''), origem=(primeiro or {}).get('ref', ''))
+                            entrada=(primeiro or {}).get('lp', ''), origem=(primeiro or {}).get('ref', ''),
+                            experimentos={e: variante(e, registrar=False) for e in EXPERIMENTOS})
                     conn.close()
                     conn = None
                     _init_user_schema(schema)
@@ -10028,6 +10029,44 @@ def _toque_atual(ref):
             'uc': a.get('utm_campaign', '')[:80], 't': int(time.time())}
 
 
+# Experimentos A/B próprios (Fase 6; plano em growth/experimentos.md): uma
+# variável por teste, divisão estável por visitante (cookie tv_vid), exposição
+# gravada só para visita de pessoa (sem robô nem pré-carregamento) e clique
+# pelo data-cta com o sufixo da versão. Quem recusou cookies vê a versão "a".
+EXPERIMENTOS = {
+    'pseo_cta': ('a', 'b'),   # botão do topo das páginas segmento × cidade
+}
+
+
+def _visitante():
+    vid = request.cookies.get('tv_vid') or getattr(g, 'tv_vid_novo', None)
+    if not vid:
+        vid = g.tv_vid_novo = secrets.token_hex(8)
+    return vid
+
+
+def variante(exp, registrar=True):
+    """Versão do visitante neste experimento. registrar=False só consulta
+    (ex.: no cadastro, para atribuir a conversão sem contar exposição)."""
+    versoes = EXPERIMENTOS.get(exp)
+    if not versoes:
+        return None
+    if request.cookies.get('tv_consent') == 'rejected':
+        v = versoes[0]
+    elif not registrar and not request.cookies.get('tv_vid'):
+        return None
+    else:
+        v = versoes[int(hashlib.sha256(f'{exp}:{_visitante()}'.encode()).hexdigest(), 16) % len(versoes)]
+    if registrar:
+        if not hasattr(g, 'experimentos'):
+            g.experimentos = {}
+        g.experimentos[exp] = v
+    return v
+
+
+app.jinja_env.globals['variante'] = variante
+
+
 def _toques_do_visitante():
     """(first_touch, last_touch) dos cookies, ou None."""
     def ler(nome):
@@ -10178,6 +10217,12 @@ def _trafego_pageview(resp):
                         resp.set_cookie('tv_ft', toque, **opcoes)
                     if externo:
                         resp.set_cookie('tv_lt', toque, **opcoes)
+                if getattr(g, 'tv_vid_novo', None):
+                    resp.set_cookie('tv_vid', g.tv_vid_novo, max_age=365 * 86400,
+                                    secure=request.is_secure, httponly=True, samesite='Lax')
+            for exp, v in (getattr(g, 'experimentos', None) or {}).items():
+                _evento('experimento_exposto', session.get('user_id'), exp=exp,
+                        variante=v, path=request.path[:120])
         html = resp.get_data(as_text=True)
         if '</body>' in html and '/api/t/cta' not in html:
             extra = (_TRAF_PRE_SCRIPT if pre else '') + _TRAF_SCRIPT

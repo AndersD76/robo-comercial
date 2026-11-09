@@ -62,3 +62,19 @@ def test_eventos_do_navegador_so_da_lista(fila):
     evs = [v for t, v in fila if t == 'ev']
     assert [e[0] for e in evs] == ['paywall_viewed']
     assert evs[0][2].adapted == {'origem': 'modal_painel', 'plano': ''}
+
+
+def test_experimento_estavel_por_visitante_e_respeita_recusa():
+    vistas = set()
+    for i in range(40):
+        with app.app.test_request_context('/', headers={'Cookie': f'tv_vid=visitante{i}'}):
+            v1 = app.variante('pseo_cta')
+            assert app.variante('pseo_cta') == v1            # mesma pessoa, mesma versão
+            assert app.g.experimentos == {'pseo_cta': v1}    # exposição registrada
+            vistas.add(v1)
+    assert vistas == {'a', 'b'}                              # as duas versões aparecem
+    with app.app.test_request_context('/', headers={'Cookie': 'tv_consent=rejected; tv_vid=x'}):
+        assert app.variante('pseo_cta') == 'a'
+    with app.app.test_request_context('/'):
+        assert app.variante('pseo_cta', registrar=False) is None   # sem visitante, sem atribuição
+        assert not hasattr(app.g, 'experimentos')

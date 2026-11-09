@@ -81,10 +81,38 @@ def dados_receita(cur, hoje=None, semanas=8):
           AND NOT EXISTS (SELECT 1 FROM users u WHERE u.first_touch->>'lp' = g.pagina)
         GROUP BY g.pagina HAVING SUM(g.cliques) > 0 ORDER BY cliques DESC LIMIT 10""")
         if _existe(cur, 'busca_consultas') else [])
+    d['experimentos'] = experimentos(cur)
     d['cta'] = (_q(cur, """SELECT COALESCE(NULLIF(cta, ''), '(sem nome)') AS cta, COUNT(*) AS n FROM cta_cliques
                            WHERE created_at > NOW() - INTERVAL '28 days' GROUP BY 1 ORDER BY n DESC LIMIT 12""")
                 if _existe(cur, 'cta_cliques') else [])
     return d
+
+
+def experimentos(cur):
+    """Por experimento e versão: exposições (visitas de pessoa), cliques no
+    botão testado (data-cta com sufixo da versão) e cadastros atribuídos."""
+    if not _existe(cur, 'eventos'):
+        return []
+    linhas = {}
+    for r in _q(cur, """SELECT props->>'exp' AS exp, props->>'variante' AS v, COUNT(*) AS n
+                        FROM eventos WHERE nome = 'experimento_exposto' GROUP BY 1, 2"""):
+        linhas[(r['exp'], r['v'])] = {'exp': r['exp'], 'v': r['v'], 'expostos': r['n'],
+                                      'cliques': 0, 'cadastros': 0}
+    if _existe(cur, 'cta_cliques'):
+        for r in _q(cur, """SELECT cta, COUNT(*) AS n FROM cta_cliques
+                            WHERE cta LIKE 'pseo-topo-%%' GROUP BY 1"""):
+            chave = ('pseo_cta', r['cta'].rsplit('-', 1)[-1])
+            if chave in linhas:
+                linhas[chave]['cliques'] = r['n']
+    for r in _q(cur, """SELECT e.key AS exp, e.value AS v, COUNT(*) AS n FROM eventos,
+                               jsonb_each_text(props->'experimentos') e
+                        WHERE nome = 'signup_completed' AND jsonb_typeof(props->'experimentos') = 'object'
+                          AND e.value IS NOT NULL GROUP BY 1, 2"""):
+        if (r['exp'], r['v']) in linhas:
+            linhas[(r['exp'], r['v'])]['cadastros'] = r['n']
+    for x in linhas.values():
+        x['taxa_clique'] = taxa(x['cliques'], x['expostos'])
+    return sorted(linhas.values(), key=lambda x: (x['exp'], x['v']))
 
 
 def secao_relatorio(cur, ini, fim):

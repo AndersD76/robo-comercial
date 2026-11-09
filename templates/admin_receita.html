@@ -70,6 +70,11 @@
     </div>
   </div>
 
+  <h2>Experimentos (plano e amostra mínima em growth/experimentos.md)</h2>
+  {% if d.experimentos %}<div class="tbl"><table><tr><th>Experimento</th><th>Versão</th><th class="n">Visitas</th><th class="n">Cliques</th><th class="n">Taxa</th><th class="n">Cadastros</th></tr>
+    {% for x in d.experimentos %}<tr><td>{{ x.exp }}</td><td>{{ x.v }}</td><td class="n">{{ x.expostos }}</td><td class="n">{{ x.cliques }}</td><td class="n">{{ x.taxa_clique }}</td><td class="n">{{ x.cadastros }}</td></tr>{% endfor %}</table></div>
+  {% else %}<p class="vazio">Nenhuma exposição registrada ainda.</p>{% endif %}
+
   <div class="grid2">
     <div>
       <h2>Páginas com cliques do Google e nenhum cadastro (alvo de otimização)</h2>

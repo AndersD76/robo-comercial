@@ -143,9 +143,10 @@
     <p><strong>Você vende para {{ seg.label|lower }}?</strong><br>
        O robô do TurboVenda busca telefone, e-mail e o sócio de cada uma dessas {{ n }} empresas
        de {{ municipio }} e escreve a primeira mensagem. Teste grátis com 50, sem cartão.</p>
-    <a href="{{ cta_url }}" class="cta-btn" data-cta="pseo-topo"
+    {% set v_cta = variante('pseo_cta') %}
+    <a href="{{ cta_url }}" class="cta-btn" data-cta="pseo-topo-{{ v_cta }}"
        onclick="if(typeof gtag==='function')gtag('event','pseo_cta_click',{cnae_slug:'{{ seg.slug }}',cidade:'{{ combo.mun_slug }}',empresas:{{ n }}})">
-      Quero o contato dessas empresas
+      {% if v_cta == 'b' %}Buscar telefone e e-mail destas empresas{% else %}Quero o contato dessas empresas{% endif %}
     </a>
   </div>
 
