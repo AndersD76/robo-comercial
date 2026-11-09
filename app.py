@@ -2770,36 +2770,38 @@ def _todas_urls_sitemap():
     return dict(urls)
 
 
+# IndexNow em fluxo ("streaming"): poucas URLs por envio, espaçadas no tempo.
+# Em 09/11/2026 o Bing Webmaster marcou "IndexNow is in batch mode" (moderado)
+# porque o deploy mandava milhares de URLs de uma vez, em lotes de 1.000.
+INDEXNOW_POR_ENVIO = 10
+INDEXNOW_INTERVALO = 60       # segundos entre um envio e o próximo
+INDEXNOW_REVISAO = 30 * 60    # fila vazia: procura páginas novas/alteradas
+_INDEXNOW_TRAVA = 7700503     # pg advisory lock (funil 7700501, medição 7700502)
+
+
 def _indexnow_enviar(urls):
-    """Envia ao IndexNow (Bing, Yandex, Seznam...) em lotes. Devolve as URLs
-    aceitas (HTTP 200/202) e o status de cada lote."""
+    """Um POST ao IndexNow (Bing, Yandex, Seznam...). Devolve o status HTTP
+    (200/202 = aceito) ou o texto do erro."""
     import requests as http
-    aceitas, statuses = [], []
-    for i in range(0, len(urls), 1000):
-        lote = urls[i:i + 1000]
-        payload = {
-            "host": "www.turbovenda.com.br",
-            "key": _INDEXNOW_KEY,
-            "keyLocation": f"https://www.turbovenda.com.br/{_INDEXNOW_KEY}.txt",
-            "urlList": lote,
-        }
-        try:
-            r = http.post('https://api.indexnow.org/indexnow',
-                          json=payload, timeout=20)
-            statuses.append(r.status_code)
-            if r.status_code in (200, 202):
-                aceitas += lote
-        except Exception as e:
-            statuses.append(str(e))
-    return aceitas, statuses
+    payload = {
+        "host": "www.turbovenda.com.br",
+        "key": _INDEXNOW_KEY,
+        "keyLocation": f"https://www.turbovenda.com.br/{_INDEXNOW_KEY}.txt",
+        "urlList": list(urls),
+    }
+    try:
+        return http.post('https://api.indexnow.org/indexnow',
+                         json=payload, timeout=20).status_code
+    except Exception as e:
+        return str(e)
 
 
-def _indexnow_deploy(forcar=False):
-    """Avisa o IndexNow das URLs novas ou com lastmod alterado desde o último
-    envio (forcar=True reenvia tudo). Roda sozinho a cada deploy; o histórico
-    em indexnow_enviados evita reenviar milhares de URLs toda vez."""
+def _indexnow_pendencias(forcar=False):
+    """[(url, lastmod)] que falta avisar: URLs novas ou com lastmod diferente
+    do último envio aceito, páginas fixas antes das programáticas.
+    forcar=True apaga o histórico e põe tudo de volta na fila."""
     if not DATABASE_URL:
-        return {'erro': 'sem DATABASE_URL'}
+        return []
     atuais = _todas_urls_sitemap()
     conn = _conn()
     try:
@@ -2807,44 +2809,96 @@ def _indexnow_deploy(forcar=False):
         c.execute("CREATE TABLE IF NOT EXISTS indexnow_enviados ("
                   "url TEXT PRIMARY KEY, lastmod TEXT, "
                   "enviado_em TIMESTAMPTZ DEFAULT now())")
+        if forcar:
+            c.execute("DELETE FROM indexnow_enviados")
         conn.commit()
         c.execute("SELECT url, lastmod FROM indexnow_enviados")
         antes = {r['url']: r['lastmod'] or '' for r in c.fetchall()}
-        novas = [u for u, lm in atuais.items()
-                 if forcar or antes.get(u) != (lm or '')]
-        if not novas:
-            return {'urls_enviadas': 0}
-        aceitas, statuses = _indexnow_enviar(novas)
-        if aceitas:
+    finally:
+        conn.close()
+    return [(u, lm or '') for u, lm in atuais.items()
+            if antes.get(u) != (lm or '')]
+
+
+def _indexnow_enviar_grupo(grupo):
+    """Envia um grupo pequeno e grava as URLs aceitas. A trava evita que os
+    dois containers da troca de versão mandem o mesmo grupo, e a releitura
+    dentro dela descarta o que o outro já enviou."""
+    conn = _conn()
+    try:
+        c = conn.cursor()
+        c.execute("SELECT pg_try_advisory_xact_lock(%s) AS ok", (_INDEXNOW_TRAVA,))
+        if not c.fetchone()['ok']:
+            return 'ocupado'
+        c.execute("SELECT url, lastmod FROM indexnow_enviados WHERE url = ANY(%s)",
+                  ([u for u, _ in grupo],))
+        ja = {r['url']: r['lastmod'] or '' for r in c.fetchall()}
+        grupo = [(u, lm) for u, lm in grupo if ja.get(u) != lm]
+        if not grupo:
+            return 'ja_enviado'
+        status = _indexnow_enviar([u for u, _ in grupo])
+        if status in (200, 202):
             psycopg2.extras.execute_values(
                 c, "INSERT INTO indexnow_enviados (url, lastmod) VALUES %s "
                    "ON CONFLICT (url) DO UPDATE SET lastmod = EXCLUDED.lastmod,"
-                   " enviado_em = now()",
-                [(u, atuais[u] or '') for u in aceitas])
-            conn.commit()
-        return {'urls_enviadas': len(novas), 'aceitas': len(aceitas),
-                'indexnow': statuses}
+                   " enviado_em = now()", grupo)
+        conn.commit()
+        return status
     finally:
         conn.close()
 
 
-def _indexnow_no_boot():
+def _indexnow_rodada(dormir=time.sleep):
+    """Esvazia a fila em grupos de INDEXNOW_POR_ENVIO, um a cada
+    INDEXNOW_INTERVALO segundos. Para depois de 5 falhas seguidas (IndexNow
+    fora do ar): o resto fica para a próxima revisão. Devolve (aceitas, fila)."""
+    fila = _indexnow_pendencias()
+    if not fila:
+        return 0, 0
+    logger.info(f'IndexNow: {len(fila)} URLs na fila, {INDEXNOW_POR_ENVIO} '
+                f'por envio a cada {INDEXNOW_INTERVALO} s')
+    aceitas = falhas = 0
+    for i in range(0, len(fila), INDEXNOW_POR_ENVIO):
+        grupo = fila[i:i + INDEXNOW_POR_ENVIO]
+        status = _indexnow_enviar_grupo(grupo)
+        if status in ('ocupado', 'ja_enviado'):
+            continue
+        if status in (200, 202):
+            aceitas += len(grupo)
+            falhas = 0
+        else:
+            falhas += 1
+            logger.warning(f'IndexNow: envio recusado ({status})')
+            if falhas >= 5:
+                break
+        dormir(INDEXNOW_INTERVALO)
+    logger.info(f'IndexNow: rodada terminou, {aceitas} de {len(fila)} aceitas')
+    return aceitas, len(fila)
+
+
+def _indexnow_loop():
     time.sleep(90)  # app no ar, chave servida e contagens pSEO carregadas
-    try:
-        logger.info(f'IndexNow no deploy: {_indexnow_deploy()}')
-    except Exception as e:
-        logger.warning(f'IndexNow no deploy falhou: {e}')
+    while True:
+        try:
+            _indexnow_rodada()
+        except Exception as e:
+            logger.warning(f'IndexNow falhou: {e}')
+        time.sleep(INDEXNOW_REVISAO)
 
 
 if DATABASE_URL and os.environ.get('RAILWAY_ENVIRONMENT_ID'):
-    threading.Thread(target=_indexnow_no_boot, daemon=True).start()
+    threading.Thread(target=_indexnow_loop, daemon=True).start()
 
 
 @app.route('/admin/indexnow', methods=['POST'])
 def admin_indexnow():
+    """Mostra o tamanho da fila; ?tudo=1 põe todas as URLs de volta na fila
+    (saem aos poucos, na próxima revisão)."""
     if not session.get('admin_auth'):
         return jsonify({'error': 'unauthorized'}), 401
-    return jsonify(_indexnow_deploy(forcar=request.args.get('tudo') == '1'))
+    fila = _indexnow_pendencias(forcar=request.args.get('tudo') == '1')
+    return jsonify({'na_fila': len(fila), 'por_envio': INDEXNOW_POR_ENVIO,
+                    'intervalo_s': INDEXNOW_INTERVALO})
 
 
 # =============================================================================
