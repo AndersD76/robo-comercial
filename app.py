@@ -55,6 +55,28 @@ logging.basicConfig(
     datefmt='%Y-%m-%dT%H:%M:%S')
 logger = logging.getLogger(__name__)
 
+
+class _SemDadoPessoal(logging.Filter):
+    """LGPD nos logs (QA-LGPD-001): mascara e-mail, CPF e segredos em qualquer
+    linha (ex.: 'Unipile OK -> fulano@empresa.com' vira 'f***@empresa.com')."""
+    _EMAIL = re.compile(r'\b([A-Za-z0-9])[A-Za-z0-9._%+-]*@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)')
+    _CPF = re.compile(r'(?<![\d./-])\d{3}\.\d{3}\.\d{3}-\d{2}(?![\d./-])')
+    _SEGREDO = re.compile(r'(?i)\b(bearer\s+|token[=:]\s*|apikey=|api_key=|senha[=:]\s*|password[=:]\s*)[^\s&"\',]+')
+
+    def filter(self, record):
+        try:
+            msg = record.getMessage()
+        except Exception:
+            return True
+        novo = self._SEGREDO.sub(r'\1***', self._CPF.sub('***.***.***-**', self._EMAIL.sub(r'\1***@\2', msg)))
+        if novo != msg:
+            record.msg, record.args = novo, ()
+        return True
+
+
+for _h in logging.getLogger().handlers:
+    _h.addFilter(_SemDadoPessoal())
+
 _secret = os.environ.get('SECRET_KEY', '')
 if not _secret or _secret == 'mv-saas-2025-change-in-prod':
     if os.environ.get('RAILWAY_ENVIRONMENT') or os.environ.get('RENDER') or os.environ.get('FLY_APP_NAME'):
@@ -8850,7 +8872,11 @@ def api_excluir_dados():
 # =============================================================================
 
 @app.route('/health')
+@app.route('/ready')
 def health():
+    """Usado pelo healthcheck do Railway: só responde 200 se o banco responde.
+    O erro vai para o log, nunca para a resposta pública (QA-SEC-008: a
+    mensagem do driver trazia host e usuário do banco)."""
     try:
         conn = _conn()
         try:
@@ -8859,8 +8885,9 @@ def health():
         finally:
             conn.close()
         return jsonify({'status': 'ok', 'version': '2.1', 'db': 'ok'})
-    except Exception as e:
-        return jsonify({'status': 'degraded', 'version': '2.1', 'db': str(e)}), 503
+    except Exception:
+        logger.exception('health: banco indisponível')
+        return jsonify({'status': 'degraded', 'version': '2.1', 'db': 'falha'}), 503
 
 
 # =============================================================================

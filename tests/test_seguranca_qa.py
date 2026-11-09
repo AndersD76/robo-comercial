@@ -155,3 +155,27 @@ def test_robo_sem_termos_nao_usa_termos_da_pili():
     assert 'TERMOS_BUSCA' not in corpo.split('# Sem termos do cliente')[0] and corpo.rstrip().endswith('return []')
     buscador = open(os.path.join(raiz, 'buscador.py'), encoding='utf-8').read()
     assert 'random.choice(TERMOS_BUSCA)' not in buscador and 'random.sample(TERMOS_BUSCA' not in buscador
+
+
+# QA-LGPD-001: logs gravavam e-mail de lead e de cliente
+def test_logs_sem_email_cpf_ou_segredo():
+    f = app._SemDadoPessoal()
+    import logging
+    r = logging.LogRecord('t', logging.INFO, __file__, 1,
+                          'Unipile OK -> %s | cpf 123.456.789-09 | Authorization: Bearer abc.def | token=xyz123',
+                          ('fulano.silva@empresa.com.br',), None)
+    f.filter(r)
+    m = r.getMessage()
+    assert 'fulano.silva' not in m and 'f***@empresa.com.br' in m
+    assert '123.456.789-09' not in m and 'abc.def' not in m and 'xyz123' not in m
+    assert any(isinstance(fl, app._SemDadoPessoal) for h in logging.getLogger().handlers for fl in h.filters)
+
+
+# QA-SEC-008: /health devolvia a mensagem do driver (host e usuário do banco)
+def test_health_nao_vaza_detalhe_do_banco(monkeypatch):
+    def quebra(*a, **k):
+        raise RuntimeError('connection to server at "ep-segredo.neon.tech" failed for user "neondb_owner"')
+    monkeypatch.setattr(app, '_conn', quebra)
+    for rota in ('/health', '/ready'):
+        r = app.app.test_client().get(rota)
+        assert r.status_code == 503 and 'neon' not in r.get_data(as_text=True)
