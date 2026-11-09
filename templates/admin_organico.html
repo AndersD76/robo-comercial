@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Busca orgânica e IA — Admin TurboVenda</title>
+<style>
+  body{margin:0;background:#0b1220;color:#e2e8f0;font:15px/1.5 Inter,system-ui,sans-serif}
+  main{max-width:1100px;margin:0 auto;padding:24px 16px 60px}
+  h1{font-size:1.5rem;margin:0 0 4px} h2{font-size:1.1rem;margin:32px 0 10px}
+  .sub{color:#94a3b8;margin:0 0 20px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+  .card{background:#0d1526;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:14px}
+  .card b{display:block;font-size:1.5rem;color:#fff} .card span{color:#94a3b8;font-size:13px}
+  table{width:100%;border-collapse:collapse;font-size:14px;margin-top:6px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.06)}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+  .vazio{color:#94a3b8;background:#0d1526;border:1px dashed rgba(255,255,255,.12);border-radius:10px;padding:12px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:24px} @media(max-width:800px){.grid2{grid-template-columns:1fr}}
+  pre{white-space:pre-wrap;background:#0d1526;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:16px;font:13.5px/1.6 ui-monospace,monospace}
+  a{color:#a5b4fc} .erro{color:#fca5a5}
+</style>
+</head>
+<body><main>
+  <p><a href="/admin/dashboard">← Admin</a> · <a href="/admin/trafego">Tráfego</a></p>
+  <h1>Busca orgânica e IA</h1>
+  <p class="sub">Últimos 28 dias. Telemetria própria; cliques, impressões e posição entram quando o Search Console estiver conectado.</p>
+  {% if erro %}<p class="erro">Erro ao ler os dados: {{ erro }}</p>{% endif %}
+
+  {% if d %}
+  <div class="cards">
+    <div class="card"><b>{{ d.entradas.atual }}</b><span>entradas vindas de buscadores (28 dias anteriores: {{ d.entradas.anterior }})</span></div>
+    <div class="card"><b>{{ d.entradas_ia }}</b><span>entradas vindas de assistentes de IA</span></div>
+    <div class="card"><b>{{ d.cadastros|sum(attribute='n') }}</b><span>cadastros no período</span></div>
+    {% if d.sov %}<div class="card"><b>{{ d.sov[0].citado or 0 }} de {{ d.sov[0].perguntas }}</b><span>citações em IA (rodada de {{ d.sov[0].rodada.strftime('%d/%m') }})</span></div>{% endif %}
+  </div>
+
+  <div class="grid2">
+    <div>
+      <h2>Entradas de buscadores por tipo de página</h2>
+      <table><tr><th>Tipo</th><th class="n">Entradas</th></tr>
+        {% for t, n in d.por_tipo %}<tr><td>{{ t }}</td><td class="n">{{ n }}</td></tr>{% endfor %}</table>
+    </div>
+    <div>
+      <h2>Cadastros por origem (visitas → cadastro)</h2>
+      <table><tr><th>Origem (utm_source)</th><th class="n">Cadastros</th></tr>
+        {% for r in d.cadastros %}<tr><td>{{ r.origem }}</td><td class="n">{{ r.n }}</td></tr>{% endfor %}</table>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div>
+      <h2>Robôs de busca e de IA</h2>
+      {% if d.robos %}<table><tr><th>Robô</th><th class="n">Acessos</th><th class="n">429</th></tr>
+        {% for r in d.robos %}<tr><td>{{ r.robo }}</td><td class="n">{{ r.n }}</td><td class="n">{{ r.bloqueados }}</td></tr>{% endfor %}</table>
+      {% else %}<p class="vazio">Nenhum robô registrado ainda.</p>{% endif %}
+    </div>
+    <div>
+      <h2>Share of voice em IA (por rodada)</h2>
+      {% if d.sov %}<table><tr><th>Rodada</th><th class="n">Citado</th><th class="n">Nos resultados</th><th class="n">Perguntas</th></tr>
+        {% for r in d.sov %}<tr><td>{{ r.rodada.strftime('%d/%m/%Y') }}</td><td class="n">{{ r.citado }}</td><td class="n">{{ r.nos_resultados }}</td><td class="n">{{ r.perguntas }}</td></tr>{% endfor %}</table>
+      {% else %}<p class="vazio">Nenhuma rodada registrada (growth/ferramentas/share_of_voice.py).</p>{% endif %}
+    </div>
+  </div>
+
+  <h2>Search Console</h2>
+  {% if d.gsc %}
+  <div class="grid2">
+    <div>
+      <h3>Posição 4–15 (empurrar para o top 3)</h3>
+      <table><tr><th>Consulta</th><th>Página</th><th class="n">Impr.</th><th class="n">Pos.</th></tr>
+        {% for r in d.oportunidades %}<tr><td>{{ r.consulta }}</td><td>{{ r.pagina }}</td><td class="n">{{ r.imp }}</td><td class="n">{{ '%.1f'|format(r.pos) }}</td></tr>{% endfor %}</table>
+    </div>
+    <div>
+      <h3>CTR abaixo do esperado para a posição (reescrever título)</h3>
+      <table><tr><th>Página</th><th class="n">Impr.</th><th class="n">CTR</th><th class="n">Pos.</th></tr>
+        {% for r in d.ctr_baixo %}<tr><td>{{ r.pagina }}</td><td class="n">{{ r.imp }}</td><td class="n">{{ '%.1f'|format(100 * r.cli / r.imp) }}%</td><td class="n">{{ '%.1f'|format(r.pos) }}</td></tr>{% endfor %}</table>
+    </div>
+  </div>
+  <h3>Indexação</h3>
+  <table><tr><th>Sitemap</th><th class="n">Enviadas</th><th class="n">Indexadas</th></tr>
+    {% for r in d.indexacao %}<tr><td>{{ r.sitemap }}</td><td class="n">{{ r.enviadas }}</td><td class="n">{{ r.indexadas }}</td></tr>{% endfor %}</table>
+  <table><tr><th>URL prioritária</th><th>Veredito</th><th>Situação</th><th>Último rastreio</th></tr>
+    {% for r in d.inspecao %}<tr><td>{{ r.url }}</td><td>{{ r.veredito }}</td><td>{{ r.estado }}</td><td>{{ r.ultimo_rastreio }}</td></tr>{% endfor %}</table>
+  {% else %}
+  <p class="vazio">Sem dados do Search Console. Para conectar: crie uma conta de serviço no Google Cloud, adicione o e-mail dela como
+    usuário (leitura) da propriedade no Search Console e configure no Railway <code>GSC_CREDENCIAIS_JSON</code> (conteúdo do JSON)
+    e <code>GSC_PROPRIEDADE</code> (ex.: <code>sc-domain:turbovenda.com.br</code>). Para o Bing: <code>BING_API_KEY</code>
+    (Bing Webmaster → Configurações → Acesso à API). A coleta roda todo dia às 6h.</p>
+  {% endif %}
+  {% endif %}
+
+  <h2>Relatório semanal</h2>
+  <p><a href="?gerar=1">Gerar agora</a> (gera sozinho toda segunda, 8h)</p>
+  {% if relatorio %}<pre>{{ relatorio.markdown }}</pre>{% else %}<p class="vazio">Nenhum relatório gerado ainda.</p>{% endif %}
+</main></body>
+</html>

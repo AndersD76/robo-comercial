@@ -297,3 +297,15 @@ def test_paginas_de_video(client, monkeypatch):
     assert video['hasPart'][0]['endOffset'] == 45 and 'transcript' in video
     assert client.get('/videos').status_code == 200
     assert client.get('/videos/nao-existe').status_code == 404
+
+
+def test_painel_organico_so_para_admin(client):
+    r = client.get('/admin/organico')
+    assert r.status_code == 302   # sem login de admin, vai para o login
+    with client.session_transaction() as s:
+        s['admin_auth'] = True
+    r = client.get('/admin/organico')
+    assert r.status_code == 200 and 'Busca orgânica e IA' in r.get_data(as_text=True)
+    assert 'noindex' in r.get_data(as_text=True)
+    with client.session_transaction() as s:
+        s.pop('admin_auth', None)

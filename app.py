@@ -10073,6 +10073,85 @@ def admin_trafego():
     return render_template('admin_trafego.html', dias=dias, d=dados, erro=erro)
 
 
+# =============================================================================
+# Medição orgânica (Fase 6 do growth): ingestão diária de Search Console e
+# Bing (só com credenciais), relatório semanal e painel /admin/organico
+# =============================================================================
+
+import medicao  # noqa: E402
+
+_MEDICAO_TRAVA = 7700502
+
+
+def _medicao_passada(agora_br):
+    """Ingestão às 6h e relatório semanal às segundas, 8h (horário de Brasília)."""
+    conn = _conn()
+    try:
+        c = conn.cursor()
+        c.execute('SELECT pg_try_advisory_lock(%s) AS ok', (_MEDICAO_TRAVA,))
+        if not c.fetchone()['ok']:
+            return
+        try:
+            medicao.criar_tabelas(c)
+            conn.commit()
+            if agora_br.hour == 6:
+                cred, prop = os.environ.get('GSC_CREDENCIAIS_JSON'), os.environ.get('GSC_PROPRIEDADE')
+                if cred and prop:
+                    logger.info(f'medicao: GSC {medicao.ingerir_gsc(conn, cred, prop)} linhas')
+                if os.environ.get('BING_API_KEY'):
+                    logger.info(f"medicao: Bing {medicao.ingerir_bing(conn, os.environ['BING_API_KEY'])} linhas")
+            if agora_br.weekday() == 0 and agora_br.hour == 8:
+                semana, _ = medicao.salvar_relatorio_semanal(conn, agora_br.date())
+                logger.info(f'medicao: relatório semanal de {semana} gerado')
+        finally:
+            conn.rollback()
+            c.execute('SELECT pg_advisory_unlock(%s)', (_MEDICAO_TRAVA,))
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def _medicao_loop():
+    time.sleep(300)
+    while True:
+        try:
+            _medicao_passada(_dt.datetime.utcnow() - _dt.timedelta(hours=3))
+        except Exception:
+            logger.exception('medicao: falha na passada')
+        # acorda perto da virada da hora seguinte
+        time.sleep(3600 - time.time() % 3600 + 60)
+
+
+if DATABASE_URL and os.environ.get('RAILWAY_ENVIRONMENT_ID'):
+    threading.Thread(target=_medicao_loop, daemon=True).start()
+
+
+@app.route('/admin/organico')
+@admin_required
+def admin_organico():
+    dados, relatorio, erro = {}, None, None
+    conn = None
+    try:
+        conn = _conn()
+        c = conn.cursor()
+        c.execute(_TRAF_SQL)
+        medicao.criar_tabelas(c)
+        conn.commit()
+        dados = medicao.dados_painel(c)
+        if request.args.get('gerar') == '1':
+            medicao.salvar_relatorio_semanal(conn)
+        c.execute('SELECT semana, gerado_em, markdown FROM relatorios_semanais ORDER BY semana DESC LIMIT 1')
+        relatorio = c.fetchone()
+    except Exception as e:
+        logger.exception('admin_organico')
+        erro = str(e)
+    finally:
+        if conn:
+            conn.close()
+    return render_template('admin_organico.html', d=dados, relatorio=relatorio, erro=erro,
+                           ctr_esperado=medicao.CTR_ESPERADO)
+
+
 @app.route('/admin/api/stats')
 @admin_required
 def admin_api_stats():
