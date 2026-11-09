@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nova senha — TurboVenda</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" href="/static/favicon-96.png" type="image/png" sizes="96x96">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/tokens.css">
+  <link rel="stylesheet" href="/static/components.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',sans-serif;background:#060b18;color:#f1f5f9;
+         min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px 16px}
+    .bg-glow{position:fixed;inset:0;pointer-events:none;
+        background:radial-gradient(ellipse at 50% 0%,rgba(99,102,241,.12) 0%,transparent 60%)}
+    .card{width:100%;max-width:420px;background:#0d1526;border:1px solid rgba(99,102,241,.2);
+        border-radius:20px;padding:40px;position:relative;z-index:1}
+    .logo{text-align:center;margin-bottom:28px}
+    .logo-mark{width:48px;height:48px;border-radius:14px;margin:0 auto 12px;
+        background:linear-gradient(135deg,#6366f1,#8b5cf6);
+        display:flex;align-items:center;justify-content:center;font-size:22px}
+    .logo-text{font-size:20px;font-weight:900;letter-spacing:-.5px}
+    .logo-text span{color:#6366f1}
+    h2{font-size:22px;font-weight:800;margin-bottom:6px;text-align:center}
+    .subtitle{color:#94a3b8;font-size:14px;text-align:center;margin-bottom:24px;line-height:1.6}
+    .field{margin-bottom:16px}
+    label{display:block;font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:6px}
+    input{width:100%;background:#111d35;border:1px solid rgba(255,255,255,.08);
+        border-radius:10px;padding:12px 14px;color:#f1f5f9;font-size:15px;
+        font-family:'Inter',sans-serif;outline:none;transition:.2s}
+    input:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.15)}
+    input::placeholder{color:#475569}
+    .btn{width:100%;background:linear-gradient(135deg,#6366f1,#8b5cf6);
+        color:#fff;border:none;border-radius:10px;padding:13px;font-size:15px;
+        font-weight:700;cursor:pointer;margin-top:8px;transition:.2s;font-family:'Inter',sans-serif;
+        display:inline-block;text-align:center;text-decoration:none}
+    .btn:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(99,102,241,.4)}
+    .error{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);
+        color:#fca5a5;border-radius:10px;padding:12px 14px;font-size:13px;margin-bottom:16px;line-height:1.6}
+    .footer-link{text-align:center;margin-top:20px;font-size:14px;color:#64748b}
+    .footer-link a{color:#818cf8;text-decoration:none;font-weight:600}
+  </style>
+</head>
+<body>
+<a href="#main" class="skip-link">Pular para conteúdo</a>
+<div class="bg-glow"></div>
+<main id="main">
+<div class="card">
+  <div class="logo">
+    <div class="logo-mark">⚡</div>
+    <div class="logo-text">Turbo<span>Venda</span></div>
+  </div>
+
+  {% if invalido %}
+  <h2>Link inválido ou vencido</h2>
+  <p class="subtitle">O link para criar uma nova senha vale por 1 hora e só pode ser usado uma vez. Peça outro.</p>
+  <a href="/esqueci-senha" class="btn"><i class="fa fa-rotate-right"></i> Pedir um novo link</a>
+  {% else %}
+  <h2>Crie uma nova senha</h2>
+  <p class="subtitle">Use pelo menos 6 caracteres.</p>
+
+  {% if error %}
+  <div class="error"><i class="fa fa-circle-exclamation"></i> {{ error }}</div>
+  {% endif %}
+
+  <form method="POST">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="field">
+      <label for="senha">Nova senha</label>
+      <input type="password" id="senha" name="senha" placeholder="••••••••" required minlength="6" autocomplete="new-password" autofocus>
+    </div>
+    <div class="field">
+      <label for="senha2">Repita a nova senha</label>
+      <input type="password" id="senha2" name="senha2" placeholder="••••••••" required minlength="6" autocomplete="new-password">
+    </div>
+    <button type="submit" class="btn">
+      <i class="fa fa-key"></i> Salvar nova senha
+    </button>
+  </form>
+  {% endif %}
+
+  <div class="footer-link">
+    <a href="/login">← Voltar para o login</a>
+  </div>
+</div>
+</main>
+{% include 'cookie_banner.html' %}
+</body>
+</html>

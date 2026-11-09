@@ -50,6 +50,8 @@
     .btn:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(99,102,241,.4)}
     .error{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);
         color:#fca5a5;border-radius:10px;padding:12px 14px;font-size:13px;margin-bottom:16px}
+    .ok{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);
+        color:#6ee7b7;border-radius:10px;padding:12px 14px;font-size:13px;margin-bottom:16px}
     .footer-link{text-align:center;margin-top:20px;font-size:14px;color:#64748b}
     .footer-link a{color:#818cf8;text-decoration:none;font-weight:600}
     .footer-link a:hover{color:#6366f1}
@@ -70,6 +72,9 @@
   <h2>Bem-vindo de volta</h2>
   <p class="subtitle">Entre na sua conta para continuar</p>
 
+  {% if senha_trocada %}
+  <div class="ok" role="status"><i class="fa fa-circle-check"></i> Senha alterada. Entre com a nova senha.</div>
+  {% endif %}
   {% if error %}
   <div class="error"><i class="fa fa-circle-exclamation"></i> {{ error }}</div>
   {% endif %}
@@ -88,6 +93,9 @@
       <i class="fa fa-arrow-right-to-bracket"></i> Entrar
     </button>
   </form>
+  <div class="footer-link" style="margin-top:14px;font-size:13px">
+    <a href="/esqueci-senha" style="font-weight:500">Esqueci minha senha</a>
+  </div>
 
   <div class="divider">ou</div>
   <div class="footer-link">

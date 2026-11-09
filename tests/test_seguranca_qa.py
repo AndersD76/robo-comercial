@@ -92,3 +92,43 @@ def test_painel_define_funcoes_de_escape():
     for nome in ('dashboard.html', 'index.html', 'admin.html', 'config.html', 'agendar.html'):
         html = open(os.path.join(raiz, nome), encoding='utf-8').read()
         assert 'function esc(v)' in html and 'function urlSegura(u)' in html, nome
+
+
+# QA-SEC-006: troca de senha não derrubava as outras sessões (cookie assinado no navegador)
+def test_troca_de_senha_derruba_sessoes_antigas(monkeypatch):
+    class Banco:
+        def cursor(self):
+            return self
+
+        def execute(self, sql, params=None):
+            pass
+
+        def fetchone(self):
+            return {'sessao_versao': 1, 'ativo': True}
+
+        def close(self):
+            pass
+    monkeypatch.setattr(app, '_conn', lambda *a, **k: Banco())
+    app._sessoes_cache.clear()
+    c = app.app.test_client()
+    with c.session_transaction() as s:
+        s['user_id'], s['sv'] = 99, 0          # sessão de antes da troca
+    assert c.get('/api/meu-plano').status_code == 401
+    with c.session_transaction() as s:
+        assert 'user_id' not in s
+    with c.session_transaction() as s:
+        s['user_id'], s['sv'] = 99, 1          # sessão nova passa do login_required
+    assert c.get('/api/meu-plano').status_code != 401
+    app._sessoes_cache.clear()
+
+
+# QA-FUN-001: e-mail de prospecção dos clientes saía com o modelo da Pili Equipamentos
+def test_email_do_cliente_nao_usa_modelo_da_pili(monkeypatch):
+    monkeypatch.setattr(app, 'get_bot_config', lambda schema: {
+        'empresa_nome': 'Uniformes Sul', 'descricao': 'Vendemos uniformes para indústrias.',
+        'website': 'uniformessul.com.br'})
+    html, assunto = app._template_email_cliente('emp_5', {'email': 'dono@uniformessul.com.br'})
+    assert 'Pili' not in html and 'Tombadores' not in html
+    assert 'Uniformes Sul' in html and 'Uniformes Sul' in assunto
+    html_pili, _ = app._template_email_cliente('emp_1', {'email': 'vendas@pili.ind.br', 'empresa_nome': 'Pili'})
+    assert 'Pili' in html_pili

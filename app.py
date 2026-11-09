@@ -41,6 +41,7 @@ except ImportError:
 
 from validacao_contato import email_valido, limpar_contatos
 import emails_funil
+import contas as _contas
 from pseo_data import (CNAE_B2B, CNAE_POR_CODIGO, CNAE_POR_SLUG,
                        PORTE_LABELS, UF_NOMES, cnae_formatado, do_uf,
                        no_uf, nome_municipio, slugify)
@@ -655,6 +656,18 @@ def _init_public_schema_safe():
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS aha_em TIMESTAMPTZ",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS emails_marketing_off BOOLEAN DEFAULT FALSE",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS indicado_por BIGINT",
+            # recuperação de senha (trazida da branch fix/robo-ativacao-seguranca, que
+            # nunca entrou no master): só o hash do token, 1 hora, uso único
+            """CREATE TABLE IF NOT EXISTS senha_reset (
+                id          BIGSERIAL PRIMARY KEY,
+                user_id     BIGINT REFERENCES users(id) ON DELETE CASCADE,
+                token_hash  TEXT UNIQUE NOT NULL,
+                expira_em   TIMESTAMP NOT NULL,
+                usado_em    TIMESTAMP,
+                criado_em   TIMESTAMP DEFAULT NOW()
+            )""",
+            # troca de senha derruba as outras sessões (QA-SEC-006)
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS sessao_versao INTEGER DEFAULT 0",
         ]:
             try:
                 c.execute(stmt)
@@ -994,9 +1007,36 @@ def _verify_pw(pw: str, stored_hash: str) -> bool:
     return hashlib.sha256(pw.encode()).hexdigest() == stored_hash
 
 
+_sessoes_cache = {}   # user_id -> (sessao_versao, ativo, quando)
+
+
+def _sessao_valida(uid, versao):
+    """Sessão de conta ativa e da versão atual. A troca de senha sobe
+    users.sessao_versao e derruba as outras sessões (QA-SEC-006); conta
+    desativada perde o acesso. Cache de 60 s; se o banco falhar, não derruba ninguém."""
+    agora = time.time()
+    v = _sessoes_cache.get(uid)
+    if not v or agora - v[2] > 60:
+        try:
+            conn = _conn()
+            try:
+                c = conn.cursor()
+                c.execute('SELECT sessao_versao, ativo FROM users WHERE id = %s', (uid,))
+                r = c.fetchone()
+            finally:
+                conn.close()
+        except Exception:
+            return True
+        v = ((r['sessao_versao'] or 0), bool(r['ativo']), agora) if r else (None, False, agora)
+        _sessoes_cache[uid] = v
+    return v[1] and v[0] == (versao or 0)
+
+
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        if 'user_id' in session and not _sessao_valida(session['user_id'], session.get('sv', 0)):
+            session.clear()
         if 'user_id' not in session:
             if request.path.startswith('/api/'):
                 return jsonify({'error': 'não autenticado'}), 401
@@ -1473,6 +1513,7 @@ def login():
             conn = None
             if user and _verify_pw(pw, user['password_hash']):
                 session['user_id'] = user['id']
+                session['sv'] = user.get('sessao_versao') or 0
                 session.permanent = True
                 # Migra hash SHA-256 legado para bcrypt
                 if not user['password_hash'].startswith('$2'):
@@ -1656,6 +1697,7 @@ def cadastro():
                     if termos or segmento:
                         _ligar_robo_primeira_vez_ao_fundo(schema)
                     session['user_id'] = uid
+                    session['sv'] = 0
                     session['just_registered'] = True
                     return redirect(url_for('config_page'))
             except Exception as e:
@@ -1706,6 +1748,152 @@ def admin_users():
 def logout():
     session.clear()
     return redirect(url_for('landing'))
+
+
+# --- Esqueci minha senha ----------------------------------------------------
+# Não existia: quem esquecia a senha (e a sessão morria em 8h) não voltava
+# mais. Token aleatório, só o hash no banco, vale 1 hora, uso único.
+
+def _enviar_link_senha(email):
+    """Gera o token e manda o link. Roda em thread: a tela responde sempre
+    igual e no mesmo tempo, exista ou não a conta."""
+    conn = None
+    token = None
+    try:
+        conn = _conn()
+        c = conn.cursor()
+        c.execute('SELECT id FROM users WHERE email = %s AND ativo = TRUE',
+                  (email,))
+        user = c.fetchone()
+        if not user:
+            return
+        # Um pedido a cada 2 min por conta: ninguém enche a caixa de alguém
+        c.execute("""SELECT 1 FROM senha_reset WHERE user_id = %s
+                     AND criado_em > NOW() - INTERVAL '2 minutes'""",
+                  (user['id'],))
+        if c.fetchone():
+            return
+        token = secrets.token_urlsafe(32)
+        # O link novo invalida os anteriores
+        c.execute('UPDATE senha_reset SET usado_em = NOW() '
+                  'WHERE user_id = %s AND usado_em IS NULL', (user['id'],))
+        c.execute("""INSERT INTO senha_reset (user_id, token_hash, expira_em)
+                     VALUES (%s, %s, NOW() + INTERVAL '1 hour')""",
+                  (user['id'], _contas.hash_token(token)))
+        conn.commit()
+    except Exception:
+        logger.exception('esqueci-senha: falha ao gerar o token')
+        return
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    link = f'{_url_app()}/redefinir-senha/{token}'
+    _send_system_email(email, 'Criar uma nova senha no TurboVenda',
+                       _contas.html_redefinir_senha(link))
+
+
+def _token_senha_valido(token):
+    """Registro do token se ele existe, não foi usado e não venceu."""
+    if not token or len(token) > 200:
+        return None
+    conn = None
+    try:
+        conn = _conn()
+        c = conn.cursor()
+        c.execute("""SELECT id, user_id FROM senha_reset
+                     WHERE token_hash = %s AND usado_em IS NULL
+                       AND expira_em > NOW()""", (_contas.hash_token(token),))
+        return c.fetchone()
+    except Exception:
+        logger.exception('redefinir-senha: falha ao validar o token')
+        return None
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/esqueci-senha', methods=['GET', 'POST'])
+@limiter.limit("5 per minute;20 per hour", methods=["POST"])
+def esqueci_senha():
+    enviado = False
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        if email and len(email) <= 254 and '@' in email:
+            threading.Thread(target=_enviar_link_senha, args=(email,),
+                             daemon=True).start()
+        # Mesma resposta sempre: não revela se o e-mail tem conta
+        enviado = True
+    return render_template('esqueci_senha.html', enviado=enviado)
+
+
+@app.route('/redefinir-senha/<token>')
+def redefinir_senha_link(token):
+    """Link do e-mail. Guarda o token na sessão e tira da URL, para ele não
+    ficar no histórico, no Referer nem no registro de páginas visitadas."""
+    session['reset_token'] = (token or '')[:200]
+    return redirect(url_for('redefinir_senha'))
+
+
+@app.route('/redefinir-senha', methods=['GET', 'POST'])
+@limiter.limit("10 per minute", methods=["POST"])
+def redefinir_senha():
+    token = session.get('reset_token') or ''
+    if not _token_senha_valido(token):
+        session.pop('reset_token', None)
+        return render_template('redefinir_senha.html', invalido=True,
+                               error=None)
+    error = None
+    if request.method == 'POST':
+        pw = request.form.get('senha', '')
+        pw2 = request.form.get('senha2', '')
+        if len(pw) < 6:
+            error = 'A senha precisa ter pelo menos 6 caracteres.'
+        elif pw != pw2:
+            error = 'As duas senhas não são iguais.'
+        else:
+            conn = None
+            try:
+                conn = _conn()
+                c = conn.cursor()
+                # Usa o token uma vez só, mesmo com dois envios ao mesmo tempo
+                c.execute("""UPDATE senha_reset SET usado_em = NOW()
+                             WHERE token_hash = %s AND usado_em IS NULL
+                               AND expira_em > NOW()
+                             RETURNING user_id""",
+                          (_contas.hash_token(token),))
+                row = c.fetchone()
+                if row:
+                    c.execute('UPDATE users SET password_hash = %s, '
+                              'sessao_versao = COALESCE(sessao_versao, 0) + 1 '
+                              'WHERE id = %s', (_hash_pw(pw), row['user_id']))
+                    _sessoes_cache.pop(row['user_id'], None)
+                    c.execute('UPDATE senha_reset SET usado_em = NOW() '
+                              'WHERE user_id = %s AND usado_em IS NULL',
+                              (row['user_id'],))
+                    conn.commit()
+                    session.pop('reset_token', None)
+                    session.pop('user_id', None)
+                    return redirect(url_for('login', senha='ok'))
+                conn.rollback()
+                session.pop('reset_token', None)
+                return render_template('redefinir_senha.html', invalido=True,
+                                       error=None)
+            except Exception:
+                logger.exception('redefinir-senha: falha ao trocar a senha')
+                error = 'Erro interno. Tente de novo.'
+            finally:
+                if conn:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+    return render_template('redefinir_senha.html', invalido=False, error=error)
 
 
 # =============================================================================
@@ -6691,6 +6879,65 @@ def _send_email_classico(ecfg, to_email, to_name, subject, html):
     return False
 
 
+def _template_email_cliente(schema, user):
+    """(html, assunto) do e-mail avulso de /send-emails (trazido da branch
+    fix/robo-ativacao-seguranca, commit 40b6e43, que nunca entrou no master).
+
+    O master usava templates/email_pili.html — propaganda de tombadores da
+    Pili Equipamentos — para QUALQUER cliente, em nome dele. Ordem agora: o
+    template do próprio cliente (gerado no onboarding ou editado em
+    /configurar) e, sem ele, um neutro com nome, descrição, site e
+    assinatura do cliente. O da Pili só vale para a conta @pili.ind.br.
+    """
+    from html import escape as _esc
+    user = user or {}
+    if _contas.usa_template_pili(user.get('email')):
+        caminho = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               'templates', 'email_pili.html')
+        with open(caminho, 'r', encoding='utf-8') as f:
+            empresa_pili = (user.get('empresa_nome') or 'Pili').strip()
+            return f.read(), '{{nome}}, conheça a ' + empresa_pili
+
+    cfg = get_bot_config(schema) or {}
+    empresa = (cfg.get('empresa_nome') or user.get('empresa_nome')
+               or 'Nossa empresa').strip()
+    assunto = ((cfg.get('email_assunto_padrao') or '').strip()
+               or '{{nome}}, conheça a ' + empresa)
+    tpl = (cfg.get('email_html_template') or '').strip()
+    if tpl:
+        return tpl, assunto
+
+    cor_btn = cfg.get('email_cor_botao') or '#2563eb'
+    website = (cfg.get('website') or user.get('website') or '').strip()
+    site_url = ''
+    if website:
+        site_url = website if website.startswith('http') else f'https://{website}'
+    site_limpo = re.sub(r'^https?://(www\.)?', '', site_url).rstrip('/')
+    site_inline = ''
+    rodape = []
+    assinatura = (cfg.get('email_remetente_nome') or '').strip()
+    if assinatura and assinatura.lower() != empresa.lower():
+        rodape.append(_esc(assinatura))
+    if site_url:
+        rodape.append(f'<a href="{_esc(site_url)}" style="color:#6b7280;'
+                      f'text-decoration:none;border-bottom:1px solid #d1d5db;">'
+                      f'{_esc(site_limpo)}</a>')
+        site_inline = (f' (<a href="{_esc(site_url)}" style="color:{cor_btn};'
+                       f'text-decoration:none;">{_esc(site_limpo)}</a>)')
+    descricao = (cfg.get('descricao') or '').strip()
+    pitch = _extrair_pitch(descricao, empresa, max_chars=150) if descricao else ''
+    if not pitch:
+        pitch = ('Gostaria de apresentar rapidamente o nosso trabalho e '
+                 'entender se faz sentido para vocês')
+    html_tpl = _build_email_html(
+        empresa=_esc(empresa), pitch=_esc(pitch.rstrip('.')),
+        cor_header=cfg.get('email_cor_header') or '#1a2332',
+        cor_btn=cor_btn, cor_texto=cfg.get('email_cor_texto') or '#ffffff',
+        site_link_inline=site_inline, site_footer=' · '.join(rodape),
+        site_url=_esc(site_url))
+    return html_tpl, assunto
+
+
 @app.route('/api/<bot>/send-emails', methods=['POST'])
 @login_required
 def api_send_emails(bot):
@@ -6708,16 +6955,14 @@ def api_send_emails(bot):
     if not ecfg['sender_email']:
         return jsonify({'error': 'Configure seu email remetente em Configurações'}), 400
 
-    tpl_path = os.path.join(os.path.dirname(__file__), 'templates', 'email_custom.html')
-    if not os.path.exists(tpl_path):
-        tpl_path = os.path.join(os.path.dirname(__file__), 'templates', 'email_pili.html')
-    try:
-        with open(tpl_path, 'r', encoding='utf-8') as f:
-            tpl_html = f.read()
-    except FileNotFoundError:
-        return jsonify({'error': 'template de email nao encontrado'}), 400
-
     user = get_current_user()
+    try:
+        tpl_html, assunto_tpl = _template_email_cliente(schema, user)
+    except Exception:
+        logger.exception('template de email do cliente')
+        return jsonify({'error': 'Não foi possível montar o email. '
+                                 'Revise o template em Configurações.'}), 400
+
     conn = _conn(schema)
     c = conn.cursor()
     ph = ','.join(['%s'] * len(lead_ids))
@@ -6771,15 +7016,19 @@ def api_send_emails(bot):
         track_token = _get_email_track_token(schema, lead['id'])
         track_open_url = f'{base_url}/t/{track_token}/open.png'
         track_click_url = f'{base_url}/t/{track_token}/click?url={_urlquote(link_agenda, safe="")}'
-        html = (tpl_html.replace('{{nome}}', nome)
+        from html import escape as _esc_html
+        html = (tpl_html.replace('{{nome}}', _esc_html(nome))
                         .replace('{{DEMO_CAL_LINK}}', track_click_url)
                         .replace('{{cal_link}}', track_click_url)
                         .replace('{{link_agenda}}', track_click_url)
-                        .replace('{{EMPRESA}}', empresa_nome))
+                        .replace('{{EMPRESA}}', _esc_html(empresa_nome))
+                        .replace('{{empresa}}', _esc_html(empresa_nome)))
         html = _inject_tracking_pixel(html, track_open_url)
+        assunto = (assunto_tpl.replace('{{nome}}', nome)
+                              .replace('{{EMPRESA}}', empresa_nome)
+                              .replace('{{empresa}}', empresa_nome))
         try:
-            ok = _send_email(ecfg, lead['email'], nome,
-                             f'{nome}, conheça {empresa_nome}', html)
+            ok = _send_email(ecfg, lead['email'], nome, assunto, html)
             if ok:
                 enviados += 1
                 try:
@@ -10731,12 +10980,13 @@ def admin_api_impersonate(uid):
     try:
         conn = _conn()
         c = conn.cursor()
-        c.execute('SELECT id, schema_name FROM users WHERE id = %s', (uid,))
+        c.execute('SELECT id, schema_name, sessao_versao FROM users WHERE id = %s', (uid,))
         user = c.fetchone()
         conn.close()
         if not user:
             return jsonify({'error': 'Usuario nao encontrado'}), 404
         session['user_id'] = user['id']
+        session['sv'] = user.get('sessao_versao') or 0
         schema = user.get('schema_name') or f'emp_{user["id"]}'
         try:
             _init_user_schema(schema)
@@ -10810,6 +11060,10 @@ def _send_system_email(to_email, subject, html):
     except Exception as e:
         logger.error(f'Erro ao enviar email: {e}')
         return False
+
+
+def _url_app():
+    return APP_URL.rstrip('/')
 
 
 def _token_descadastro(uid):
