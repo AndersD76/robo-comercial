@@ -75,6 +75,12 @@ def test_ingestao_gsc_grava_consultas_sitemaps_e_inspecao():
     assert 'sc-domain%3Aturbovenda.com.br' in s.chamadas[0]
 
 
+def test_propriedade_de_prefixo_ganha_a_barra_final():
+    s = SessaoGSC()
+    medicao.ingerir_gsc(Conn(), '{}', 'https://www.turbovenda.com.br', sessao=s)
+    assert 'sites/https%3A%2F%2Fwww.turbovenda.com.br%2F/' in s.chamadas[0]
+
+
 def test_ingestao_bing_le_datas_e_separa_consulta_de_pagina():
     class SessaoBing:
         def get(self, url, params=None, timeout=None):

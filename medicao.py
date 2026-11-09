@@ -63,6 +63,9 @@ def _sessao_gsc(credenciais_json):
 def ingerir_gsc(conn, credenciais_json, propriedade, dias=5, sessao=None):
     """Últimos `dias` disponíveis (o GSC atrasa ~2 dias). Idempotente."""
     s = sessao or _sessao_gsc(credenciais_json)
+    propriedade = propriedade.strip()
+    if propriedade.startswith('http') and not propriedade.endswith('/'):
+        propriedade += '/'  # o GSC só reconhece a propriedade de prefixo com a barra final
     base = f'https://www.googleapis.com/webmasters/v3/sites/{quote(propriedade, safe="")}'
     fim = date.today() - timedelta(days=2)
     ini = fim - timedelta(days=dias - 1)
