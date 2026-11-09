@@ -78,3 +78,28 @@ def test_experimento_estavel_por_visitante_e_respeita_recusa():
     with app.app.test_request_context('/'):
         assert app.variante('pseo_cta', registrar=False) is None   # sem visitante, sem atribuição
         assert not hasattr(app.g, 'experimentos')
+
+
+def test_descadastro_em_um_clique(monkeypatch, fila):
+    feitos = []
+
+    class Banco:
+        def cursor(self):
+            return self
+
+        def execute(self, sql, params=None):
+            feitos.append((' '.join(sql.split()), params))
+
+        def commit(self):
+            pass
+
+        def close(self):
+            pass
+    monkeypatch.setattr(app, '_conn', lambda *a, **k: Banco())
+    c = app.app.test_client()
+    assert 'Link inválido' in c.get('/descadastrar/7.adulterado').get_data(as_text=True)
+    assert not feitos
+    r = c.get('/descadastrar/' + app._token_descadastro(7))
+    assert 'não vai mais receber' in r.get_data(as_text=True)
+    assert feitos == [('UPDATE users SET emails_marketing_off = TRUE WHERE id = %s', (7,))]
+    assert [v[0] for t, v in fila if t == 'ev'] == ['email_unsubscribed']

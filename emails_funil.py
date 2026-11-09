@@ -43,6 +43,9 @@ MIGRACOES = [
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS renovacao_aviso_para TIMESTAMP',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS renovacao_vencido_para TIMESTAMP',
     'ALTER TABLE pagamentos ADD COLUMN IF NOT EXISTS lembrete_em TIMESTAMP',
+    # descadastro em 1 clique (LGPD): vale para os e-mails de teste e de PIX não pago;
+    # o aviso de vencimento de quem paga é transacional e continua
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS emails_marketing_off BOOLEAN DEFAULT FALSE',
 ]
 DIAS_AVISO_RENOVACAO = 3
 NOMES_PLANO = {'starter': 'Starter', 'pro': 'Pro'}
@@ -123,6 +126,7 @@ def _layout(empresa, paragrafos, botao, url, rodape=''):
   <p style="font-size:14px;color:#64748b;line-height:1.5;margin:0">Ficou com dúvida ou algo não funcionou? Responda este e-mail.</p>
   <hr style="border:none;border-top:1px solid #e2e8f0;margin:28px 0 16px">
   <p style="font-size:12px;color:#94a3b8;margin:0">Você recebe este e-mail porque criou uma conta de teste no TurboVenda.</p>
+  __DESCADASTRO__
 </div>'''
 
 
@@ -197,6 +201,14 @@ def email_reativacao(empresa, r, expira, app_url, preco):
         f'grátis, até {_data_br(expira)}</strong>. Não precisa de cartão.',
     ], 'Entrar no meu painel', f'{app_url}/dashboard')
     return assunto, html
+
+
+def _com_descadastro(html, url):
+    """Troca o marcador do rodapé pelo link de descadastro da pessoa (e-mails de
+    marketing) ou o remove (transacionais)."""
+    link = (f'<p style="font-size:12px;color:#94a3b8;margin:8px 0 0"><a href="{url}" '
+            f'style="color:#94a3b8">Não quero mais receber estes e-mails</a></p>') if url else ''
+    return html.replace('__DESCADASTRO__', link)
 
 
 def _rodape_pagante(html):
@@ -286,8 +298,9 @@ def _etapa_devida(u, r, agora):
     return None
 
 
-def rodar(conn, enviar, app_url, preco, agora=None):
-    """Uma passada do funil. `enviar(para, assunto, html) -> bool`.
+def rodar(conn, enviar, app_url, preco, agora=None, descadastro=None):
+    """Uma passada do funil. `enviar(para, assunto, html) -> bool`;
+    `descadastro(user_id) -> url` põe o link de saída em 1 clique no rodapé.
 
     Marca antes de enviar, com commit: se o processo cair no meio, a pessoa
     fica sem aquele e-mail em vez de receber dois. Se o envio falhar,
@@ -302,7 +315,7 @@ def rodar(conn, enviar, app_url, preco, agora=None):
                            funil_ultimo_email_em, {', '.join(COLUNA.values())}
                     FROM users
                     WHERE plano = 'trial' AND ativo = TRUE AND plano_expira IS NOT NULL
-                      AND plano_expira > %s
+                      AND plano_expira > %s AND emails_marketing_off IS NOT TRUE
                     ORDER BY id""", (agora - timedelta(days=3),))
     usuarios = cur.fetchall()
     resultado = {e: 0 for e in ETAPAS}
@@ -330,6 +343,7 @@ def rodar(conn, enviar, app_url, preco, agora=None):
         conn.commit()
         assunto, html = MODELOS[etapa](u['empresa_nome'], r, u['plano_expira'],
                                        app_url, preco)
+        html = _com_descadastro(html, descadastro(u['id']) if descadastro else None)
         if enviar(u['email'], assunto, html):
             resultado[etapa] += 1
         else:
@@ -375,6 +389,7 @@ def reativar(conn, u, enviar, app_url, preco):
     r = resumo_leads(cur, schema)
     assunto, html = email_reativacao(u['empresa_nome'], r, linha['plano_expira'],
                                      app_url, preco)
+    html = _com_descadastro(html, None)
     if enviar(u['email'], assunto, html):
         conn.commit()
         return True
@@ -382,7 +397,7 @@ def reativar(conn, u, enviar, app_url, preco):
     return False
 
 
-def rodar_pagantes(conn, enviar, app_url, precos, agora=None):
+def rodar_pagantes(conn, enviar, app_url, precos, agora=None, descadastro=None):
     """Avisos de quem já pagou ou tentou pagar (uma passada).
 
     - plano pago vencendo em até 3 dias: um aviso por vencimento
@@ -426,6 +441,7 @@ def rodar_pagantes(conn, enviar, app_url, precos, agora=None):
         else:
             assunto, html = email_renova(u['empresa_nome'], u['plano'], valor,
                                          u['plano_expira'], app_url)
+        html = _com_descadastro(html, None)   # transacional: aviso do plano pago
         if enviar(u['email'], assunto, html):
             res['vencido' if vencido else 'renova'] += 1
         else:
@@ -436,6 +452,7 @@ def rodar_pagantes(conn, enviar, app_url, precos, agora=None):
     cur.execute("""SELECT p.mp_payment_id, p.plano, p.valor, u.id AS uid, u.email, u.empresa_nome
                    FROM pagamentos p JOIN users u ON u.id = p.user_id
                    WHERE p.status = 'pending' AND p.lembrete_em IS NULL
+                     AND u.emails_marketing_off IS NOT TRUE
                      AND p.criado_em BETWEEN %s AND %s
                      AND NOT EXISTS (SELECT 1 FROM pagamentos q WHERE q.user_id = p.user_id
                                      AND q.status = 'approved' AND q.criado_em >= p.criado_em)
@@ -455,6 +472,7 @@ def rodar_pagantes(conn, enviar, app_url, precos, agora=None):
         avisados.add(p['uid'])
         assunto, html = email_pix_pendente(p['empresa_nome'], p['plano'],
                                            float(p['valor'] or 0), app_url)
+        html = _com_descadastro(html, descadastro(p['uid']) if descadastro else None)
         if enviar(p['email'], assunto, html):
             res['pix'] += 1
         else:

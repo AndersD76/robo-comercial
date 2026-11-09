@@ -73,7 +73,8 @@ def test_um_aviso_por_vencimento_e_um_pix_por_pessoa(monkeypatch):
           'email': 'c3@empresa.com.br', 'empresa_nome': 'Cliente 3'}])
     enviados = []
     envio = lambda para, assunto, html: enviados.append((para, assunto, html)) or True  # noqa: E731
-    assert ef.rodar_pagantes(banco, envio, 'https://www.turbovenda.com.br', PRECOS) == \
+    sair = lambda uid: f'https://www.turbovenda.com.br/descadastrar/{uid}.assinatura'  # noqa: E731
+    assert ef.rodar_pagantes(banco, envio, 'https://www.turbovenda.com.br', PRECOS, descadastro=sair) == \
         {'renova': 1, 'vencido': 1, 'pix': 1, 'falhas': 0}
     # segunda passada no mesmo ciclo: nada de novo
     assert ef.rodar_pagantes(banco, envio, 'https://www.turbovenda.com.br', PRECOS) == \
@@ -82,9 +83,11 @@ def test_um_aviso_por_vencimento_e_um_pix_por_pessoa(monkeypatch):
     assert assuntos['c1@empresa.com.br'].startswith('Seu plano Starter vence em')
     assert assuntos['c2@empresa.com.br'] == 'Seu plano Pro venceu e o robô pausou'
     assert assuntos['c3@empresa.com.br'] == 'Seu PIX do TurboVenda não foi pago'
-    for _, _, html in enviados:
-        assert 'boleto' not in html.lower()
+    for para, _, html in enviados:
+        assert 'boleto' not in html.lower() and '__DESCADASTRO__' not in html
         assert '/assinar?plano=' in html
+        # descadastro só no lembrete de PIX (marketing); aviso do plano pago é transacional
+        assert ('/descadastrar/' in html) == (para == 'c3@empresa.com.br')
 
 
 def test_falha_no_envio_desfaz_a_marca(monkeypatch):

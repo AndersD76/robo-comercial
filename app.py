@@ -629,6 +629,7 @@ def _init_public_schema_safe():
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS first_touch JSONB",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_touch JSONB",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS aha_em TIMESTAMPTZ",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS emails_marketing_off BOOLEAN DEFAULT FALSE",
         ]:
             try:
                 c.execute(stmt)
@@ -10724,6 +10725,46 @@ def _send_system_email(to_email, subject, html):
         return False
 
 
+def _token_descadastro(uid):
+    assinatura = _hmac.new(str(app.secret_key).encode(), f'descadastro:{int(uid)}'.encode(),
+                           'sha256').hexdigest()[:24]
+    return f'{int(uid)}.{assinatura}'
+
+
+def _link_descadastro(uid):
+    return f'{APP_URL}/descadastrar/{_token_descadastro(uid)}'
+
+
+@app.route('/descadastrar/<token>')
+def descadastrar(token):
+    """Descadastro em 1 clique (LGPD) dos e-mails de teste e de PIX não pago.
+    Avisos sobre um plano pago (vencimento) são transacionais e continuam."""
+    uid = token.split('.', 1)[0]
+    valido = uid.isdigit() and _hmac.compare_digest(_token_descadastro(int(uid)), token)
+    if valido:
+        conn = _conn()
+        try:
+            c = conn.cursor()
+            c.execute('UPDATE users SET emails_marketing_off = TRUE WHERE id = %s', (int(uid),))
+            conn.commit()
+        finally:
+            conn.close()
+        _evento('email_unsubscribed', int(uid))
+        titulo, texto = ('Pronto, você não vai mais receber estes e-mails.',
+                         'Saiu dos e-mails do teste grátis e dos lembretes de pagamento. '
+                         'Avisos sobre um plano pago (como o vencimento) continuam, porque fazem parte do serviço.')
+    else:
+        titulo, texto = ('Link inválido.', 'Responda qualquer e-mail nosso pedindo para sair que tiramos você na hora.')
+    return (f'<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">'
+            f'<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">'
+            f'<title>Descadastro — TurboVenda</title></head>'
+            f'<body style="font-family:Arial,sans-serif;background:#0b1220;color:#e2e8f0;display:flex;'
+            f'align-items:center;justify-content:center;min-height:100vh;margin:0;padding:16px">'
+            f'<div style="max-width:480px;background:#0d1526;border-radius:14px;padding:28px">'
+            f'<h1 style="font-size:1.3rem;margin:0 0 10px">{titulo}</h1><p style="color:#94a3b8;line-height:1.6">{texto}</p>'
+            f'<p><a href="/" style="color:#a5b4fc">Voltar ao TurboVenda</a></p></div></body></html>')
+
+
 def _funil_rodar():
     """Uma passada dos e-mails do teste (emails_funil.py). A trava do banco
     impede duas passadas juntas quando um deploy sobrepõe dois containers."""
@@ -10737,11 +10778,13 @@ def _funil_rodar():
             return None
         try:
             res = emails_funil.rodar(conn, _send_system_email, APP_URL,
-                                     MP_PLANOS['starter']['valor'])
+                                     MP_PLANOS['starter']['valor'],
+                                     descadastro=_link_descadastro)
             try:
                 res['pagantes'] = emails_funil.rodar_pagantes(
                     conn, _send_system_email, APP_URL,
-                    {k: p['valor'] for k, p in MP_PLANOS.items()})
+                    {k: p['valor'] for k, p in MP_PLANOS.items()},
+                    descadastro=_link_descadastro)
             except Exception:
                 conn.rollback()
                 logger.exception('funil: avisos de pagantes falharam')
