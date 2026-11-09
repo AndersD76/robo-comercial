@@ -107,6 +107,7 @@
     footer p{color:var(--muted);font-size:13px}
     footer a{color:var(--muted2);text-decoration:none;margin:0 12px}
   </style>
+  {% with trilha = [('Planos e preços', '/precos')] %}{% include '_trilha.html' %}{% endwith %}
 </head>
 <body>
 <a href="#main" class="skip-link">Pular para conteúdo</a>

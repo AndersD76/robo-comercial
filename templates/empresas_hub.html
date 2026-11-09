@@ -79,6 +79,7 @@
     .skip-link{position:absolute;top:-40px;left:0;background:#6366f1;color:#fff;padding:8px 16px;z-index:10000;transition:top .2s}.skip-link:focus{top:0}
     @media(max-width:768px){nav{padding:0 16px}.nav-links a:not(.btn-nav){display:none}h1{font-size:1.5rem}}
   </style>
+  {% with trilha = [('Empresas', '/empresas')] %}{% include '_trilha.html' %}{% endwith %}
 </head>
 <body>
 <a href="#main" class="skip-link">Pular para conteúdo</a>

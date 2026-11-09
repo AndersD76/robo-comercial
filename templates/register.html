@@ -78,6 +78,7 @@
     .divider{display:flex;align-items:center;gap:12px;margin:20px 0;color:#334155;font-size:12px}
     .divider::before,.divider::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.06)}
   </style>
+  {% with trilha = [('Criar conta', '/cadastro')] %}{% include '_trilha.html' %}{% endwith %}
 </head>
 <body>
 <a href="#main" class="skip-link">Pular para conteúdo</a>

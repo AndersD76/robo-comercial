@@ -50,7 +50,12 @@ def normalizar(href, base):
     return f'{BASE}{p.path}' + (f'?{p.query}' if p.query else '')
 
 
+PAUSA = 0.0
+
+
 def analisar(url, s):
+    if PAUSA:
+        time.sleep(PAUSA)
     t0 = time.time()
     try:
         r = s.get(url, timeout=60, allow_redirects=False)
@@ -111,7 +116,12 @@ def main():
     ap.add_argument('--saida', default='growth/dados')
     ap.add_argument('--threads', type=int, default=4)
     ap.add_argument('--max', type=int, default=600)
+    ap.add_argument('--pausa', type=float, default=0.0,
+                    help='segundos de espera por requisição em cada thread; o site limita '
+                         'a 200 req/min por IP quem não é buscador verificado')
     args = ap.parse_args()
+    global PAUSA
+    PAUSA = args.pausa
     random.seed(42)
     os.makedirs(args.saida, exist_ok=True)
     s = requests.Session()

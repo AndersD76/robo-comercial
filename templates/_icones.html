@@ -1,4 +1,16 @@
-{# Font Awesome sem bloquear a primeira pintura: o texto aparece antes e os
-   ícones logo depois (antes eram ~1 s de bloqueio no mobile). #}
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" media="print" onload="this.media='all'">
+{# Font Awesome só depois do "load": a fonte de ícones (153 KB) entrava com
+   prioridade máxima e disputava a banda do 4G com o texto da página, segurando
+   o LCP em ~2,8 s. Agora o texto pinta primeiro e os ícones vêm em seguida. #}
+<script>
+(function () {
+  var u = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css';
+  function carregar() {
+    var l = document.createElement('link');
+    l.rel = 'stylesheet'; l.href = u;
+    document.head.appendChild(l);
+  }
+  if (document.readyState === 'complete') carregar();
+  else window.addEventListener('load', carregar);
+})();
+</script>
 <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"></noscript>

@@ -275,6 +275,9 @@ MARCA = {
     'cnpj': os.environ.get('MARCA_CNPJ', '').strip(),
 }
 app.jinja_env.globals['marca'] = MARCA
+app.jinja_env.filters['trilha_itens'] = lambda itens: [
+    {'@type': 'ListItem', 'position': i, 'name': nome, 'item': _SITE + caminho}
+    for i, (nome, caminho) in enumerate(itens, start=2)]
 
 
 @app.before_request

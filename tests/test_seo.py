@@ -103,6 +103,19 @@ def test_json_ld_valido_e_um_h1(renderizadas):
             json.loads(bloco)   # quebra se o JSON-LD estiver inválido
 
 
+def test_toda_pagina_tem_trilha(renderizadas):
+    """BreadcrumbList em todas as páginas públicas, menos a raiz."""
+    sem = []
+    for c, (_, d) in renderizadas.items():
+        tipos = []
+        for bloco in d['ld']:
+            j = json.loads(bloco)
+            tipos += [i.get('@type') for i in (j if isinstance(j, list) else j.get('@graph', [j]))]
+        if c != '/' and 'BreadcrumbList' not in tipos:
+            sem.append(c)
+    assert not sem
+
+
 def test_blog_tem_schema_blog(renderizadas):
     tipos = [json.loads(b).get('@type') for b in renderizadas['/blog'][1]['ld']]
     assert 'Blog' in tipos and 'BreadcrumbList' in tipos

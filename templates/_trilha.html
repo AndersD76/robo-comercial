@@ -1,0 +1,2 @@
+{# BreadcrumbList a partir de `trilha`: lista de (nome, caminho). Início entra sozinho. #}
+<script type="application/ld+json">{{ {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Início", "item": "https://www.turbovenda.com.br/"}] + (trilha | default([]) | map("list") | list | trilha_itens)} | tojson }}</script>
