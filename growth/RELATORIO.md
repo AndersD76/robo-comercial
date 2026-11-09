@@ -33,7 +33,7 @@ Atualizado em 09/11/2026. Fases 0 e 1 concluídas e em produção; Fase 2 com a 
 | Texto canônico da marca em 1 linha, 1 parágrafo e 1 página | `growth/entidade.md` |
 | Painel de share of voice: 30 perguntas fixas do ICP feitas ao Claude com busca na web (Brasil), registrando se o TurboVenda é citado, a posição e os concorrentes; histórico na tabela `share_of_voice` | `growth/ferramentas/share_of_voice.py`, `growth/dados/sov-perguntas.txt` |
 
-<!-- SOV -->
+**Linha de base do share of voice (09/11/2026, `growth/dados/share-of-voice-2026-11-09.md`):** o TurboVenda foi citado em **0 de 30** respostas e apareceu nos resultados da busca em 2. Quem aparece: Econodata e Agendor (11 respostas cada), EmpresAqui (9), Speedio (8), Leads2b (6), Apollo (5). Custo da rodada: US$ 4,27. A medição usa a busca do Claude; o ChatGPT usa outro índice e já trouxe 10 cadastros em 3 semanas, então os dois sinais se complementam.
 
 ### Fase 2 — Conteúdo e links internos (branch `growth/fase-2-conteudo`)
 | Mudança | Arquivos |
@@ -130,6 +130,7 @@ As programáticas e ferramentas caíram para 1,2–1,3 s. As páginas que usam �
 | Entradas orgânicas Google por semana | ~1.200 (3.680 em 3 semanas) | 3.000 | `pageviews` |
 | Entradas vindas do Bing por semana | ~15 | 150 | `pageviews` |
 | Entradas e cadastros vindos de IA (ChatGPT, Perplexity, Copilot) | 57 entradas e 10 cadastros em 3 semanas | 300 entradas e 40 cadastros por trimestre | `pageviews`, `users.utm_source` |
+| Share of voice em IA (30 perguntas fixas) | 0 de 30 citações; 2 de 30 nos resultados | citado em 6 de 30 | `share_of_voice` |
 | Cadastros por semana | ~10 | 25 | `users` |
 | Títulos > 60 / descrições > 155 no crawl | 0 / 0 | manter 0 | `crawl.py` |
 | LCP mobile de laboratório nas 10 páginas | 1,2–2,8 s | todas < 2,5 s | Lighthouse diário |
