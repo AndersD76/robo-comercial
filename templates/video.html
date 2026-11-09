@@ -1,0 +1,35 @@
+{% extends '_publico_base.html' %}
+{% block estilo %}
+    .video{position:relative;aspect-ratio:16/9;background:#000;border-radius:14px;overflow:hidden;margin:16px 0 20px}
+    .video iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+    .capitulos{list-style:none;padding:0}
+    .capitulos li{padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+    .capitulos code{color:#a5b4fc;margin-right:10px}
+    .transcricao p{line-height:1.7}
+{% endblock %}
+{% block conteudo %}
+  {% if lista %}
+  <div class="crumbs"><a href="/">Home</a> › Vídeos</div>
+  <h1>Vídeos sobre prospecção B2B</h1>
+  <ul>{{ lista|safe }}</ul>
+  {% else %}
+  <div class="crumbs"><a href="/">Home</a> › <a href="/videos">Vídeos</a> › {{ v.titulo }}</div>
+  <h1>{{ v.titulo }}</h1>
+  <p>{{ v.descricao }}</p>
+  <div class="video">
+    <iframe src="https://www.youtube-nocookie.com/embed/{{ v.youtube_id }}{{ '?start=' ~ inicio if inicio }}" title="{{ v.titulo }}"
+            loading="lazy" allow="accelerometer; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+  </div>
+  {% if v.capitulos %}
+  <h2>Capítulos</h2>
+  <ul class="capitulos">
+    {% for ini, nome in v.capitulos %}<li><a href="?t={{ ini }}"><code>{{ '%02d:%02d'|format(ini // 60, ini % 60) }}</code>{{ nome }}</a></li>{% endfor %}
+  </ul>
+  {% endif %}
+  {% if v.relacionado %}<p>Versão em texto, com mais detalhes: <a href="{{ v.relacionado }}">{{ v.relacionado }}</a>.</p>{% endif %}
+  {% if v.transcricao %}
+  <h2>Transcrição</h2>
+  <div class="transcricao">{% for par in v.transcricao.split('\n\n') %}<p>{{ par }}</p>{% endfor %}</div>
+  {% endif %}
+  {% endif %}
+{% endblock %}

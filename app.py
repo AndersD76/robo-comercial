@@ -2564,6 +2564,8 @@ def _static_sitemap_urls():
         urls.append((f"https://www.turbovenda.com.br/ferramentas/{f['slug']}",
                      rev, 'monthly', '0.9'))
     urls.append(('https://www.turbovenda.com.br/imprensa', rev, 'monthly', '0.5'))
+    for v in _videos.VIDEOS:
+        urls.append((f"https://www.turbovenda.com.br/videos/{v['slug']}", v['publicado'], 'monthly', '0.6'))
     rel = _relatorio_dados()
     if rel:
         urls.append((f'https://www.turbovenda.com.br{RELATORIO_URL}',
@@ -4079,6 +4081,41 @@ def relatorio_dados_pagina():
         canonical=canonical,
         ld_json=[ld_dataset, _ld_breadcrumb([('Home', f'{_SITE}/'), ('Empresas', f'{_SITE}/empresas'),
                                              ('Empresas ativas no Brasil', canonical)])],
+        ga_id=GA_MEASUREMENT_ID)
+
+
+import videos as _videos  # noqa: E402
+
+
+@app.route('/videos')
+def videos_hub():
+    if not _videos.VIDEOS:
+        return render_template('404.html'), 404
+    canonical = f'{_SITE}/videos'
+    itens = ''.join(f'<li><a href="/videos/{v["slug"]}">{v["titulo"]}</a></li>' for v in _videos.VIDEOS)
+    return render_template(
+        'video.html', v={'titulo': 'Vídeos sobre prospecção B2B', 'descricao': '',
+                         'youtube_id': _videos.VIDEOS[0]['youtube_id'], 'capitulos': [],
+                         'transcricao': ''},
+        lista=itens, inicio=None, titulo='Vídeos sobre prospecção B2B | TurboVenda',
+        descricao='Vídeos curtos e aulas sobre prospecção B2B, listas de empresas e abordagem.',
+        canonical=canonical, ld_json=[_ld_breadcrumb([('Home', f'{_SITE}/'), ('Vídeos', canonical)])],
+        ga_id=GA_MEASUREMENT_ID)
+
+
+@app.route('/videos/<slug>')
+def video_pagina(slug):
+    v = _videos.por_slug(slug)
+    if not v:
+        return render_template('404.html'), 404
+    canonical = f'{_SITE}/videos/{slug}'
+    inicio = request.args.get('t', type=int)
+    return render_template(
+        'video.html', v=v, inicio=inicio, titulo=f"{v['titulo']} | TurboVenda",
+        descricao=v['descricao'], canonical=canonical,
+        ld_json=[json.dumps(_videos.ld_video(v, _SITE), ensure_ascii=False),
+                 _ld_breadcrumb([('Home', f'{_SITE}/'), ('Vídeos', f'{_SITE}/videos'),
+                                 (v['titulo'], canonical)])],
         ga_id=GA_MEASUREMENT_ID)
 
 

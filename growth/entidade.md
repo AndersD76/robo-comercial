@@ -14,8 +14,9 @@ Use **exatamente** estes textos em todo lugar onde a marca aparece: site, JSON-L
 | Categoria | Software de prospecção B2B / geração de leads B2B |
 | País e idioma | Brasil, português |
 | Planos | Grátis (50 leads, sem cartão, 14 dias), Starter R$ 97/mês, Pro R$ 297/mês |
+| Empresa responsável | AndersTech (como aparece no rodapé do site e nos textos de diretórios de out/2026) |
 | Razão social e CNPJ | **TODO-VALIDAR** |
-| Cidade/UF (endereço comercial) | **TODO-VALIDAR** |
+| Cidade/UF | Passo Fundo/RS (rodapé do site) — endereço comercial completo: **TODO-VALIDAR** |
 | Fundador(es) | **TODO-VALIDAR** |
 | Perfis oficiais | **TODO-VALIDAR** (LinkedIn da empresa, Instagram, YouTube) — os mesmos vão em `MARCA_PERFIS` no Railway |
 

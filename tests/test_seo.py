@@ -275,3 +275,25 @@ def test_kit_de_imprensa(client, monkeypatch):
     assert r.status_code == 200 and 'Fonte: TurboVenda' in html and '1.000' in html
     monkeypatch.setattr(A, '_relatorio_dados', lambda: None)
     assert client.get('/imprensa').status_code == 200   # sem relatório, sem números
+
+
+def test_paginas_de_video(client, monkeypatch):
+    """Sem vídeo cadastrado não existe página; com vídeo, VideoObject com
+    capítulos (Clip) e transcrição."""
+    import videos
+    assert client.get('/videos').status_code == 404
+    monkeypatch.setattr(videos, 'VIDEOS', [{
+        'slug': 'lista-de-empresas-por-cnae', 'titulo': 'Como montar uma lista de empresas por CNAE',
+        'descricao': 'Passo a passo com os dados abertos da Receita.', 'youtube_id': 'abc123XYZ00',
+        'publicado': '2026-11-20', 'duracao': 'PT6M10S',
+        'capitulos': [(0, 'Abertura'), (45, 'O que é CNAE'), (150, 'Filtrando por cidade')],
+        'transcricao': 'Primeiro parágrafo.\n\nSegundo parágrafo.',
+        'relacionado': '/blog/o-que-e-cnae-prospeccao'}])
+    r = client.get('/videos/lista-de-empresas-por-cnae')
+    d = _extrair(r.get_data(as_text=True))
+    assert r.status_code == 200 and d['h1'] == 1 and len(d['title']) <= A.TITULO_MAX
+    video = next(json.loads(b) for b in d['ld'] if json.loads(b).get('@type') == 'VideoObject')
+    assert [c['startOffset'] for c in video['hasPart']] == [0, 45, 150]
+    assert video['hasPart'][0]['endOffset'] == 45 and 'transcript' in video
+    assert client.get('/videos').status_code == 200
+    assert client.get('/videos/nao-existe').status_code == 404
