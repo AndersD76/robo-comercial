@@ -5,17 +5,33 @@ on:
     branches: [master]
   pull_request:
 
+# Token do CI só lê o repositório (Fase 4 do Prompt 3: permissões mínimas)
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
+    # PostgreSQL descartável para os testes de integração (testes_integracao/)
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      # Mesma versão do container de produção (imagem Playwright jammy)
+      - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.10"
 
       - name: Install dependencies
         run: pip install -r requirements.txt
@@ -34,6 +50,11 @@ jobs:
           # programáticas usam a base sintética do cnpj_ingest --sample
           DATABASE_URL: postgresql://ci:ci@127.0.0.1:1/ci
         run: pytest tests/test_seo.py tests/test_seo_pseo.py tests/test_cota.py tests/test_indexnow.py tests/test_trafego.py tests/test_medicao.py tests/test_pagamento.py tests/test_eventos.py tests/test_seguranca_qa.py tests/test_contas.py -v --tb=short
+
+      - name: Integração com PostgreSQL real (conta, isolamento, senha, pagamento, cota, e-mails, LGPD)
+        env:
+          PG_TESTE_URI: postgresql://postgres:postgres@localhost:5432/postgres
+        run: pytest testes_integracao -v --tb=short
 
       - name: Validate templates
         run: |
