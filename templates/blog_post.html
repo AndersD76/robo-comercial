@@ -133,6 +133,7 @@
 
     .related{max-width:720px;margin:40px auto;padding:0 24px 60px}
     .related h3{font-size:1.1rem;font-weight:700;margin-bottom:16px;color:var(--muted2)}
+    .resposta-direta{margin:24px 0 0;padding:16px 20px;border-left:4px solid var(--accent);background:var(--surface);border-radius:0 12px 12px 0;font-size:1.05rem;line-height:1.6}
     .related-pilar{margin:0 0 24px;color:var(--muted2)}
     .related-pilar a{color:var(--accent);font-weight:600}
     .related h3 + .related-list + h3{margin-top:28px}
@@ -174,6 +175,7 @@
     <span><i class="fa fa-calendar"></i> Publicado em <time datetime="{{ post.data }}">{{ post.data|data_br }}</time>{% if post.atualizado and post.atualizado != post.data %} · atualizado em <time datetime="{{ post.atualizado }}">{{ post.atualizado|data_br }}</time>{% endif %}</span>
     <span><i class="fa fa-clock"></i> {{ post.tempo }} de leitura</span>
   </div>
+  {% if post.resposta %}<p class="resposta-direta">{{ post.resposta }}</p>{% endif %}
 </header>
 
 <article class="post-content">

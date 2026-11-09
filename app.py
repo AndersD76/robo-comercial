@@ -2310,6 +2310,46 @@ TITULOS_SEO_BLOG = {
 for _post in BLOG_POSTS:
     _post.setdefault('titulo_seo', TITULOS_SEO_BLOG.get(_post['slug']) or _post['titulo'])
 
+# Resposta direta (40–60 palavras) logo abaixo do H1: é o trecho que buscador
+# e assistente de IA citam. Cada uma resume o próprio post, sem dado novo.
+RESPOSTAS_DIRETAS = {
+    'como-prospectar-clientes-b2b': (
+        'Prospectar clientes B2B é identificar empresas que se encaixam no seu perfil de '
+        'cliente ideal e abordá-las de forma ativa. As cinco estratégias que mais funcionam '
+        'são outbound com IA, e-mail personalizado, LinkedIn, indicações e parcerias, e '
+        'conteúdo. O resultado depende de lista certa, mensagem personalizada e acompanhamento '
+        'das métricas de cada etapa.'),
+    'automacao-comercial-guia-completo': (
+        'Automação comercial é usar tecnologia para fazer tarefas de vendas sem trabalho '
+        'manual: buscar leads por segmento e cidade, enviar o primeiro contato por e-mail ou '
+        'WhatsApp, fazer o follow-up e organizar o pipeline. A equipe gasta menos tempo com '
+        'tarefa repetitiva e mais tempo negociando. Dá para começar pela prospecção e pelo '
+        'follow-up.'),
+    'base-de-dados-de-empresas-cnpj': (
+        'A Receita Federal publica o cadastro dos CNPJs como dado aberto: qualquer pessoa pode '
+        'baixar sem custo. A base traz razão social, atividade (CNAE), endereço, situação, data '
+        'de abertura e sócios, mas nem sempre telefone e e-mail atualizados. Para prospectar, '
+        'filtre por CNAE e cidade, use a data de abertura como gatilho e os sócios para chegar '
+        'ao decisor.'),
+    'mensagem-de-prospeccao-whatsapp': (
+        'Uma boa mensagem de prospecção no WhatsApp B2B é curta, diz logo quem você é e por que '
+        'está escrevendo, traz algo real sobre a empresa (cidade, segmento ou produto) e termina '
+        'com uma única pergunta. Evite áudio no primeiro contato e textos longos. Abaixo há 12 '
+        'modelos prontos para contato frio, indicação, empresa recém-aberta e retomada.'),
+    'quantos-leads-preciso-para-bater-a-meta': (
+        'Use o funil reverso: comece pela meta de faturamento, descubra quantas vendas ela exige '
+        'e volte etapa por etapa usando as suas taxas de conversão, de proposta até lead. O '
+        'resultado mostra quantas empresas abordar por mês e por dia. Considere também o ciclo '
+        'de venda, porque o lead de hoje fecha no mês seguinte.'),
+    'como-encontrar-o-decisor-da-empresa': (
+        'Em empresa pequena, quem decide a compra costuma ser o dono ou um dos sócios; na média, '
+        'um gestor de área avalia e a diretoria aprova. Para achar o nome, comece pelo quadro de '
+        'sócios (QSA) publicado pela Receita, confira no site da empresa e no LinkedIn e confirme '
+        'com quem atende antes de mandar a proposta.'),
+}
+for _post in BLOG_POSTS:
+    _post.setdefault('resposta', RESPOSTAS_DIRETAS.get(_post['slug']))
+
 import links_internos  # noqa: E402
 # Pilar + satélites por cluster e similaridade de texto (antes cada post
 # listava os outros 29 como "relacionados")

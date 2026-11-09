@@ -1,6 +1,6 @@
 # Relatório do motor de visibilidade orgânica — TurboVenda
 
-Atualizado em 09/11/2026. Fases 0 e 1 concluídas e em produção; Fase 2 com a parte técnica no ar e o conteúdo aguardando revisão; Fases 3 a 6 pendentes (ver seção 5).
+Atualizado em 09/11/2026. Fases 0 e 1 concluídas e em produção; Fase 2 com a parte técnica no ar e o conteúdo aguardando revisão; Fase 3 feita; Fases 4 a 6 pendentes (ver seção 5).
 
 ## 1. O que foi implementado
 
@@ -23,6 +23,17 @@ Atualizado em 09/11/2026. Fases 0 e 1 concluídas e em produção; Fase 2 com a 
 | `lastmod` real nas 10 mil programáticas (data da base da Receita) e hubs de segmento indexáveis no sitemap; IndexNow reenvia quando a base muda (no deploy: 10.099 URLs enviadas, todas aceitas) | `app.py` |
 | Paginação com canonical próprio; H1 no cadastro; `Blog` e `BreadcrumbList` no JSON-LD de todas as páginas públicas menos a home; `Organization` com `@id`, logo quadrado e espaço para CNPJ/perfis | `app.py`, `templates/*` |
 | Guarda no CI: `tests/test_seo.py` (48 páginas fixas) e `tests/test_seo_pseo.py` (programáticas sobre base sintética) num passo próprio do `ci.yml`; Lighthouse diário em produção (`lighthouse.yml`, `lighthouserc.json`) | `.github/workflows/`, `tests/` |
+
+### Fase 3 — GEO (branch `growth/fase-3-geo`)
+| Mudança | Arquivos |
+|---|---|
+| `/llms-full.txt` gerado do próprio conteúdo (ferramentas, comparativos com data de consulta, páginas por segmento e os 30 artigos em texto limpo, ~17 mil palavras); `/llms.txt` aponta para ele | `app.py` |
+| Monitor de crawlers: cada acesso de robô conhecido é gravado com nome (GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-SearchBot, PerplexityBot, Googlebot, Bingbot…) e status, em qualquer resposta (inclusive `llms.txt`, 404 e 429); Googlebot/Bingbot/Applebot verificados por DNS reverso; tabela no `/admin/trafego` | `app.py`, `templates/admin_trafego.html` |
+| Resposta direta de 40–60 palavras logo abaixo do H1 nos 6 pilares (resume o próprio post, sem dado novo) | `app.py`, `templates/blog_post.html` |
+| Texto canônico da marca em 1 linha, 1 parágrafo e 1 página | `growth/entidade.md` |
+| Painel de share of voice: 30 perguntas fixas do ICP feitas ao Claude com busca na web (Brasil), registrando se o TurboVenda é citado, a posição e os concorrentes; histórico na tabela `share_of_voice` | `growth/ferramentas/share_of_voice.py`, `growth/dados/sov-perguntas.txt` |
+
+<!-- SOV -->
 
 ### Fase 2 — Conteúdo e links internos (branch `growth/fase-2-conteudo`)
 | Mudança | Arquivos |
@@ -71,7 +82,18 @@ Lighthouse mobile das 10 páginas depois do deploy (09/11, laboratório):
 
 As programáticas e ferramentas caíram para 1,2–1,3 s. As páginas que usam ícones ficaram em 2,7–2,8 s por causa da fonte de ícones (153 KB); a correção (ícones só depois do carregamento) foi publicada em seguida — ver seção 2.1.
 
-<!-- POS-ICONES -->
+### 2.1 Depois dos ícones fora do caminho crítico (09/11, 10:15)
+
+| Página | Nota | LCP antes da Fase 1 | LCP agora |
+|---|---|---|---|
+| Home | 81* | 3,4 s | **1,9 s** |
+| Blog (pilar) | 98 | 3,5 s | **1,8 s** |
+| `/para/industria` | 99 | 3,5 s | **1,8 s** |
+| Preços | 93 | 3,5 s | 2,6 s |
+| Cadastro | 91 | 3,5 s | 2,7 s |
+
+\* Nota da home puxada por 684 ms de bloqueio de CPU da máquina que mediu (sobrecarregada); o LCP é o que interessa. Em preços e cadastro sobra o CSS próprio bloqueante (`tokens.css` e `components.css`, a internalizar) e, no cadastro, o banner de cookies como maior elemento da tela.
+
 
 ## 3. TODO-VALIDAR (depende de você)
 
@@ -96,7 +118,7 @@ As programáticas e ferramentas caíram para 1,2–1,3 s. As páginas que usam �
 | Fase | Situação | Próximo passo |
 |---|---|---|
 | 2 — Conteúdo e programático | Links internos, datas, fila de frescor, briefs e rascunhos feitos | **Atualizar a base do Postgres** (é de ~jul/2026; a de out/2026 está no PC) — pré-requisito do brief de empresas recém-abertas; publicar Sobre, autor e política editorial depois dos TODO-VALIDAR; produzir os briefs aprovados |
-| 3 — GEO | `llms.txt` existe; robots liberado | `llms-full.txt`, resposta direta de 40–60 palavras nas páginas de conteúdo, `growth/entidade.md`, monitor de crawlers de IA (a tabela de visitas não guarda user-agent), painel de share of voice |
+| 3 — GEO | Feita: `llms-full.txt`, monitor de crawlers, respostas diretas nos pilares, entidade, share of voice com linha de base | Respostas diretas nos outros 24 posts; validar crawlers de IA pelas faixas de IP publicadas; agendar o share of voice semanal (custo ~US$ 4 por rodada — decisão sua) |
 | 4 — Ativos que ganham link | 3 ferramentas já existem | Resultado compartilhável por URL, relatório de dados com embed, kit de imprensa, `alvos-link.csv` |
 | 5 — Distribuição | Textos de LinkedIn, diretórios e grupos já existem em `docs/trafego/` | Pipeline de rascunhos por página nova, checklist de diretórios com status, mapa de comunidades, páginas de vídeo |
 | 6 — Medição | Telemetria própria (`pageviews`, `cta_cliques`) e `/admin/trafego` | Ingestão diária do GSC e do Bing (depende da ação 3), painel por cluster, relatório semanal |

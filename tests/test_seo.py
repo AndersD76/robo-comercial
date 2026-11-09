@@ -225,3 +225,15 @@ def test_monitor_de_crawlers(client, monkeypatch):
     assert not any(p == '/llms.txt' and robo == '' for p, robo, _, _ in vistos)
     assert ('/precos', 'Googlebot', True, 200) in vistos
     assert ('/pagina-que-nao-existe', 'ClaudeBot', False, 404) in vistos
+
+
+def test_resposta_direta_nos_pilares(client):
+    """Formato citável: 40-60 palavras logo abaixo do H1 nos pilares."""
+    import links_internos
+    for c in links_internos.CLUSTERS.values():
+        post = next(p for p in A.BLOG_POSTS if p['slug'] == c['pilar'])
+        assert post.get('resposta'), c['pilar']
+        assert 40 <= len(post['resposta'].split()) <= 60, (c['pilar'], len(post['resposta'].split()))
+        html = client.get(f"/blog/{c['pilar']}").get_data(as_text=True)
+        cabecalho = html.split('<h1>', 1)[1].split('</header>', 1)[0]
+        assert 'class="resposta-direta"' in cabecalho, c['pilar']
