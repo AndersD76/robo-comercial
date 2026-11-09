@@ -766,7 +766,8 @@ class Buscador:
     async def buscar_leads(self, termo=None, max_resultados=20, start=0):
         """Busca leads: Serper API primeiro, HTTP fallback, Playwright último."""
         if not termo:
-            termo = random.choice(TERMOS_BUSCA)
+            # sem termo do cliente, não sorteia os termos da Pili (config.TERMOS_BUSCA)
+            return []
 
         self._search_start = start  # offset para paginação
         if start > 0:
@@ -919,7 +920,7 @@ class Buscador:
     async def buscar_multiplos(self, termos=None, max_por_termo=15):
         """Busca múltiplos termos com delay entre buscas"""
         if not termos:
-            termos = random.sample(TERMOS_BUSCA, min(5, len(TERMOS_BUSCA)))
+            return []   # idem: nada de termos da Pili para outro cliente
 
         todos_leads = []
         urls_vistas = set()

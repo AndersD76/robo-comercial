@@ -591,12 +591,10 @@ def get_termos(schema: str) -> list:
                 return termos
     except Exception as e:
         print(f'[run_busca] erro ao ler termos: {e}', flush=True)
-    # Fallback
-    try:
-        from config import TERMOS_BUSCA
-        return TERMOS_BUSCA
-    except ImportError:
-        return ['empresa industria site:.com.br contato']
+    # Sem termos do cliente, nada de cair nos termos da Pili (config.TERMOS_BUSCA:
+    # cerealistas, silos...): o robô buscaria empresas de outro negócio e gastaria
+    # a cota do cliente. Correção da branch abandonada (14fae08), parte mínima.
+    return []
 
 
 def log_db(schema: str, tipo: str, mensagem: str):
@@ -1546,9 +1544,11 @@ async def main_loop(schema: str):
             return
         termos = get_termos(schema)
         if not termos:
-            print(f'[{schema}] Nenhum termo configurado. Configure em /configurar', flush=True)
-            await asyncio.sleep(60)
-            continue
+            print(f'[{schema}] Nenhum termo de busca configurado: robô encerrado. '
+                  'Configure em /configurar e inicie de novo.', flush=True)
+            log_db(schema, 'erro', 'Sem termos de busca: robô encerrado (configure em /configurar)')
+            await buscador.fechar()
+            return
 
         # Filtra termos não esgotados
         termos_ativos = [t for t in termos if t not in termos_esgotados]

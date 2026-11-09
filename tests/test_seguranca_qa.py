@@ -145,3 +145,13 @@ def test_whatsapp_e_linkedin_separados_por_cliente():
             regras.caminhos_wa('/robo', ruim)
     src = open(os.path.join(os.path.dirname(__file__), '..', 'app.py'), encoding='utf-8').read()
     assert "'robo_pili', 'wa_qr.png'" not in src and "'robo_pili', 'wa_status.json'" not in src
+
+
+# QA-FUN-003: sem termos próprios, o robô do cliente buscava com os termos da Pili
+def test_robo_sem_termos_nao_usa_termos_da_pili():
+    raiz = os.path.join(os.path.dirname(__file__), '..', 'robo_pili')
+    busca = open(os.path.join(raiz, 'run_busca.py'), encoding='utf-8').read()
+    corpo = busca[busca.index('def get_termos'):busca.index('def log_db')]
+    assert 'TERMOS_BUSCA' not in corpo.split('# Sem termos do cliente')[0] and corpo.rstrip().endswith('return []')
+    buscador = open(os.path.join(raiz, 'buscador.py'), encoding='utf-8').read()
+    assert 'random.choice(TERMOS_BUSCA)' not in buscador and 'random.sample(TERMOS_BUSCA' not in buscador
