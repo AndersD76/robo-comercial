@@ -808,6 +808,13 @@ async def main():
     init_database()
     print(f"[WA/Pili {_ts()}] ℹ Banco inicializado", flush=True)
 
+    # Sessão, QR e status na pasta do schema da Pili (wa/pili/), como os
+    # clientes do SaaS. A sessão da pasta antiga é movida uma vez, para
+    # não pedir o QR de novo.
+    import whatsapp as _wa_mod
+    from config import DB_SCHEMA as _schema_pili
+    _wa_mod.configurar_cliente(_schema_pili, migrar_sessao_antiga=True)
+
     bot = WhatsAppBot()
     gerador = GeradorMensagens()
 

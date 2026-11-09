@@ -132,3 +132,16 @@ def test_email_do_cliente_nao_usa_modelo_da_pili(monkeypatch):
     assert 'Uniformes Sul' in html and 'Uniformes Sul' in assunto
     html_pili, _ = app._template_email_cliente('emp_1', {'email': 'vendas@pili.ind.br', 'empresa_nome': 'Pili'})
     assert 'Pili' in html_pili
+
+
+# QA-SEC-007: sessão, QR e status do WhatsApp eram um arquivo só para todos os clientes
+def test_whatsapp_e_linkedin_separados_por_cliente():
+    from robo_pili import regras
+    a, b = regras.caminhos_wa('/robo', 'emp_1'), regras.caminhos_wa('/robo', 'emp_2')
+    assert a['qr'] != b['qr'] and a['sessao'] != b['sessao'] and a['status'] != b['status']
+    assert 'emp_1' in a['qr'] and 'emp_2' in b['qr']
+    for ruim in ('../emp_2', 'emp_1/../../x', ''):
+        with pytest.raises(ValueError):
+            regras.caminhos_wa('/robo', ruim)
+    src = open(os.path.join(os.path.dirname(__file__), '..', 'app.py'), encoding='utf-8').read()
+    assert "'robo_pili', 'wa_qr.png'" not in src and "'robo_pili', 'wa_status.json'" not in src

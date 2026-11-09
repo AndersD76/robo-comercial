@@ -45,6 +45,8 @@ import contas as _contas
 from pseo_data import (CNAE_B2B, CNAE_POR_CODIGO, CNAE_POR_SLUG,
                        PORTE_LABELS, UF_NOMES, cnae_formatado, do_uf,
                        no_uf, nome_municipio, slugify)
+# Caminhos por cliente (sessão, QR e status do WhatsApp; sessão do LinkedIn)
+from robo_pili import regras as _regras
 
 app = Flask(__name__)
 logging.basicConfig(
@@ -4764,24 +4766,25 @@ def api_bot_status(bot):
         wa_exit = wa_proc.returncode
         _procs.setdefault(schema, {})['wa'] = None
     wa_running = _proc_running(schema, 'wa')
-    # Estado real do WhatsApp (não só se o processo está vivo)
+    # Estado real do WhatsApp (não só se o processo está vivo). O arquivo
+    # é do próprio cliente — antes era um só para todos.
     wa_real_status = None
     wa_detail = None
+    try:
+        sf = _regras.caminhos_wa(_BOT_DIR, schema)['status']
+    except ValueError:
+        sf = None
     if wa_running:
         try:
-            base = os.path.dirname(os.path.abspath(__file__))
-            sf = os.path.join(base, 'robo_pili', 'wa_status.json')
             with open(sf, 'r', encoding='utf-8') as f:
                 ws = json.load(f)
             wa_real_status = ws.get('status')
             wa_detail = ws.get('detail')
         except Exception:
             wa_real_status = 'iniciando'
-    elif not wa_running:
+    elif sf:
         # Limpa status file quando processo não está rodando
         try:
-            base = os.path.dirname(os.path.abspath(__file__))
-            sf = os.path.join(base, 'robo_pili', 'wa_status.json')
             if os.path.exists(sf):
                 os.remove(sf)
         except Exception:
@@ -4799,8 +4802,11 @@ def api_bot_status(bot):
 @app.route('/api/<bot>/qr')
 @login_required
 def api_bot_qr(bot):
-    base = os.path.dirname(os.path.abspath(__file__))
-    qr_path = os.path.join(base, 'robo_pili', 'wa_qr.png')
+    # Só o QR do próprio cliente (schema da sessão, nunca o da URL)
+    try:
+        qr_path = _regras.caminhos_wa(_BOT_DIR, _get_schema())['qr']
+    except ValueError:
+        return '', 404
     if os.path.exists(qr_path):
         return send_file(qr_path, mimetype='image/png',
                          max_age=0)

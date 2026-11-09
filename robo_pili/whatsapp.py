@@ -25,15 +25,45 @@ from config import (
 # Fuso horário de Brasília (UTC-3)
 _BRT = timezone(timedelta(hours=-3))
 
-# Diretório para salvar sessão e evitar QR toda vez
-SESSION_DIR = './whatsapp_session'
-
 import os as _os_mod
 import json as _json_mod
 
-_STATUS_FILE = _os_mod.path.join(
-    _os_mod.path.dirname(_os_mod.path.abspath(__file__)), 'wa_status.json'
-)
+_DIR_ROBO = _os_mod.path.dirname(_os_mod.path.abspath(__file__))
+
+# Sessão do navegador (evita QR toda vez), status e QR para o painel.
+# Estes são os caminhos antigos, de um cliente só. Multi-cliente chama
+# configurar_cliente(schema) antes de iniciar: sem isso, todos os
+# clientes dividiam a mesma sessão do WhatsApp e o mesmo QR.
+SESSION_DIR = './whatsapp_session'
+_STATUS_FILE = _os_mod.path.join(_DIR_ROBO, 'wa_status.json')
+_QR_FILE = _os_mod.path.join(_DIR_ROBO, 'wa_qr.png')
+
+
+def configurar_cliente(schema: str, migrar_sessao_antiga: bool = False):
+    """Usa sessão, status e QR só deste cliente (robo_pili/wa/<schema>/).
+
+    migrar_sessao_antiga: move a sessão da pasta antiga (whatsapp_session)
+    para a do cliente, para não pedir QR de novo. Só para o robô
+    standalone da Pili — a pasta antiga pode ter a sessão de outro
+    cliente, então o robô multi-cliente nunca migra.
+    """
+    global SESSION_DIR, _STATUS_FILE, _QR_FILE
+    import regras
+    caminhos = regras.caminhos_wa(_DIR_ROBO, schema)
+    _os_mod.makedirs(caminhos['pasta'], exist_ok=True)
+    antiga = _os_mod.path.join(_DIR_ROBO, 'whatsapp_session')
+    if (migrar_sessao_antiga and _os_mod.path.isdir(antiga)
+            and not _os_mod.path.exists(caminhos['sessao'])):
+        import shutil
+        try:
+            shutil.move(antiga, caminhos['sessao'])
+        except OSError:
+            pass
+    SESSION_DIR = caminhos['sessao']
+    _STATUS_FILE = caminhos['status']
+    _QR_FILE = caminhos['qr']
+    return caminhos
+
 
 def _write_wa_status(status: str, detail: str = ''):
     try:
@@ -133,12 +163,7 @@ class WhatsAppBot:
             qr_task.cancel()
             # Remove arquivo QR após autenticação
             try:
-                import os as _os2
-                _qr = _os2.path.join(
-                    _os2.path.dirname(_os2.path.abspath(__file__)),
-                    'wa_qr.png'
-                )
-                _os2.remove(_qr)
+                _os_mod.remove(_QR_FILE)
             except OSError:
                 pass
         else:
@@ -168,10 +193,7 @@ class WhatsAppBot:
     async def _salvar_qr_loop(self):
         """Salva screenshot do QR Code a cada 3s para o dashboard servir.
         Captura apenas o elemento QR para exibição em tamanho grande."""
-        import os as _os
-        qr_path = _os.path.join(
-            _os.path.dirname(_os.path.abspath(__file__)), 'wa_qr.png'
-        )
+        qr_path = _QR_FILE
         while True:
             try:
                 # Tenta capturar só o elemento do QR (evita página inteira)

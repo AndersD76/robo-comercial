@@ -18,6 +18,14 @@ token.json
 # WhatsApp sessions (NÃO subir ao git)
 whatsapp_session/
 */whatsapp_session/
+# Pastas de execução dos robôs, uma por cliente (sessão, QR, status, PID)
+robo_pili/wa/
+robo_pili/linkedin/
+robo_pili/logs/
+robo_pili/pids/
+robo_pili/wa_qr.png
+robo_pili/wa_status.json
+robo_pili/linkedin_creds.json
 
 # Variáveis de ambiente
 .env

@@ -383,7 +383,12 @@ async def main(schema: str):
     _db.DB_SCHEMA = schema  # garante
 
     from buscador import Buscador
+    import whatsapp as _wa_mod
     from whatsapp import WhatsAppBot
+
+    # Sessão, QR e status só deste cliente. Antes todos dividiam a mesma
+    # pasta: um cliente via o QR de outro e podia enviar pelo número dele.
+    _wa_mod.configurar_cliente(schema)
 
     # 4. Inicializa banco
     try:

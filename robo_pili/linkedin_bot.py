@@ -139,14 +139,22 @@ class LinkedInBot:
         from playwright.async_api import async_playwright
 
         self._pw = await async_playwright().start()
-        os.makedirs(SESSION_DIR, exist_ok=True)
+        # Sessão (cookies do LinkedIn) por cliente: a pasta única fazia o
+        # robô de um cliente abrir já logado na conta de outro.
+        sessao = SESSION_DIR
+        if self.schema:
+            import regras
+            sessao = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), 'linkedin',
+                regras.schema_seguro(self.schema), 'sessao')
+        os.makedirs(sessao, exist_ok=True)
 
         # Se tem display (Xvfb), abre visível para noVNC funcionar
         tem_display = self._tem_display()
         usar_headless = not tem_display
 
         self.context = await self._pw.chromium.launch_persistent_context(
-            user_data_dir=SESSION_DIR,
+            user_data_dir=sessao,
             headless=usar_headless,
             args=[
                 '--disable-blink-features=AutomationControlled',
