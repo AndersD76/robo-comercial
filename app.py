@@ -1011,6 +1011,22 @@ PLAN_LEAD_LIMITS = {
     'enterprise': None  # ilimitado
 }
 
+# O Starter é vendido como "500 leads/mês" (landing, preços, llms.txt): a cota
+# conta só os leads dos últimos 30 dias. No teste grátis, os 50 são do período todo.
+PLANOS_COTA_MENSAL = {'starter'}
+
+
+def _sql_leads_na_cota(plano):
+    """COUNT dos leads que contam na cota: só os com algum contato (o lixo da
+    coleta antiga, limpo em 03/11, enchia a cota e travava o robô) e, nos
+    planos mensais, só os encontrados nos últimos 30 dias."""
+    sql = ("SELECT COUNT(*) AS total FROM empresas "
+           "WHERE (COALESCE(telefone, '') <> '' OR COALESCE(email, '') <> '' "
+           "OR COALESCE(whatsapp, '') <> '')")
+    if plano in PLANOS_COTA_MENSAL:
+        sql += " AND encontrado_em >= NOW() - INTERVAL '30 days'"
+    return sql
+
 TRIAL_DAYS = 14
 
 PLAN_FEATURES = {
@@ -1092,11 +1108,7 @@ def _check_lead_limit(schema, uid=None):
     try:
         conn2 = _conn(schema)
         c2 = conn2.cursor()
-        c2.execute('SELECT COUNT(*) AS total FROM empresas '
-                       # Só conta lead com algum contato: o lixo da coleta antiga
-                       # (limpo em 03/11) enchia a cota grátis e travava o robô
-                       "WHERE COALESCE(telefone, '') <> '' OR COALESCE(email, '') <> '' "
-                       "OR COALESCE(whatsapp, '') <> ''")
+        c2.execute(_sql_leads_na_cota(plano))
         total = c2.fetchone()['total']
     except Exception:
         return True, ''
@@ -1107,6 +1119,9 @@ def _check_lead_limit(schema, uid=None):
             except Exception:
                 pass
     if total >= limite:
+        if plano in PLANOS_COTA_MENSAL:
+            return False, (f'Limite de {limite} leads nos últimos 30 dias atingido no plano {plano}. '
+                           'Faça upgrade para continuar.')
         return False, f'Limite de {limite} leads atingido no plano {plano}. Faça upgrade para continuar.'
     return True, ''
 
@@ -9751,11 +9766,7 @@ def api_meu_plano():
         if schema:
             conn2 = _conn(schema)
             c2 = conn2.cursor()
-            c2.execute('SELECT COUNT(*) AS total FROM empresas '
-                       # Só conta lead com algum contato: o lixo da coleta antiga
-                       # (limpo em 03/11) enchia a cota grátis e travava o robô
-                       "WHERE COALESCE(telefone, '') <> '' OR COALESCE(email, '') <> '' "
-                       "OR COALESCE(whatsapp, '') <> ''")
+            c2.execute(_sql_leads_na_cota(plano))
             total_leads = c2.fetchone()['total']
             conn2.close()
     except Exception:
