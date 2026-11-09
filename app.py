@@ -630,6 +630,7 @@ def _init_public_schema_safe():
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_touch JSONB",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS aha_em TIMESTAMPTZ",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS emails_marketing_off BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS indicado_por BIGINT",
         ]:
             try:
                 c.execute(stmt)
@@ -1581,11 +1582,15 @@ def cadastro():
                     c.execute('UPDATE users SET schema_name=%s WHERE id=%s', (schema, uid))
                     conn.commit()
                     primeiro, ultimo = _toques_do_visitante()
+                    indicou = next((q for q in (_quem_indicou((t or {}).get('in'))
+                                                for t in (ultimo, primeiro)) if q and q != uid), None)
                     try:
-                        c.execute('UPDATE users SET first_touch=%s, last_touch=%s WHERE id=%s',
+                        c.execute('UPDATE users SET first_touch=%s, last_touch=%s, indicado_por=%s WHERE id=%s',
                                   (psycopg2.extras.Json(primeiro) if primeiro else None,
-                                   psycopg2.extras.Json(ultimo) if ultimo else None, uid))
+                                   psycopg2.extras.Json(ultimo) if ultimo else None, indicou, uid))
                         conn.commit()
+                        if indicou:
+                            _evento('referral_signup', uid, indicado_por=indicou)
                     except Exception:
                         conn.rollback()
                         logger.exception('cadastro: atribuição não gravada')
@@ -9878,6 +9883,8 @@ def api_meu_plano():
         'total_leads': total_leads,
         'features': features,
         'trial_expirado': plano == 'trial' and not ativo,
+        'indicacao': (f"{APP_URL}/?indica={_codigo_indicacao(session['user_id'])}"
+                      if session.get('user_id') else None),
     })
 
 
@@ -10025,9 +10032,27 @@ _TOQUE_DIAS = 90
 
 def _toque_atual(ref):
     a = request.args
-    return {'lp': request.path[:120], 'ref': _urlparse(ref).netloc.lower()[:60] if ref else '',
-            'us': a.get('utm_source', '')[:40], 'um': a.get('utm_medium', '')[:40],
-            'uc': a.get('utm_campaign', '')[:80], 't': int(time.time())}
+    toque = {'lp': request.path[:120], 'ref': _urlparse(ref).netloc.lower()[:60] if ref else '',
+             'us': a.get('utm_source', '')[:40], 'um': a.get('utm_medium', '')[:40],
+             'uc': a.get('utm_campaign', '')[:80], 't': int(time.time())}
+    if a.get('indica'):
+        toque['in'] = a.get('indica', '')[:40]   # link de indicação de um cliente
+    return toque
+
+
+# Indicação (Fase 7): cada conta tem um link /?indica=<código>; o cadastro que
+# chega por ele grava users.indicado_por. Prêmio: TODO-VALIDAR (decisão do dono).
+def _codigo_indicacao(uid):
+    assinatura = _hmac.new(str(app.secret_key).encode(), f'indica:{int(uid)}'.encode(),
+                           'sha256').hexdigest()[:8]
+    return f'{int(uid)}-{assinatura}'
+
+
+def _quem_indicou(codigo):
+    uid = (codigo or '').split('-', 1)[0]
+    if uid.isdigit() and _hmac.compare_digest(_codigo_indicacao(int(uid)), codigo or ''):
+        return int(uid)
+    return None
 
 
 # Experimentos A/B próprios (Fase 6; plano em growth/experimentos.md): uma
@@ -10209,7 +10234,7 @@ def _trafego_pageview(resp):
                     if nome in request.cookies:
                         resp.delete_cookie(nome)
             else:
-                externo = (not interno and ref) or a.get('utm_source')
+                externo = (not interno and ref) or a.get('utm_source') or a.get('indica')
                 if externo or 'tv_ft' not in request.cookies:
                     toque = json.dumps(_toque_atual('' if interno else ref), separators=(',', ':'))
                     opcoes = dict(max_age=_TOQUE_DIAS * 86400, secure=request.is_secure,
@@ -10788,6 +10813,12 @@ def _funil_rodar():
             except Exception:
                 conn.rollback()
                 logger.exception('funil: avisos de pagantes falharam')
+            try:
+                res['depoimentos'] = emails_funil.rodar_depoimentos(
+                    conn, _send_system_email, APP_URL, descadastro=_link_descadastro)
+            except Exception:
+                conn.rollback()
+                logger.exception('funil: pedidos de depoimento falharam')
             return res
         finally:
             conn.rollback()

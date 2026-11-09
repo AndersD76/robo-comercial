@@ -100,3 +100,9 @@ def test_falha_no_envio_desfaz_a_marca(monkeypatch):
 def test_textos_de_renovacao_sao_honestos():
     assunto, html = ef.email_renova('ACME', 'starter', 97.0, AGORA + timedelta(days=3), 'https://x')
     assert 'nada é cobrado sem você pagar' in html and 'assinatura do TurboVenda' in html
+
+
+def test_pedido_de_depoimento_so_com_autorizacao():
+    assunto, html = ef.email_depoimento('ACME', {'validos': 12, 'cnpj': 3, 'decisor': 1}, 'https://x')
+    assert 'autorizar por escrito' in html and 'Sem autorização, ele fica só entre nós' in html
+    assert ef._com_descadastro(html, 'https://x/descadastrar/1.a').count('/descadastrar/') == 1

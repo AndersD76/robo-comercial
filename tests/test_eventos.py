@@ -103,3 +103,14 @@ def test_descadastro_em_um_clique(monkeypatch, fila):
     assert 'não vai mais receber' in r.get_data(as_text=True)
     assert feitos == [('UPDATE users SET emails_marketing_off = TRUE WHERE id = %s', (7,))]
     assert [v[0] for t, v in fila if t == 'ev'] == ['email_unsubscribed']
+
+
+def test_link_de_indicacao_assinado_e_capturado(fila):
+    codigo = app._codigo_indicacao(42)
+    assert app._quem_indicou(codigo) == 42
+    assert app._quem_indicou('42-falso') is None and app._quem_indicou('') is None
+    c = app.app.test_client()
+    r = c.get(f'/?indica={codigo}', headers={'User-Agent': CHROME})
+    assert _cookie(r, 'tv_lt')
+    with app.app.test_request_context('/', headers={'Cookie': f"tv_lt={c.get_cookie('tv_lt').value}"}):
+        assert app._toques_do_visitante()[1]['in'] == codigo

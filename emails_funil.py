@@ -46,6 +46,7 @@ MIGRACOES = [
     # descadastro em 1 clique (LGPD): vale para os e-mails de teste e de PIX não pago;
     # o aviso de vencimento de quem paga é transacional e continua
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS emails_marketing_off BOOLEAN DEFAULT FALSE',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS depoimento_pedido_em TIMESTAMP',
 ]
 DIAS_AVISO_RENOVACAO = 3
 NOMES_PLANO = {'starter': 'Starter', 'pro': 'Pro'}
@@ -249,6 +250,18 @@ def email_pix_pendente(empresa, plano, valor, app_url):
         'libera assim que o PIX cair.',
     ], 'Gerar um PIX novo', f'{app_url}/assinar?plano={plano}',
         'Se você já pagou por outro meio, ignore este e-mail.')
+    return assunto, html
+
+
+def email_depoimento(empresa, r, app_url):
+    assunto = 'O TurboVenda está ajudando nas suas vendas?'
+    html = _layout(empresa, [
+        f'Seu robô já encontrou {_numeros(r)}.',
+        'Queremos saber como está sendo: responda este e-mail com uma ou duas frases '
+        'sobre o que mudou na sua prospecção, ou sobre o que ainda falta.',
+        'Só publicamos o seu comentário no site, com o nome da sua empresa, se você '
+        'autorizar por escrito na resposta. Sem autorização, ele fica só entre nós.',
+    ], 'Abrir meu painel', f'{app_url}/dashboard')
     return assunto, html
 
 
@@ -481,3 +494,44 @@ def rodar_pagantes(conn, enviar, app_url, precos, agora=None, descadastro=None):
             conn.commit()
             res['falhas'] += 1
     return res
+
+
+def rodar_depoimentos(conn, enviar, app_url, agora=None, descadastro=None):
+    """Pedido de depoimento no pico de satisfação (Fase 7): 3 a 30 dias depois
+    do 1º lead, com 10+ leads, uma vez por pessoa, respeitando o descadastro e
+    o intervalo mínimo entre e-mails. Publicação só com autorização escrita."""
+    cur = conn.cursor()
+    migrar(cur)
+    conn.commit()
+    cur.execute('SELECT NOW()::timestamp AS agora')
+    agora = agora or cur.fetchone()['agora']
+    cur.execute("""SELECT id, email, empresa_nome, schema_name, funil_ultimo_email_em FROM users
+                   WHERE aha_em IS NOT NULL AND aha_em BETWEEN %s AND %s
+                     AND depoimento_pedido_em IS NULL AND emails_marketing_off IS NOT TRUE
+                     AND ativo = TRUE ORDER BY id""",
+                (agora - timedelta(days=30), agora - timedelta(days=3)))
+    enviados = 0
+    for u in cur.fetchall():
+        if not _EMAIL_OK.match(u['email'] or ''):
+            continue
+        if u['funil_ultimo_email_em'] and agora - u['funil_ultimo_email_em'] < INTERVALO_MIN:
+            continue
+        r = resumo_leads(cur, u['schema_name'] or f'emp_{u["id"]}')
+        if r['validos'] < LEADS_PRIMEIRO_AVISO:
+            continue
+        cur.execute("""UPDATE users SET depoimento_pedido_em = %s, funil_ultimo_email_em = %s
+                       WHERE id = %s AND depoimento_pedido_em IS NULL RETURNING id""",
+                    (agora, agora, u['id']))
+        if not cur.fetchone():
+            conn.commit()
+            continue
+        conn.commit()
+        assunto, html = email_depoimento(u['empresa_nome'], r, app_url)
+        html = _com_descadastro(html, descadastro(u['id']) if descadastro else None)
+        if enviar(u['email'], assunto, html):
+            enviados += 1
+        else:
+            cur.execute('UPDATE users SET depoimento_pedido_em = NULL, funil_ultimo_email_em = %s '
+                        'WHERE id = %s', (u['funil_ultimo_email_em'], u['id']))
+            conn.commit()
+    return enviados

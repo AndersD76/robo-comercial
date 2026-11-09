@@ -581,6 +581,7 @@
 <main id="main">
 
   <div id="faixa-plano" style="display:none"></div>
+  <div id="indicacao" style="display:none"></div>
 
   <div class="sec-title"><i class="fa fa-robot" style="font-size:10px"></i>Agente</div>
   <div class="bot-card">
@@ -3132,7 +3133,18 @@ async function loadPlano(){
       badge.style.color='#fbbf24';
     }
     mostrarFaixa(d);
+    mostrarIndicacao(d);
   }catch(e){}
+}
+// Indicação: só depois que o robô já entregou valor (10+ leads)
+function mostrarIndicacao(d){
+  const el=document.getElementById('indicacao');
+  if(!el||!d.indicacao||(d.total_leads||0)<10)return;
+  el.innerHTML=`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#0d1526;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:12px 16px;margin:0 0 16px;font-size:13px;color:#94a3b8">
+    <span style="flex:1;min-width:200px">Conhece alguém que vende para empresas? Mande o seu link do TurboVenda:</span>
+    <code style="background:#111d35;padding:6px 10px;border-radius:6px;color:#cbd5e1;font-size:12px;word-break:break-all">${d.indicacao}</code>
+    <button onclick="navigator.clipboard.writeText('${d.indicacao}');this.textContent='Copiado'" style="background:none;border:1px solid rgba(99,102,241,.4);color:#a5b4fc;border-radius:6px;padding:6px 12px;cursor:pointer">Copiar</button></div>`;
+  el.style.display='block';
 }
 // Oferta no momento de valor: cota do teste cheia, teste acabando ou acabado,
 // plano pago vencendo ou vencido. Sem contagem falsa: tudo vem de /api/meu-plano.
