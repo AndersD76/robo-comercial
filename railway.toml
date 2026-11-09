@@ -1,3 +1,9 @@
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "./Dockerfile"
+
+[deploy]
+# A versão nova só substitui a que está no ar se responder 200 aqui (testa o
+# banco). Em 09/11/2026 um erro de sintaxe derrubou o site por ~40 s.
+healthcheckPath = "/health"
+healthcheckTimeout = 300
