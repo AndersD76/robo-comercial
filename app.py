@@ -2599,9 +2599,8 @@ def _pseo_data_base():
 _INDEXNOW_KEY = 'b4f7e2a1c9d84f6e8a3b5c7d9e1f0a2b'
 
 
-@app.route('/llms.txt')
-def llms_txt():
-    txt = (
+def _llms_resumo():
+    return (
         "# TurboVenda\n"
         "> Plataforma de prospecção B2B automática com IA\n\n"
         "## O que é\n"
@@ -2634,8 +2633,58 @@ def llms_txt():
         "https://www.turbovenda.com.br/ferramentas\n"
         "- Comparativos com Econodata, Speedio, Leads2b e Apollo: "
         "https://www.turbovenda.com.br/alternativas\n"
+        "- Conteúdo completo (ferramentas, comparativos e artigos em texto): "
+        "https://www.turbovenda.com.br/llms-full.txt\n"
     )
-    return app.response_class(txt, mimetype='text/plain')
+
+
+@app.route('/llms.txt')
+def llms_txt():
+    return app.response_class(_llms_resumo(), mimetype='text/plain')
+
+
+def _texto_limpo(html_):
+    """HTML de artigo → texto corrido em Markdown simples."""
+    import html as _html
+    t = re.sub(r'<h([23])[^>]*>', lambda m: '\n' + '#' * (int(m.group(1)) + 1) + ' ', html_ or '')
+    t = re.sub(r'<li[^>]*>', '\n- ', t)
+    t = re.sub(r'<(br|/p|/h[1-6]|/li|/tr|/ul|/ol|/table)[^>]*>', '\n', t)
+    t = re.sub(r'<[^>]+>', '', t)
+    t = _html.unescape(t)
+    t = re.sub(r'[ \t]+', ' ', t)
+    return re.sub(r'\n\s*\n+', '\n\n', t).strip()
+
+
+@lru_cache(maxsize=1)
+def _llms_completo():
+    """Índice do llms.txt + o conteúdo das páginas-chave em texto limpo,
+    para assistentes de IA lerem o site sem precisar renderizar HTML."""
+    partes = [_llms_resumo().rstrip(), '', '# Ferramentas grátis (sem login)']
+    for f in FERRAMENTAS:
+        partes += [f"\n## {f['nome']}", f"{_SITE}/ferramentas/{f['slug']}", f['resumo']]
+    partes += ['', '# Comparativos com concorrentes']
+    for a in ALTERNATIVAS:
+        partes += [f"\n## {a['h1']}", f"{_SITE}/alternativas/{a['slug']}",
+                   f"Preços e recursos conferidos em {a['consultado_em']}.", a['resumo']]
+    partes += ['', '# Prospecção por segmento']
+    for seg in SEGMENTOS:
+        partes += [f"\n## Prospecção B2B para {seg['nome']}", f"{_SITE}/para/{seg['slug']}",
+                   seg['desc']]
+    partes += ['', '# Dados de empresas',
+               'Páginas com contagem de empresas ativas por segmento, estado e cidade, feitas '
+               f'com os dados abertos do CNPJ publicados pela Receita Federal: {_SITE}/empresas '
+               f'(fonte e metodologia: {_SITE}/empresas/sobre-os-dados).',
+               '', '# Artigos do blog']
+    for post in BLOG_POSTS:
+        partes += [f"\n## {post['titulo']}", f"{_SITE}/blog/{post['slug']}",
+                   f"Publicado em {post['data']}.", post['desc'], '',
+                   _texto_limpo(post.get('conteudo', ''))]
+    return '\n'.join(partes) + '\n'
+
+
+@app.route('/llms-full.txt')
+def llms_full_txt():
+    return app.response_class(_llms_completo(), mimetype='text/plain')
 
 
 @app.route(f'/{_INDEXNOW_KEY}.txt')
@@ -9550,6 +9599,30 @@ _BOT_UA = ('bot', 'crawl', 'spider', 'slurp', 'bing', 'google', 'yandex', 'baidu
            'semrush', 'headless', 'python', 'curl', 'wget', 'go-http', 'okhttp',
            'axios', 'java/', 'lighthouse', 'preview', 'monitor', 'uptime',
            'scrapy', 'httpclient', 'node-fetch')
+# Monitor de crawlers (Fase 3 do growth): nome normalizado do robô a partir
+# do user-agent. Os de IA (OpenAI, Anthropic, Perplexity) ficam como declarados;
+# Googlebot, Bingbot e Applebot são confirmados pelo DNS reverso do limitador.
+_ROBOS = (
+    ('oai-searchbot', 'OAI-SearchBot'), ('chatgpt-user', 'ChatGPT-User'), ('gptbot', 'GPTBot'),
+    ('claude-searchbot', 'Claude-SearchBot'), ('claude-user', 'Claude-User'),
+    ('claudebot', 'ClaudeBot'), ('anthropic-ai', 'anthropic-ai'),
+    ('perplexity-user', 'Perplexity-User'), ('perplexitybot', 'PerplexityBot'),
+    ('google-inspectiontool', 'Google-InspectionTool'), ('googleother', 'GoogleOther'),
+    ('googlebot', 'Googlebot'), ('bingbot', 'Bingbot'), ('adidxbot', 'Bingbot'),
+    ('applebot-extended', 'Applebot-Extended'), ('applebot', 'Applebot'),
+    ('duckduckbot', 'DuckDuckBot'), ('yandexbot', 'YandexBot'), ('meta-externalagent', 'Meta-ExternalAgent'),
+    ('ccbot', 'CCBot'), ('bytespider', 'Bytespider'), ('amazonbot', 'Amazonbot'),
+    ('mistralai-user', 'MistralAI-User'), ('youbot', 'YouBot'),
+    ('ahrefsbot', 'AhrefsBot'), ('semrushbot', 'SemrushBot'),
+)
+_ROBOS_DNS = {'Googlebot', 'Google-InspectionTool', 'Bingbot', 'Applebot'}
+
+
+def _nome_do_robo(ua):
+    ua = (ua or '').lower()
+    return next((nome for chave, nome in _ROBOS if chave in ua), '')
+
+
 _TRAF_SQL = """
 CREATE TABLE IF NOT EXISTS pageviews (
     id           BIGSERIAL PRIMARY KEY,
@@ -9562,6 +9635,9 @@ CREATE TABLE IF NOT EXISTS pageviews (
     created_at   TIMESTAMPTZ DEFAULT now()
 );
 ALTER TABLE pageviews ADD COLUMN IF NOT EXISTS entrada BOOLEAN DEFAULT false;
+ALTER TABLE pageviews ADD COLUMN IF NOT EXISTS robo TEXT DEFAULT '';
+ALTER TABLE pageviews ADD COLUMN IF NOT EXISTS robo_verificado BOOLEAN DEFAULT false;
+ALTER TABLE pageviews ADD COLUMN IF NOT EXISTS status SMALLINT;
 CREATE INDEX IF NOT EXISTS idx_pageviews_created ON pageviews(created_at);
 CREATE TABLE IF NOT EXISTS cta_cliques (
     id           BIGSERIAL PRIMARY KEY,
@@ -9617,7 +9693,8 @@ def _traf_gravador(fila):
                 if pvs:
                     psycopg2.extras.execute_values(
                         c, "INSERT INTO pageviews (path, referrer, utm_source, "
-                           "utm_medium, utm_campaign, is_bot, entrada) VALUES %s", pvs)
+                           "utm_medium, utm_campaign, is_bot, entrada, robo, "
+                           "robo_verificado, status) VALUES %s", pvs)
                 if ctas:
                     psycopg2.extras.execute_values(
                         c, "INSERT INTO cta_cliques (path, cta, destino, utm_source, "
@@ -9651,20 +9728,29 @@ def _traf_enfileirar(tipo, valores):
 @app.after_request
 def _trafego_pageview(resp):
     try:
-        if (request.method != 'GET' or resp.status_code != 200
-                or resp.direct_passthrough
-                or 'text/html' not in (resp.content_type or '')
-                or request.path.startswith(_TRAF_FORA)):
+        if request.method not in ('GET', 'HEAD') or request.path.startswith(_TRAF_FORA):
             return resp
         ua = (request.headers.get('User-Agent') or '').lower()
+        robo = _nome_do_robo(ua)
+        pagina_html = (request.method == 'GET' and resp.status_code == 200
+                       and not resp.direct_passthrough
+                       and 'text/html' in (resp.content_type or ''))
+        # Robô conhecido entra sempre (llms.txt, robots.txt, sitemap, 404,
+        # 429); visita comum só quando é página HTML servida com sucesso
+        if not robo and not pagina_html:
+            return resp
         ref = (request.headers.get('Referer') or '')[:300]
         interno = _urlparse(ref).netloc.lower().endswith('turbovenda.com.br')
         a = request.args
+        verificado = robo in _ROBOS_DNS and _buscador_verificado()
         _traf_enfileirar('pv', (
             request.path[:300], '' if interno else ref,
             a.get('utm_source', '')[:120], a.get('utm_medium', '')[:120],
             a.get('utm_campaign', '')[:120],
-            not ua or any(b in ua for b in _BOT_UA), not interno))
+            bool(robo) or not ua or any(b in ua for b in _BOT_UA), not interno,
+            robo, verificado, resp.status_code))
+        if not pagina_html:
+            return resp
         html = resp.get_data(as_text=True)
         if '</body>' in html and '/api/t/cta' not in html:
             resp.set_data(html.replace('</body>', _TRAF_SCRIPT + '</body>', 1))
@@ -9737,6 +9823,13 @@ def admin_trafego():
         dados['ctas'] = q(
             f"SELECT path, cta, COUNT(*) AS n FROM cta_cliques WHERE {janela} "
             f"GROUP BY 1, 2 ORDER BY n DESC LIMIT 30")
+        dados['robos'] = q(
+            f"SELECT robo, COUNT(*) AS acessos, COUNT(DISTINCT path) AS paginas, "
+            f"COUNT(*) FILTER (WHERE robo_verificado) AS verificados, "
+            f"COUNT(*) FILTER (WHERE status = 429) AS bloqueados, "
+            f"COUNT(*) FILTER (WHERE path IN ('/llms.txt', '/llms-full.txt')) AS llms, "
+            f"MAX(created_at) AS ultimo FROM pageviews "
+            f"WHERE {janela} AND robo <> '' GROUP BY robo ORDER BY acessos DESC")
     except Exception as e:
         logger.exception('admin_trafego')
         erro = str(e)

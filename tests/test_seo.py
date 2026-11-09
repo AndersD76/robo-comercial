@@ -206,3 +206,22 @@ def test_links_internos_do_blog(client):
             assert info['pilar']['slug'] in alvos, p['slug']
         for _, url in info['paginas']:
             assert f'href="{url}"' in bloco, (p['slug'], url)
+
+
+def test_monitor_de_crawlers(client, monkeypatch):
+    """Robô conhecido é gravado com nome e status em qualquer resposta
+    (inclusive llms.txt e 404); pessoa lendo llms.txt não conta como visita."""
+    gravados = []
+    monkeypatch.setattr(A, '_traf_enfileirar', lambda tipo, v: gravados.append(v))
+    monkeypatch.setattr(A, '_dns_confere', lambda ip, dominios: True)
+    A._buscador_cache.clear()
+    gpt = 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.2; +https://openai.com/gptbot'
+    client.get('/llms.txt', headers={'User-Agent': gpt})
+    client.get('/llms.txt', headers={'User-Agent': 'Mozilla/5.0 Chrome/130.0'})
+    client.get('/precos', headers={'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'})
+    client.get('/pagina-que-nao-existe', headers={'User-Agent': 'Mozilla/5.0 (compatible; ClaudeBot/1.0; +claudebot@anthropic.com)'})
+    vistos = [(v[0], v[7], v[8], v[9]) for v in gravados]
+    assert ('/llms.txt', 'GPTBot', False, 200) in vistos
+    assert not any(p == '/llms.txt' and robo == '' for p, robo, _, _ in vistos)
+    assert ('/precos', 'Googlebot', True, 200) in vistos
+    assert ('/pagina-que-nao-existe', 'ClaudeBot', False, 404) in vistos

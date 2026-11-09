@@ -86,8 +86,14 @@
   </div>
   {% endif %}
 
+  <h2>Robôs e crawlers de IA</h2>
+  {% if d.robos %}<table><thead><tr><th>Robô</th><th style="text-align:right">Acessos</th><th style="text-align:right">Páginas</th><th style="text-align:right">Verificados</th><th style="text-align:right">429</th><th style="text-align:right">llms.txt</th><th>Último</th></tr></thead><tbody>
+    {% for r in d.robos %}<tr><td>{{ r.robo }}</td><td class="n">{{ r.acessos }}</td><td class="n">{{ r.paginas }}</td><td class="n">{{ r.verificados }}</td><td class="n">{{ r.bloqueados }}</td><td class="n">{{ r.llms }}</td><td>{{ r.ultimo.strftime('%d/%m %H:%M') if r.ultimo }}</td></tr>{% endfor %}
+  </tbody></table>{% else %}<p class="vazio">Nenhum robô identificado no período (o registro por nome começou em 09/11/2026).</p>{% endif %}
+
   <p class="nota">Entrada = página vista vinda de fora do site (busca, rede social, link direto); é a melhor aproximação de
-    "visita". Origem usa a UTM quando houver e, senão, o site de referência. Robôs são identificados pelo user-agent, que não
-    é gravado; IP também não (LGPD). Os dados ficam nas tabelas <code>pageviews</code> e <code>cta_cliques</code> do banco.</p>
+    "visita". Origem usa a UTM quando houver e, senão, o site de referência. Robôs são identificados pelo user-agent (só o nome
+    do robô é gravado); "verificados" = Googlebot, Bingbot e Applebot confirmados por DNS reverso; os de IA são
+    declarados pelo próprio user-agent. IP não é gravado (LGPD). Os dados ficam nas tabelas <code>pageviews</code> e <code>cta_cliques</code> do banco.</p>
 </body>
 </html>
