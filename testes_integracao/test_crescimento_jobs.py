@@ -126,6 +126,11 @@ def test_mapa_classifica_e_escolhe_satelites_sem_duplicar():
         for q in ('como prospectar clientes para transportadora', 'como prospectar clientes transportadora',
                   'como fazer prospecção de clientes por telefone b2b', 'receita de bolo de cenoura'):
             mapa_buscas.gravar(c, q, 'teste', impressoes=500)
+        # demanda real caindo numa página que não responde (lista de empresas, posição 23)
+        mapa_buscas.gravar(c, 'como abordar cliente b2b pela primeira vez', 'gsc', impressoes=300, posicao=23.0,
+                           pagina='/empresas/usinagem')
+        mapa_buscas.gravar(c, 'como montar lista de prospecção de clientes', 'gsc', impressoes=300, posicao=4.0,
+                           pagina='/empresas/usinagem')
         alvos = mapa_buscas.alvos_satelites(c, 10)
         conn.commit()
     finally:
@@ -133,3 +138,5 @@ def test_mapa_classifica_e_escolhe_satelites_sem_duplicar():
     consultas = [a['consulta'] for a in alvos]
     assert sum('transportadora' in q for q in consultas) == 1          # quase-duplicata vira uma página só
     assert 'receita de bolo de cenoura' not in consultas                 # fora do ICP
+    assert 'como abordar cliente b2b pela primeira vez' in consultas     # posição 23 numa lista: merece resposta
+    assert 'como montar lista de prospecção de clientes' not in consultas  # já ranqueia bem (posição 4)

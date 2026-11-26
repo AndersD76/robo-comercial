@@ -175,6 +175,9 @@ def passada(m, agora=None, forcar=()):
                 falta_cnae = c.fetchone()['falta']
             etapa('dados', (nunca('dados') and agora.hour >= 4) or falta_cnae, lambda: preparar_dados(m, c))
             etapa('reavaliar', nunca('reavaliar'), lambda: reavaliar(m, c))
+            c.execute("SELECT COUNT(*) AS n FROM conteudo_paginas WHERE tipo = 'satelite'")
+            etapa('satelites', c.fetchone()['n'] < 200 and nunca('satelites', 0.25),
+                  lambda: sem.semear(c, [], mapa_buscas.alvos_satelites(c, 200)))
             etapa('primeira_onda', _sem_ondas(c), lambda: cm.publicar_onda(c, limite_total=ONDA_TAMANHO))
             cliente = _cliente_ia()
             if cliente:
@@ -196,7 +199,18 @@ def passada(m, agora=None, forcar=()):
             conn.rollback()
             c.execute('SELECT pg_advisory_unlock(%s)', (TRAVA,))
             conn.commit()
-        if agora.weekday() == 6 and 2 <= agora.hour <= 5 or 'mapa_autocomplete' in forcar:
+        sem_autocomplete = False
+        try:
+            c2 = m._conn()
+            try:
+                k = c2.cursor()
+                k.execute("SELECT NOT EXISTS (SELECT 1 FROM mapa_buscas WHERE fonte = 'autocomplete') AS v")
+                sem_autocomplete = k.fetchone()['v']
+            finally:
+                c2.close()
+        except Exception:
+            pass
+        if (agora.weekday() == 6 and 2 <= agora.hour <= 5) or sem_autocomplete or 'mapa_autocomplete' in forcar:
             threading.Thread(target=expandir_mapa, args=(m,), daemon=True).start()
         return feito
     finally:

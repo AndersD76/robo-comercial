@@ -240,9 +240,14 @@ def _parecida(a, b):
 def alvos_satelites(cur, n=200):
     """Consultas informacionais sem página, das de maior prioridade, sem
     quase-duplicatas (uma página por intenção)."""
+    # sem página, ou com demanda real (Search Console) caindo numa página que
+    # não responde a pergunta (lista de empresas, posição pior que 8)
     cur.execute("""SELECT consulta, cluster, isca, prioridade FROM mapa_buscas
-                   WHERE pagina IS NULL AND tipo_pagina = 'satelite' AND intencao IN ('informacional', 'transacional')
+                   WHERE tipo_pagina = 'satelite' AND intencao IN ('informacional', 'transacional')
                      AND length(consulta) >= 12
+                     AND (pagina IS NULL OR (fonte = 'gsc' AND COALESCE(posicao_28d, 99) > 8
+                          AND pagina NOT LIKE '/blog/%%' AND pagina NOT LIKE '/modelos/%%'
+                          AND pagina NOT LIKE '/glossario/%%'))
                    ORDER BY prioridade DESC, impressoes_28d DESC NULLS LAST LIMIT %s""", (n * 6,))
     escolhidas = []
     for r in cur.fetchall():
