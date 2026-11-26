@@ -23,7 +23,12 @@ PADROES = OrderedDict([
     ('Slack', r'xox[baprs]-[A-Za-z0-9-]{10,}'),
     ('Senha atribuída', r'(?i)(?:password|senha|secret|api_key|apikey|token)\s*[=:]\s*["\'][^"\'\s{}%$]{8,}["\']'),
 ])
-IGNORAR = re.compile(r'(?i)(example|exemplo|placeholder|seu_|sua_|xxxx|\*\*\*|<|changeme|test_token|ci:ci@127)')
+IGNORAR = re.compile(r'(?i)(example|exemplo|placeholder|seu_|sua_|xxxx|\*\*\*|<|changeme|test_token|ci:ci@127|'
+                     r'@localhost[:/]|@127\.0\.0\.1[:/])')   # banco local/serviço do CI, descartável
+# Senhas fixas de teste (ex.: 'senha-forte-123') não são segredo; chaves com formato
+# real (Mercado Pago, Anthropic, Resend, chave privada...) continuam valendo em tudo.
+PASTAS_DE_TESTE = ('tests/', 'testes_integracao/', 'testes_e2e/')
+SO_FORA_DE_TESTE = {'Senha atribuída'}
 
 proc = subprocess.Popen(['git', 'log', '--all', '-p', '--no-color', '--format=@@COMMIT %h %ad', '--date=short'],
                         stdout=subprocess.PIPE, text=True, encoding='utf-8', errors='replace')
@@ -39,6 +44,8 @@ for linha in proc.stdout:
     if not linha.startswith('+') or linha.startswith('+++'):
         continue
     for tipo, padrao in PADROES.items():
+        if tipo in SO_FORA_DE_TESTE and arquivo.startswith(PASTAS_DE_TESTE):
+            continue
         for m in re.finditer(padrao, linha):
             if IGNORAR.search(m.group(0)):
                 continue

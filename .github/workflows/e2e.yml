@@ -13,7 +13,8 @@ permissions:
   contents: read
 jobs:
   e2e:
-    runs-on: ubuntu-latest
+    # 24.04: o Playwright 1.55 não suporta o ubuntu-latest atual (26.04)
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:16

@@ -28,5 +28,5 @@ jobs:
       - name: Segredos em todo o histórico do git (sem imprimir valores)
         run: |
           python qa/ferramentas/segredos_historico.py | tee segredos.txt
-          # o único achado conhecido é um token fixo de teste (falso positivo, ver qa/)
-          test "$(grep -c '^- ' segredos.txt)" -le 1
+          # senhas fixas de teste e o banco local do CI ficam fora (ver o script)
+          test "$(grep -c '^- ' segredos.txt)" -eq 0
