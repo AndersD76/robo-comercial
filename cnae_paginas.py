@@ -21,6 +21,29 @@ PORTES = {'00': 'Não informado', '01': 'Microempresa', '03': 'Pequena (EPP)', '
 DDL_BUSCA = "ALTER TABLE cnae_ibge ADD COLUMN IF NOT EXISTS busca TEXT"
 
 
+MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+
+
+def mes_da_base(valor):
+    """'2026-10-13' -> 'out/2026' (data da base da Receita)."""
+    m = re.match(r'(\d{4})-(\d{2})', str(valor or ''))
+    return f'{MESES[int(m.group(2)) - 1]}/{m.group(1)}' if m and 1 <= int(m.group(2)) <= 12 else (valor or '')
+
+
+def _cidades_oficiais(est):
+    """A Receita grava o município sem acento; mostra o nome oficial do IBGE."""
+    try:
+        from pseo_data import nome_municipio
+    except Exception:
+        return est
+    for c in est.get('cidades') or []:
+        c['municipio'] = nome_municipio(c['municipio'], c.get('uf'))
+    for uf, u in (est.get('ufs') or {}).items():
+        for c in u.get('cidades') or []:
+            c['municipio'] = nome_municipio(c['municipio'], uf)
+    return est
+
+
 def sem_acento(t):
     return ''.join(c for c in unicodedata.normalize('NFD', t or '') if unicodedata.category(c) != 'Mn')
 
@@ -102,9 +125,11 @@ def dados(cur, codigo, uf=None):
     est = r['dados'] or {}
     if isinstance(est, str):
         est = json.loads(est)
+    est = _cidades_oficiais(est)
     d = {'codigo': r['codigo'], 'formatado': formatado(r['codigo']), 'descricao': r['descricao'],
          'nome': frase(r['descricao']), 'hierarquia': r['hierarquia'] or {}, 'observacoes': r['observacoes'] or [],
-         'atividades': r['atividades'] or [], 'est': est, 'base_mes': r['base_mes'], 'total': est.get('total') or 0}
+         'atividades': r['atividades'] or [], 'est': est, 'base_mes': mes_da_base(r['base_mes']),
+         'total': est.get('total') or 0}
     compreende, nao = [], []
     for o in d['observacoes']:
         linhas = [x.strip(' -;') for x in o.split('\n') if x.strip(' -;')]

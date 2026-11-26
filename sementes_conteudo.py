@@ -204,7 +204,7 @@ def _estat(cur, codigo):
     if not r:
         return None, None
     d = r['dados'] if isinstance(r['dados'], dict) else json.loads(r['dados'])
-    return d, r['base_mes']
+    return cnae._cidades_oficiais(d), cnae.mes_da_base(r['base_mes'])
 
 
 def _resumo_segmento(cur, seg):

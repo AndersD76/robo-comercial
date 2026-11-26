@@ -85,18 +85,51 @@ def calcular(caminho, log=print):
     return saida
 
 
+def _no_ssd(indice, pasta):
+    """O SQLite lê o índice fora de ordem: num HD mecânico a leitura cai para
+    menos de 1 MB/s (dias para 10 GB). Copiar o arquivo inteiro é sequencial
+    (minutos); a leitura sai da cópia, que é apagada no fim do processo."""
+    import atexit
+    import shutil
+    if not pasta or os.path.splitdrive(os.path.abspath(indice))[0].lower() == \
+            os.path.splitdrive(os.path.abspath(pasta))[0].lower():
+        return indice
+    try:
+        os.makedirs(pasta, exist_ok=True)
+        if shutil.disk_usage(pasta).free < os.path.getsize(indice) * 1.2:
+            print('[cnae] sem espaço no disco rápido: lendo direto do índice')
+            return indice
+        destino = os.path.join(pasta, 'indice_cnae.sqlite')
+        t0 = time.time()
+        shutil.copyfile(indice, destino)
+        atexit.register(lambda: os.path.exists(destino) and os.remove(destino))
+        print(f'[cnae] índice copiado para o disco rápido em {time.time() - t0:.0f}s')
+        return destino
+    except OSError as e:
+        print(f'[cnae] cópia falhou ({e}): lendo direto do índice')
+        return indice
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('--indice', default='D:/cnpj/indice.sqlite')
     ap.add_argument('--dsn-arquivo', help='arquivo com a DATABASE_URL (senão usa a variável)')
     ap.add_argument('--saida-json', help='também grava tudo neste arquivo')
+    ap.add_argument('--de-json', help='não recalcula: grava no banco o JSON de uma rodada anterior')
+    ap.add_argument('--copia-ssd', default=os.path.expandvars(r'%LOCALAPPDATA%\TurboVenda\tmp'),
+                    help='pasta num disco rápido para copiar o índice antes de ler ("" para não copiar)')
     args = ap.parse_args()
     try:
         with open(args.indice + '.mes', encoding='utf-8') as f:
             mes = f.read().strip()
     except OSError:
         mes = ''
-    dados = calcular(args.indice)
+    if args.de_json:
+        with open(args.de_json, encoding='utf-8') as f:
+            bruto = json.load(f)
+        dados, mes = bruto['cnaes'], bruto.get('base_mes') or mes
+    else:
+        dados = calcular(_no_ssd(args.indice, args.copia_ssd))
     if args.saida_json:
         with open(args.saida_json, 'w', encoding='utf-8') as f:
             json.dump({'base_mes': mes, 'cnaes': dados}, f, ensure_ascii=False)
