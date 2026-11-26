@@ -24,15 +24,15 @@
     td{padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.05);word-break:break-all}
     td.n{text-align:right;font-weight:700;color:#a5b4fc;white-space:nowrap;word-break:normal}
     .barra{display:inline-block;height:8px;background:linear-gradient(90deg,#6366f1,#8b5cf6);border-radius:4px;vertical-align:middle;margin-right:6px}
-    .vazio{color:#64748b;font-size:13px;padding:10px 0}
+    .vazio{color:#7a889c;font-size:13px;padding:10px 0}
     .erro{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5;padding:12px;border-radius:8px;margin-bottom:16px}
-    .nota{color:#64748b;font-size:12px;margin-top:28px;line-height:1.6}
+    .nota{color:#7a889c;font-size:12px;margin-top:28px;line-height:1.6}
     @media(max-width:900px){.grid2{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
   <div class="topo">
-    <h1>Tráfego do site <span style="color:#64748b;font-weight:400;font-size:14px">· últimos {{ dias }} dias · bots fora</span></h1>
+    <h1>Tráfego do site <span style="color:#7a889c;font-weight:400;font-size:14px">· últimos {{ dias }} dias · bots fora</span></h1>
     <div class="periodos">
       {% for n in [7, 30, 90] %}<a href="?dias={{ n }}" class="{{ 'on' if dias == n }}">{{ n }} dias</a>{% endfor %}
       <a href="/admin/dashboard">← Admin</a>

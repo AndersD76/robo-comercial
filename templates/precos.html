@@ -55,7 +55,7 @@
   {% include '_icones.html' %}
   <style>
     *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-    :root{--bg:#060b18;--surface:#0d1526;--border:rgba(99,102,241,.18);--accent:#6366f1;--accent2:#8b5cf6;--text:#f1f5f9;--muted:#64748b;--muted2:#94a3b8}
+    :root{--bg:#060b18;--surface:#0d1526;--border:rgba(99,102,241,.18);--accent:#6366f1;--accent2:#8b5cf6;--text:#f1f5f9;--muted:#7a889c;--muted2:#94a3b8}
     body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text)}
     nav{position:fixed;top:0;left:0;right:0;z-index:100;height:64px;display:flex;align-items:center;
         justify-content:space-between;padding:0 40px;backdrop-filter:blur(20px);
@@ -145,9 +145,9 @@
       <li><i class="fa fa-check"></i> Enriquecimento CNPJ</li>
       <li><i class="fa fa-check"></i> Export CSV limitado</li>
       <li><i class="fa fa-check"></i> IA para gerar mensagens</li>
-      <li style="opacity:.4"><i class="fa fa-times" style="color:var(--muted)"></i> Sem email em massa</li>
-      <li style="opacity:.4"><i class="fa fa-times" style="color:var(--muted)"></i> Sem automações</li>
-      <li style="opacity:.4"><i class="fa fa-times" style="color:var(--muted)"></i> Sem suporte prioritário</li>
+      <li style="color:var(--muted)"><i class="fa fa-times" style="color:var(--muted)"></i> Sem email em massa</li>
+      <li style="color:var(--muted)"><i class="fa fa-times" style="color:var(--muted)"></i> Sem automações</li>
+      <li style="color:var(--muted)"><i class="fa fa-times" style="color:var(--muted)"></i> Sem suporte prioritário</li>
     </ul>
     <a href="/cadastro" class="btn-plan btn-plan-ghost" onclick="if(typeof gtag==='function')gtag('event','click_start_free',{event_category:'pricing_page'})">Gerar meus 50 leads grátis</a>
   </div>
@@ -164,8 +164,8 @@
       <li><i class="fa fa-check"></i> Export CSV completo</li>
       <li><i class="fa fa-check"></i> WhatsApp manual assistido</li>
       <li><i class="fa fa-check"></i> Suporte padrão</li>
-      <li style="opacity:.4"><i class="fa fa-times" style="color:var(--muted)"></i> Sem sequências automáticas</li>
-      <li style="opacity:.4"><i class="fa fa-times" style="color:var(--muted)"></i> Sem API</li>
+      <li style="color:var(--muted)"><i class="fa fa-times" style="color:var(--muted)"></i> Sem sequências automáticas</li>
+      <li style="color:var(--muted)"><i class="fa fa-times" style="color:var(--muted)"></i> Sem API</li>
     </ul>
     <a href="/cadastro" class="btn-plan btn-plan-primary" onclick="if(typeof gtag==='function')gtag('event','click_plan_starter',{event_category:'pricing_page'})">Assinar Starter por R$97/mês</a>
   </div>
@@ -234,6 +234,8 @@
 <script>
 // Se o usuario ja esta logado, redirecionar CTAs para o dashboard com modal de upgrade
 (async function(){
+  // Só quem está logado consulta o plano (antes o visitante gerava um 401 no console)
+  if(!{{ 'true' if session.get('user_id') else 'false' }})return;
   try{
     const r=await fetch('/api/meu-plano');
     if(!r.ok) return; // nao logado — manter links para /cadastro

@@ -26,8 +26,15 @@ RAIZ = os.path.join(os.path.dirname(__file__), '..')
 def _uri_servidor():
     if os.environ.get('PG_TESTE_URI'):
         return os.environ['PG_TESTE_URI']
+    import shutil
     import pgserver
-    pasta = os.environ.get('PG_TESTE_DIR') or os.path.join(tempfile.gettempdir(), 'turbovenda_pg_teste')
+    # Fora da pasta temporária: a limpeza do Windows apagava arquivos e o initdb
+    # recusava a pasta. Pasta sem PG_VERSION = corrompida: recria do zero.
+    pasta = os.environ.get('PG_TESTE_DIR') or os.path.join(
+        os.environ.get('LOCALAPPDATA') or tempfile.gettempdir(), 'TurboVenda', 'pg_teste')
+    if os.path.isdir(pasta) and not os.path.exists(os.path.join(pasta, 'PG_VERSION')):
+        shutil.rmtree(pasta, ignore_errors=True)
+    os.makedirs(os.path.dirname(pasta), exist_ok=True)
     return pgserver.get_server(pasta, cleanup_mode=None).get_uri()
 
 

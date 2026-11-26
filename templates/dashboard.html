@@ -43,7 +43,7 @@ function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//
       --border2: rgba(255,255,255,.20);
       --text:    #f0f6fc;
       --sub:     #9eb3cc;
-      --muted:   #6e8299;
+      --muted:   #7f92a8;
       --accent:      {{ color }};
       --accent-dim:  {{ color_dim }};
       --accent-bd:   {{ color_bd }};
@@ -67,7 +67,7 @@ function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//
     }
     .back-btn:hover { color:var(--text); background:var(--surf2); border-color:var(--border2); }
     .hdr-sep { color:var(--muted); }
-    .hdr-bot-name { font-size:16px; font-weight:800; color:var(--accent); letter-spacing:-.3px; }
+    .hdr-bot-name { font-size:16px; font-weight:800; color:#818cf8; letter-spacing:-.3px; }
     .hdr-bot-sub  { font-size:13px; color:var(--sub); }
     .hdr-right { display:flex; align-items:center; gap:8px; }
     .hdr-clock { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; font-weight:500; }
@@ -124,7 +124,7 @@ function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//
     }
     .seg-btn:last-child { border-right:none; }
     .seg-btn:hover { color:var(--text); background:var(--surf2); }
-    .seg-btn.on { background:var(--accent-dim); color:var(--accent); }
+    .seg-btn.on { background:var(--accent-dim); color:#818cf8; }
     .ctrl-actions { display:flex; gap:6px; margin-left:auto; }
     .btn-stop {
       font-family:inherit; font-size:13px; font-weight:600;
@@ -156,14 +156,14 @@ function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//
     .kpi-row { display:grid; grid-template-columns:repeat(3,1fr); border-bottom:1px solid var(--border); }
     .kpi-box { padding:26px 16px; text-align:center; border-right:1px solid var(--border); background:var(--accent-dim); min-width:0; overflow:hidden; }
     .kpi-box:last-child { border-right:none; }
-    .kpi-n { font-size:48px; font-weight:900; line-height:1; margin-bottom:7px; letter-spacing:-2px; color:var(--accent); }
+    .kpi-n { font-size:48px; font-weight:900; line-height:1; margin-bottom:7px; letter-spacing:-2px; color:#818cf8; }
     .kpi-l { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--sub); }
 
     /* Funnel */
     .funnel-row { display:grid; grid-template-columns:repeat(4,1fr); padding:14px 16px; border-bottom:1px solid var(--border); }
     .fstep { text-align:center; padding:4px 2px; position:relative; min-width:0; overflow:hidden; }
     .fstep + .fstep::before { content:'›'; position:absolute; left:-4px; top:50%; transform:translateY(-50%); color:var(--sub); font-size:20px; line-height:1; }
-    .fstep .fn { font-size:22px; font-weight:800; line-height:1; display:block; margin-bottom:5px; letter-spacing:-.5px; color:var(--accent); }
+    .fstep .fn { font-size:22px; font-weight:800; line-height:1; display:block; margin-bottom:5px; letter-spacing:-.5px; color:#818cf8; }
     .fstep .ft { font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--sub); font-weight:600; }
 
     /* Tabs */
@@ -176,7 +176,7 @@ function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//
       display:flex; align-items:center; gap:6px;
     }
     .tab-btn:hover { color:var(--sub); }
-    .tab-btn.on { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+    .tab-btn.on { color:#818cf8; border-bottom-color:var(--accent); font-weight:600; }
     .tab-pane { padding:0 16px 16px; }
     .scroll-box { max-height:70vh; overflow-y:auto; }
 
@@ -283,7 +283,7 @@ function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//
       font-size:16px; font-weight:800; color:#fff;
       margin-bottom:4px; letter-spacing:-.3px;
     }
-    .qr-sub { font-size:12px; color:#64748b; margin-bottom:20px; }
+    .qr-sub { font-size:12px; color:#7a889c; margin-bottom:20px; }
     .qr-img-wrap {
       background:#fff; border-radius:12px; padding:12px;
       display:inline-block; margin-bottom:16px;
@@ -419,7 +419,7 @@ function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//
     .console-body .ln-err  { color:#f87171; }
     .console-body .ln-warn { color:#fbbf24; }
     .console-body .ln-conn { color:#38bdf8; }
-    .console-body .ln-ts   { color:#475569; }
+    .console-body .ln-ts   { color:#7a889c; }
     .console-split { display:flex; }
     .console-col { flex:1; min-width:0; }
     .console-col-hd { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.8px; padding:3px 14px; border-bottom:1px solid rgba(255,255,255,.04); display:flex; align-items:center; gap:5px; }
@@ -454,7 +454,7 @@ function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//
       display:flex; align-items:center; gap:5px;
     }
     .modal-tab:hover { color:var(--sub); }
-    .modal-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+    .modal-tab.active { color:#818cf8; border-bottom-color:var(--accent); }
     .modal-tab-pane { display:none; }
     .modal-tab-pane.active { display:block; }
 
@@ -558,7 +558,7 @@ function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//
 
 <header>
   <div class="hdr-left">
-    <a href="/" class="back-btn"><i class="fa fa-chevron-left"></i></a>
+    <a href="/" class="back-btn" aria-label="Voltar ao início"><i class="fa fa-chevron-left" aria-hidden="true"></i></a>
     <span class="hdr-sep">|</span>
     <span class="hdr-bot-name">⚡ TurboVenda</span>
     <span class="hdr-bot-sub">{{ name }}</span>
@@ -572,7 +572,7 @@ function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//
     <button onclick="upgradeProPlano()" id="btn-upgrade" class="back-btn" style="gap:5px;background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;border:none;cursor:pointer;display:none"><i class="fa fa-crown"></i> Upgrade Pro</button>
     <span id="plano-badge" style="display:none;font-size:10px;padding:3px 8px;border-radius:6px;font-weight:700"></span>
     <button onclick="localStorage.removeItem('tv_tour_done');startTour()" class="back-btn" style="gap:5px;background:none;border:1px solid rgba(255,255,255,.08);cursor:pointer;color:#94a3b8" title="Tour guiado"><i class="fa fa-circle-question"></i></button>
-    <a href="/logout" class="back-btn" style="gap:5px"><i class="fa fa-right-from-bracket"></i></a>
+    <a href="/logout" class="back-btn" style="gap:5px" aria-label="Sair"><i class="fa fa-right-from-bracket" aria-hidden="true"></i></a>
     <div class="hdr-clock" id="clock">--:--</div>
   </div>
 </header>
@@ -682,7 +682,7 @@ function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//
       <button class="btn-cfg" onclick="enriquecerTodos()" style="background:rgba(59,130,246,.12);border-color:rgba(59,130,246,.25);color:#60a5fa;"><i class="fa fa-database"></i> Enriquecer CNPJs</button>
       <button class="btn-cfg" onclick="requalificarTodos()" title="Automático: descobre CNPJ faltante, estado da sede, situação cadastral e sócio decisor" style="background:rgba(168,85,247,.12);border-color:rgba(168,85,247,.25);color:#c084fc;"><i class="fa fa-user-check"></i> Requalificar</button>
       <span style="flex:1"></span>
-      <select id="bulk-action" class="filter-select" style="font-size:11px;padding:6px 10px;">
+      <select id="bulk-action" aria-label="Ação com os leads selecionados" class="filter-select" style="font-size:11px;padding:6px 10px;">
         <option value="">Ações em massa...</option>
         <option value="status-novo">Novo</option>
         <option value="status-contactada">Contactado</option>
@@ -695,7 +695,7 @@ function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//
     <div class="tab-pane">
       <div class="filter-bar">
         <input id="lead-search" type="text" placeholder="🔍 Buscar lead, email, CNPJ..." oninput="filterLeads()" style="flex:1;max-width:280px;padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px;font-family:inherit;">
-        <select id="filter-status" class="filter-select" onchange="filterLeads()">
+        <select id="filter-status" aria-label="Filtrar por status" class="filter-select" onchange="filterLeads()">
           <option value="">Todos status</option>
           <option value="novo">Novo</option>
           <option value="contactada">Contactado</option>
@@ -706,13 +706,13 @@ function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//
           <option value="sem_whatsapp">Sem WA</option>
           <option value="encerrado">Encerrado</option>
         </select>
-        <select id="filter-source" class="filter-select" onchange="filterLeads()">
+        <select id="filter-source" aria-label="Filtrar por fonte" class="filter-select" onchange="filterLeads()">
           <option value="">Todas fontes</option>
           <option value="busca">Robô</option>
           <option value="manual">Manual</option>
           <option value="api">API</option>
         </select>
-        <select id="filter-regiao" class="filter-select" onchange="onRegiaoChange()">
+        <select id="filter-regiao" aria-label="Filtrar por região" class="filter-select" onchange="onRegiaoChange()">
           <option value="">Todas regiões</option>
           <option value="N">Norte</option>
           <option value="NE">Nordeste</option>
@@ -720,10 +720,10 @@ function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//
           <option value="SE">Sudeste</option>
           <option value="S">Sul</option>
         </select>
-        <select id="filter-estado" class="filter-select" onchange="filterLeads()">
+        <select id="filter-estado" aria-label="Filtrar por estado" class="filter-select" onchange="filterLeads()">
           <option value="">Todos estados</option>
         </select>
-        <select id="filter-situacao" class="filter-select" onchange="filterLeads()">
+        <select id="filter-situacao" aria-label="Filtrar por situação cadastral" class="filter-select" onchange="filterLeads()">
           <option value="">Toda situação</option>
           <option value="ativa">🟢 Ativa</option>
           <option value="inativa">🔴 Inativa/Baixada</option>
@@ -732,7 +732,7 @@ function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//
         <span id="lead-count" style="font-size:11px;color:var(--muted);font-weight:600;"></span>
       </div>
       <div id="tab-wa" class="scroll-box">
-        <table style="table-layout:fixed;width:100%"><thead><tr><th style="width:28px"><input type="checkbox" id="sel-all-wa" onchange="toggleSelectAll(this)"></th><th style="width:28px">#</th><th style="width:20%">Empresa</th><th style="width:10%">Telefone</th><th style="width:18%">Email</th><th style="width:12%">CNPJ</th><th style="width:10%">Decisor</th><th style="width:72px">Status</th><th style="width:28px">Pts</th><th style="width:82px">Data</th><th style="width:82px">Ações</th></tr></thead>
+        <table style="table-layout:fixed;width:100%"><thead><tr><th style="width:28px"><input type="checkbox" id="sel-all-wa" aria-label="Selecionar todos" onchange="toggleSelectAll(this)"></th><th style="width:28px">#</th><th style="width:20%">Empresa</th><th style="width:10%">Telefone</th><th style="width:18%">Email</th><th style="width:12%">CNPJ</th><th style="width:10%">Decisor</th><th style="width:72px">Status</th><th style="width:28px">Pts</th><th style="width:82px">Data</th><th style="width:82px">Ações</th></tr></thead>
         <tbody id="wa-tb"></tbody></table>
       </div>
       <!-- RELATÓRIOS -->
@@ -794,7 +794,7 @@ function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//
             </div>
             <div style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center">
               <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;font-weight:600;margin-bottom:8px">Leads com WhatsApp</div>
-              <div id="wa-lead-count" style="font-size:20px;font-weight:800;color:var(--accent)">0</div>
+              <div id="wa-lead-count" style="font-size:20px;font-weight:800;color:#818cf8">0</div>
             </div>
           </div>
 
@@ -1134,8 +1134,14 @@ function loadWA(silencioso){
       _firstLeadsTracked=true;
       if(typeof gtag==='function') gtag('event','first_leads_generated',{value:d.length});
     }
-  }).catch(e=>{console.error('loadWA error:',e)});
+  }).catch(e=>{
+    // busca interrompida porque a pessoa saiu da página não é erro (o Firefox acusa)
+    if(window.__saindo||(e&&e.name==='AbortError'))return;
+    console.error('loadWA error:',e);
+  });
 }
+window.addEventListener('pagehide',()=>{window.__saindo=true});
+window.addEventListener('beforeunload',()=>{window.__saindo=true});
 
 function renderLeadsList(){
   const filtered=getFilteredLeads();
@@ -1493,7 +1499,7 @@ function loadPipe(){
           ondragstart="event.dataTransfer.setData('text/plain','${l.id}');this.classList.add('dragging')"
           ondragend="this.classList.remove('dragging')"
           onclick="openLead(${JSON.stringify(l).replace(/"/g,'&quot;')})">
-          <div class="lcard-name"><i class="fa fa-building" style="color:#6366f1;font-size:11px"></i> ${esc(l.nome_fantasia||'—')} ${canalIcons}</div>
+          <div class="lcard-name"><i class="fa fa-building" style="color:#818cf8;font-size:11px"></i> ${esc(l.nome_fantasia||'—')} ${canalIcons}</div>
           ${l._decisor?`<div style="font-size:10px;color:#a78bfa;margin-top:2px"><i class="fa fa-user-tie" style="font-size:9px"></i> ${esc(l._decisor)}</div>`:''}
           ${fone?`<div style="font-size:10px;color:var(--muted);margin-top:2px"><i class="fa fa-phone" style="font-size:8px"></i> ${fone}</div>`:''}
           ${l.email?`<div style="font-size:10px;color:var(--muted)"><i class="fa fa-envelope" style="font-size:8px"></i> ${esc(l.email)}</div>`:''}
@@ -3241,7 +3247,7 @@ function upgradeProPlano(origem){
         <div id="card-result" style="margin-top:10px;font-size:12px;text-align:center"></div>
       </div>
     </div>
-    <div style="text-align:center;margin-top:12px;font-size:10px;color:#475569"><i class="fa fa-lock"></i> Pagamento seguro via Mercado Pago</div>
+    <div style="text-align:center;margin-top:12px;font-size:10px;color:#7a889c"><i class="fa fa-lock"></i> Pagamento seguro via Mercado Pago</div>
   </div>`;
   ov.style.display='flex';
   selectPlan('pro');
@@ -3433,7 +3439,7 @@ function showTourStep(){
     box.innerHTML=`<div style="font-weight:700;color:#818cf8;margin-bottom:4px">${s.title}</div>
       <div style="font-size:12px;color:#cbd5e1;margin-bottom:10px">${s.desc}</div>
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:10px;color:#64748b">${_tourStep+1}/${TOUR_STEPS.length}</span>
+        <span style="font-size:10px;color:#7a889c">${_tourStep+1}/${TOUR_STEPS.length}</span>
         <div style="display:flex;gap:6px">
           <button id="tour-skip" style="background:none;border:1px solid rgba(255,255,255,.1);color:#94a3b8;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px">Pular</button>
           <button id="tour-next" style="background:#6366f1;border:none;color:#fff;padding:4px 14px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">${_tourStep===TOUR_STEPS.length-1?'Concluir':'Próximo'}</button>

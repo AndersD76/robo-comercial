@@ -27,13 +27,13 @@
       {% for s in segs %}
       <tr>
         <td>{% if s.tem_pagina %}<a href="/empresas/{{ s.cnae_slug }}/{{ mun_slug }}">{{ s.seg.label }}</a>{% else %}{{ s.seg.label }}{% endif %}</td>
-        <td style="color:#64748b;font-size:12.5px">{{ s.cnae[:4] }}-{{ s.cnae[4] }}/{{ s.cnae[5:] }}</td>
+        <td style="color:#7a889c;font-size:12.5px">{{ s.cnae[:4] }}-{{ s.cnae[4] }}/{{ s.cnae[5:] }}</td>
         <td class="num">{{ s.n }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
-  <p style="font-size:13px;color:#64748b">Segmentos com 8 ou mais empresas têm link para a lista completa. Quer o perfil
+  <p style="font-size:13px;color:#7a889c">Segmentos com 8 ou mais empresas têm link para a lista completa. Quer o perfil
     de um segmento (porte, ano de abertura, bairros)? Use a
     <a href="/ferramentas/lista-de-empresas?cidade={{ municipio|urlencode }}&uf={{ uf }}">ferramenta grátis de lista de empresas</a>.</p>
 

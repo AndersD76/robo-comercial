@@ -15,7 +15,7 @@
   <style>
     *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
     :root{--bg:#060b18;--surface:#0d1526;--surface2:#111d35;
-          --border:rgba(99,102,241,.18);--accent:#6366f1;--text:#f1f5f9;--muted:#64748b;--muted2:#94a3b8}
+          --border:rgba(99,102,241,.18);--accent:#6366f1;--text:#f1f5f9;--muted:#7a889c;--muted2:#94a3b8}
     body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
     .tv-header-right{display:flex;align-items:center;gap:12px}
     .btn-sm{padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;
@@ -33,7 +33,7 @@
         border-radius:16px;padding:28px;margin-bottom:20px}
     .card-title{font-size:14px;font-weight:700;color:var(--muted2);text-transform:uppercase;
         letter-spacing:.8px;margin-bottom:20px;display:flex;align-items:center;gap:8px}
-    .card-title i{color:var(--accent)}
+    .card-title i{color:#818cf8}
     .field{margin-bottom:18px}
     label{display:block;font-size:13px;font-weight:600;color:var(--muted2);margin-bottom:7px}
     label small{color:var(--muted);font-weight:400}
@@ -41,7 +41,7 @@
         border-radius:10px;padding:11px 14px;color:var(--text);font-size:14px;
         font-family:'Inter',sans-serif;outline:none;transition:.2s;resize:vertical}
     input:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(99,102,241,.12)}
-    input::placeholder,textarea::placeholder{color:#334155}
+    input::placeholder,textarea::placeholder{color:#7a889c}
 
     .terms-section{margin-top:6px}
     .terms-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
@@ -57,7 +57,7 @@
     .term-item input[type=text]{background:transparent;border:none;padding:0;flex:1;
         font-size:13px;box-shadow:none}
     .term-item input[type=text]:focus{box-shadow:none;border:none}
-    .btn-del-term{background:none;border:none;color:#475569;cursor:pointer;padding:2px 6px;
+    .btn-del-term{background:none;border:none;color:#7a889c;cursor:pointer;padding:2px 6px;
         font-size:13px;transition:.2s;flex-shrink:0}
     .btn-del-term:hover{color:#ef4444}
     .btn-add-term{background:none;border:1px dashed rgba(99,102,241,.3);color:#818cf8;
@@ -111,7 +111,7 @@
     .estados-grid{display:flex;flex-direction:column;gap:12px}
     .regiao-group{background:var(--surface2);border:1px solid rgba(255,255,255,.06);
         border-radius:10px;padding:12px 14px}
-    .regiao-label{font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;
+    .regiao-label{font-size:12px;font-weight:700;color:#818cf8;text-transform:uppercase;
         letter-spacing:.5px;margin-bottom:8px;cursor:pointer;user-select:none}
     .regiao-label:hover{color:#a5b4fc}
     .uf-list{display:flex;flex-wrap:wrap;gap:6px}
@@ -476,7 +476,7 @@ function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//
       </button>
     </div>
     <div class="token-reveal" id="token-reveal">
-      <div style="font-size:11px;color:#64748b;margin-bottom:6px">Seu token (copie agora):</div>
+      <div style="font-size:11px;color:#7a889c;margin-bottom:6px">Seu token (copie agora):</div>
       <div id="token-value"></div>
       <p class="token-warn"><i class="fa fa-triangle-exclamation"></i> Este token não será exibido novamente. Copie agora.</p>
     </div>
@@ -785,7 +785,7 @@ async function loadTokens() {
     const tokens = await r.json()
     const list = document.getElementById('token-list')
     if (!tokens.length) {
-      list.innerHTML = '<p style="color:#475569;font-size:13px;padding:8px 0">Nenhum token criado ainda.</p>'
+      list.innerHTML = '<p style="color:#7a889c;font-size:13px;padding:8px 0">Nenhum token criado ainda.</p>'
       return
     }
     list.innerHTML = tokens.map(t => `

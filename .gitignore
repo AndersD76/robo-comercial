@@ -52,3 +52,6 @@ pseo_dev.sqlite
 # Fase 0 do growth: JSON brutos do Lighthouse (regeráveis, ~7 MB)
 growth/dados/lighthouse/**/*.json
 lhci/
+
+# relatório gerado pelos testes de acessibilidade (vira artefato no CI)
+qa/acessibilidade.json

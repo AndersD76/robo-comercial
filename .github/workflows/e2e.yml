@@ -1,0 +1,44 @@
+# E2E no navegador e acessibilidade (Fases 2 e 7 do Prompt 3): Chromium,
+# Firefox e WebKit, desktop e celular, contra o app local com PostgreSQL de
+# serviço e base sintética. Roda em pull request e toda noite; fica fora do
+# push no master para um teste de navegador instável nunca travar uma correção
+# urgente (o deploy espera o ci.yml, que tem unidade, segurança e integração).
+name: E2E e acessibilidade
+on:
+  pull_request:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.10'
+      - name: Dependências
+        run: pip install -r requirements.txt
+      - name: Navegadores do Playwright
+        run: python -m playwright install --with-deps chromium firefox webkit
+      - name: Fluxos críticos (3 navegadores, desktop e celular) e acessibilidade WCAG 2.2 AA
+        env:
+          PG_TESTE_URI: postgresql://postgres:postgres@localhost:5432/postgres
+        run: pytest testes_e2e -v --tb=short
+      - name: Relatório de acessibilidade
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: acessibilidade
+          path: qa/acessibilidade.json
