@@ -24,9 +24,29 @@ PUBLICAS = {
     'bots_ligados', 'empresas_publicas', 'cnae_estatisticas', 'share_of_voice', 'relatorio_dados',
     'worker_receita', 'conteudo_execucoes', 'mapa_expansao',
 } | {sql.split('EXISTS', 1)[1].split('(', 1)[0].strip() for sql in crescimento.DDL if sql.startswith('CREATE TABLE')}
+# visões materializadas do pSEO: derivadas de empresas_publicas (sem dado
+# próprio); a sombra delas impedia apagar a sombra da tabela
+VISOES_PUBLICAS = {'pseo_resumo_cidade', 'pseo_resumo_cnae_cidade'}
 # dependentes primeiro (chaves estrangeiras apontando para users)
 ORDEM = ['api_tokens', 'senha_reset', 'pagamentos', 'eventos', 'leads_isca']
 TRAVA = 7700507
+
+
+def reparar_visoes(conn, log=print):
+    cur = conn.cursor()
+    cur.execute("""SELECT schemaname, matviewname FROM pg_matviews
+                   WHERE schemaname ~ '^emp_[0-9]+$' AND matviewname = ANY(%s)""", (sorted(VISOES_PUBLICAS),))
+    feitas = []
+    for schema, nome in [(r['schemaname'], r['matviewname']) for r in cur.fetchall()]:
+        try:
+            cur.execute(S.SQL('DROP MATERIALIZED VIEW {}.{}').format(S.Identifier(schema), S.Identifier(nome)))
+            conn.commit()
+            feitas.append((schema, nome, 0))
+            log(f'[reparo] {schema}.{nome}: visão sombra apagada (a do public fica)')
+        except Exception as e:
+            conn.rollback()
+            log(f'[reparo] {schema}.{nome}: não apagada ({type(e).__name__})')
+    return feitas
 
 
 def sombras(cur):
@@ -48,7 +68,8 @@ def reparar(conn, log=print):
     """Devolve [(schema, tabela, linhas_copiadas)] do que foi reparado."""
     cur = conn.cursor()
     cur.execute('SET search_path TO public')
-    feito = []
+    feito = reparar_visoes(conn, log)
+    cur.execute('SET search_path TO public')
     for schema, tabela in sombras(cur):
         try:
             publicas = _colunas(cur, 'public', tabela)

@@ -181,7 +181,7 @@ def test_health_nao_vaza_detalhe_do_banco(monkeypatch):
         assert r.status_code == 503 and 'neon' not in r.get_data(as_text=True)
 
 
-# QA-SEC-013: webhook do Resend aceitava aviso antigo reenviado (sem conferir o horário)
+# QA-SEC-015: webhook do Resend aceitava aviso antigo reenviado (sem conferir o horário)
 def _assinar_svix(segredo, msg_id, ts, corpo):
     import base64
     import hashlib

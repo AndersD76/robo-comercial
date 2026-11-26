@@ -19,6 +19,7 @@ def _executar(*comandos):
 
 def test_sombras_vao_para_o_public_e_somem_sem_tocar_no_cliente():
     A._init_public_schema()
+    _executar(A._TRAF_SQL)   # pageviews e eventos (o app cria sob demanda)
     _executar(
         'DROP SCHEMA IF EXISTS emp_9001 CASCADE',
         'CREATE SCHEMA emp_9001',
@@ -33,6 +34,10 @@ def test_sombras_vao_para_o_public_e_somem_sem_tocar_no_cliente():
         "INSERT INTO public.indexnow_enviados (url, lastmod) VALUES ('https://x/a', '1') ON CONFLICT DO NOTHING",
         'CREATE TABLE emp_9001.indexnow_enviados (LIKE public.indexnow_enviados)',
         "INSERT INTO emp_9001.indexnow_enviados (url, lastmod) VALUES ('https://x/a', '1'), ('https://x/b', '2')",
+        # sombra de empresas_publicas presa por uma visão materializada sombra
+        'CREATE TABLE IF NOT EXISTS public.empresas_publicas (cnpj_basico TEXT PRIMARY KEY, municipio TEXT)',
+        'CREATE TABLE emp_9001.empresas_publicas (LIKE public.empresas_publicas)',
+        'CREATE MATERIALIZED VIEW emp_9001.pseo_resumo_cidade AS SELECT municipio, COUNT(*) AS n FROM emp_9001.empresas_publicas GROUP BY 1',
     )
     antes = sql('SELECT COUNT(*) AS n FROM public.pageviews')[0]['n']
     conn = A._conn()
@@ -44,6 +49,7 @@ def test_sombras_vao_para_o_public_e_somem_sem_tocar_no_cliente():
     assert reparadas[('emp_9001', 'pageviews')] == 2          # ids regenerados: nada colide com o public
     assert reparadas[('emp_9001', 'users')] == 0
     assert reparadas[('emp_9001', 'indexnow_enviados')] == 1  # a repetida não duplica
+    assert ('emp_9001', 'pseo_resumo_cidade') in reparadas and ('emp_9001', 'empresas_publicas') in reparadas
     assert sql('SELECT COUNT(*) AS n FROM public.pageviews')[0]['n'] == antes + 2
     assert sql("SELECT COUNT(*) AS n FROM public.indexnow_enviados WHERE url IN ('https://x/a', 'https://x/b')")[0]['n'] == 2
     restantes = sql("SELECT table_name FROM information_schema.tables WHERE table_schema = 'emp_9001'")
