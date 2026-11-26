@@ -332,3 +332,15 @@ def test_numero_de_exemplo_declarado_passa_e_estatistica_solta_nao():
     texto = cm.texto_puro(cm.sem_exemplos(corpo))
     assert cm.numeros_suspeitos(texto, set()) == ['72%']
     assert 'R$ 60.000' not in texto and '1.000' not in texto and 'R$ 300' not in texto
+
+
+def test_satelite_e_pergunta_do_icp_nao_servico_em_cidade():
+    import mapa_buscas as mb
+    for q in ('técnicas de prospecção de software', 'como prospectar clientes para software',
+              'como conseguir clientes para consultoria', 'o que é cadência de prospecção',
+              'como prospectar clientes em curitiba', 'dicas de vendas b2b'):
+        assert mb.bom_satelite(q), q
+    for q in ('venda de sistemas em teresina', 'consultoria empresarial em florianópolis',
+              'empresa de desenvolvimento de software salvador', 'lista de empresas por cidade',
+              'receita de bolo de cenoura', 'econodata'):
+        assert not mb.bom_satelite(q), q

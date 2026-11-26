@@ -175,6 +175,7 @@ def passada(m, agora=None, forcar=()):
                 falta_cnae = c.fetchone()['falta']
             etapa('dados', (nunca('dados') and agora.hour >= 4) or falta_cnae, lambda: preparar_dados(m, c))
             etapa('reavaliar', nunca('reavaliar'), lambda: reavaliar(m, c))
+            etapa('podar_satelites', True, lambda: mapa_buscas.podar_satelites(c))
             c.execute("SELECT COUNT(*) AS n FROM conteudo_paginas WHERE tipo = 'satelite'")
             etapa('satelites', c.fetchone()['n'] < 200 and nunca('satelites', 0.25),
                   lambda: sem.semear(c, [], mapa_buscas.alvos_satelites(c, 200)))

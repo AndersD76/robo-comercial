@@ -232,6 +232,34 @@ def expandir(cur, http, limite=600, pausa=1.2, agora=None):
 # ---------------------------------------------------------------------------
 
 
+_PERGUNTA = re.compile(r'^(como|o que|qual|quais|quanto|quando|por que|porque|onde|dicas|tecnicas|estrategias|'
+                       r'passo a passo|guia|tipos de|exemplos? de|melhores (formas|maneiras|praticas|estrategias))\b|'
+                       r'\b(como (fazer|conseguir|prospectar|vender|encontrar|abordar|montar|criar|gerar|achar)|'
+                       r'dicas de|tecnicas de|estrategias de|passo a passo|o que e|vale a pena)\b')
+_LOCAL = re.compile(r'\b(em|no|na) [a-z ]+$')
+
+
+def bom_satelite(consulta):
+    """Pergunta ou "como fazer" do ICP; nunca "serviço em cidade" (quem
+    procura fornecedor local já cai na lista de empresas da cidade)."""
+    q = cm.sem_acento((consulta or '').lower()).strip()
+    if not _PERGUNTA.search(q) or not re.search(_ICP, q):
+        return False
+    # "como prospectar clientes em curitiba" é pergunta; "consultoria em curitiba" não
+    return not (_LOCAL.search(q) and not re.match(r'^(como|o que|qual|quais|quanto|dicas|onde)\b', q))
+
+
+def podar_satelites(cur):
+    """Tira da fila (ainda sem custo) os satélites que não são pergunta do ICP."""
+    cur.execute("SELECT url, consulta FROM conteudo_paginas WHERE tipo = 'satelite' AND status = 'pendente'")
+    fora = [(r['url'], r['consulta']) for r in cur.fetchall() if not bom_satelite(r['consulta'])]
+    for url, consulta in fora:
+        cur.execute("DELETE FROM conteudo_paginas WHERE url = %s AND status = 'pendente'", (url,))
+        cur.execute('UPDATE mapa_buscas SET pagina = NULL, tipo_pagina = %s WHERE consulta = %s AND pagina = %s',
+                    ('programatica' if _LOCAL.search(cm.sem_acento(consulta.lower())) else 'satelite', consulta, url))
+    return len(fora)
+
+
 def _parecida(a, b):
     ta, tb = set(cm.termos_da_consulta(a)), set(cm.termos_da_consulta(b))
     return bool(ta and tb) and len(ta & tb) / len(ta | tb) >= 0.6
@@ -251,7 +279,7 @@ def alvos_satelites(cur, n=200):
                    ORDER BY prioridade DESC, impressoes_28d DESC NULLS LAST LIMIT %s""", (n * 6,))
     escolhidas = []
     for r in cur.fetchall():
-        if not re.search(_ICP, cm.sem_acento(r['consulta'])):
+        if not bom_satelite(r['consulta']):
             continue
         if any(_parecida(r['consulta'], e['consulta']) for e in escolhidas):
             continue
