@@ -164,8 +164,15 @@ def passada(m, agora=None, forcar=()):
             ibge_vazio = c.fetchone()['n'] == 0
             etapa('ibge', nunca('ibge', 30) and (ibge_vazio or agora.hour in (3, 4, 5)), lambda: importar_ibge(c))
             c.execute("""SELECT (SELECT COUNT(*) FROM cnae_estatisticas) > 0
-                                AND NOT EXISTS (SELECT 1 FROM conteudo_paginas WHERE tipo = 'programatica') AS falta""")
-            falta_cnae = c.fetchone()['falta']
+                                AND NOT EXISTS (SELECT 1 FROM conteudo_paginas WHERE tipo = 'programatica') AS falta,
+                                to_regclass('busca_consultas') IS NOT NULL AS tem_gsc""")
+            r = c.fetchone()
+            falta_cnae = r['falta']
+            if not falta_cnae and r['tem_gsc']:
+                # o mapa ainda não tem as consultas reais do Search Console
+                c.execute("""SELECT NOT EXISTS (SELECT 1 FROM mapa_buscas WHERE fonte = 'gsc')
+                                    AND EXISTS (SELECT 1 FROM busca_consultas WHERE fonte = 'google') AS falta""")
+                falta_cnae = c.fetchone()['falta']
             etapa('dados', (nunca('dados') and agora.hour >= 4) or falta_cnae, lambda: preparar_dados(m, c))
             etapa('reavaliar', nunca('reavaliar'), lambda: reavaliar(m, c))
             etapa('primeira_onda', _sem_ondas(c), lambda: cm.publicar_onda(c, limite_total=ONDA_TAMANHO))
@@ -572,7 +579,7 @@ def alertas(m, c):
         mp = {r['url']: r['cluster'] for r in c.fetchall()}
         c.execute("""SELECT pagina, SUM(CASE WHEN data > current_date - 9 THEN cliques ELSE 0 END) AS atual,
                             SUM(CASE WHEN data <= current_date - 9 THEN cliques ELSE 0 END) AS anterior
-                     FROM busca_consultas WHERE fonte = 'gsc' AND consulta = '*' AND data > current_date - 16
+                     FROM busca_consultas WHERE fonte = 'google' AND consulta = '*' AND data > current_date - 16
                      GROUP BY pagina""")
         por = {}
         for r in c.fetchall():
@@ -641,9 +648,9 @@ def resumo_semanal(m, c):
             c.connection.rollback()
             return None
     publicadas = um("SELECT COUNT(*) AS n FROM conteudo_paginas WHERE publicado_em > now() - interval '7 days'")
-    cliques = um("""SELECT COALESCE(SUM(cliques), 0) FROM busca_consultas WHERE fonte = 'gsc' AND consulta = '*'
+    cliques = um("""SELECT COALESCE(SUM(cliques), 0) FROM busca_consultas WHERE fonte = 'google' AND consulta = '*'
                     AND data > current_date - 9""")
-    cliques_ant = um("""SELECT COALESCE(SUM(cliques), 0) FROM busca_consultas WHERE fonte = 'gsc' AND consulta = '*'
+    cliques_ant = um("""SELECT COALESCE(SUM(cliques), 0) FROM busca_consultas WHERE fonte = 'google' AND consulta = '*'
                         AND data BETWEEN current_date - 16 AND current_date - 9""")
     leads = um("SELECT COUNT(*) FROM leads_isca WHERE criado_em > now() - interval '7 days'")
     cadastros = um("SELECT COUNT(*) FROM users WHERE criado_em > now() - interval '7 days'")
@@ -668,7 +675,7 @@ def resumo_semanal(m, c):
     try:
         c.execute("""SELECT pagina, SUM(CASE WHEN data > current_date - 9 THEN cliques ELSE 0 END)
                           - SUM(CASE WHEN data <= current_date - 9 THEN cliques ELSE 0 END) AS dif
-                     FROM busca_consultas WHERE fonte = 'gsc' AND consulta = '*' AND data > current_date - 16
+                     FROM busca_consultas WHERE fonte = 'google' AND consulta = '*' AND data > current_date - 16
                      GROUP BY 1 ORDER BY 2 DESC""")
         difs = c.fetchall()
         if difs:
@@ -688,7 +695,7 @@ def resumo_semanal(m, c):
     if distrib:
         acoes.append(f'Aprovar e publicar {distrib} post(s) de LinkedIn e roteiros de vídeo.')
     try:
-        c.execute("""SELECT consulta, pagina FROM busca_consultas WHERE fonte = 'gsc' AND consulta <> '*' AND data > current_date - 28
+        c.execute("""SELECT consulta, pagina FROM busca_consultas WHERE fonte = 'google' AND consulta <> '*' AND data > current_date - 28
                      GROUP BY 1, 2 HAVING SUM(impressoes) >= 50
                         AND SUM(posicao * impressoes) / NULLIF(SUM(impressoes), 0) BETWEEN 4 AND 15
                      ORDER BY SUM(impressoes) DESC LIMIT 2""")

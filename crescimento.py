@@ -241,20 +241,20 @@ def linha_base_hoje(cur, hoje=None):
             return None
 
     m['gsc_cliques_28d'] = um("""SELECT COALESCE(SUM(cliques), 0) FROM busca_consultas
-                                WHERE fonte = 'gsc' AND consulta = '*' AND data > %s""",
+                                WHERE fonte = 'google' AND consulta = '*' AND data > %s""",
                              (hoje - _dt.timedelta(days=28),))
     m['gsc_impressoes_28d'] = um("""SELECT COALESCE(SUM(impressoes), 0) FROM busca_consultas
-                                   WHERE fonte = 'gsc' AND consulta = '*' AND data > %s""",
+                                   WHERE fonte = 'google' AND consulta = '*' AND data > %s""",
                                 (hoje - _dt.timedelta(days=28),))
     m['gsc_posicao_media_28d'] = um("""SELECT ROUND((SUM(posicao * impressoes) / NULLIF(SUM(impressoes), 0))::numeric, 2)
-                                      FROM busca_consultas WHERE fonte = 'gsc' AND consulta = '*' AND data > %s""",
+                                      FROM busca_consultas WHERE fonte = 'google' AND consulta = '*' AND data > %s""",
                                    (hoje - _dt.timedelta(days=28),))
     if m['gsc_cliques_28d'] is not None and m['gsc_impressoes_28d']:
         m['gsc_ctr_28d'] = round(float(m['gsc_cliques_28d']) / float(m['gsc_impressoes_28d']) * 100, 3)
-    m['paginas_indexadas_gsc'] = um("""SELECT SUM(indexadas) FROM busca_sitemaps WHERE fonte = 'gsc'
-                                      AND coletado_em = (SELECT MAX(coletado_em) FROM busca_sitemaps WHERE fonte = 'gsc')""")
-    m['paginas_enviadas_sitemap'] = um("""SELECT SUM(enviadas) FROM busca_sitemaps WHERE fonte = 'gsc'
-                                         AND coletado_em = (SELECT MAX(coletado_em) FROM busca_sitemaps WHERE fonte = 'gsc')""")
+    m['paginas_indexadas_gsc'] = um("""SELECT SUM(indexadas) FROM busca_sitemaps WHERE fonte = 'google'
+                                      AND coletado_em = (SELECT MAX(coletado_em) FROM busca_sitemaps WHERE fonte = 'google')""")
+    m['paginas_enviadas_sitemap'] = um("""SELECT SUM(enviadas) FROM busca_sitemaps WHERE fonte = 'google'
+                                         AND coletado_em = (SELECT MAX(coletado_em) FROM busca_sitemaps WHERE fonte = 'google')""")
     m['visitas_organicas_28d'] = um("""SELECT COUNT(*) FROM pageviews WHERE entrada AND NOT is_bot
                                       AND created_at > now() - interval '28 days'
                                       AND referrer ~* '(^|\\.)(google|bing|duckduckgo)\\.'""")

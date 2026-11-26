@@ -124,7 +124,7 @@ def importar_gsc(cur, dias=90):
     cur.execute("""SELECT consulta, SUM(impressoes) AS imp, SUM(cliques) AS cli,
                           SUM(posicao * impressoes) / NULLIF(SUM(impressoes), 0) AS pos,
                           (ARRAY_AGG(pagina ORDER BY impressoes DESC))[1] AS pagina
-                   FROM busca_consultas WHERE fonte = 'gsc' AND consulta <> '*' AND data > current_date - %s
+                   FROM busca_consultas WHERE fonte = 'google' AND consulta <> '*' AND data > current_date - %s
                    GROUP BY consulta""", (dias,))
     linhas = cur.fetchall()
     n = 0

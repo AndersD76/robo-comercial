@@ -77,8 +77,8 @@ def dados_painel(c, filtro=None):
                                   'GROUP BY 1, 2 ORDER BY 1, 2', params))
     secao('ondas', lambda: todos('SELECT * FROM conteudo_ondas ORDER BY id DESC LIMIT 15'))
     secao('pausas', lambda: todos('SELECT * FROM conteudo_pausas ORDER BY pausado_em DESC'))
-    secao('indexacao', lambda: todos("""SELECT sitemap, enviadas, indexadas FROM busca_sitemaps WHERE fonte = 'gsc'
-                                        AND coletado_em = (SELECT MAX(coletado_em) FROM busca_sitemaps WHERE fonte = 'gsc')
+    secao('indexacao', lambda: todos("""SELECT sitemap, enviadas, indexadas FROM busca_sitemaps WHERE fonte = 'google'
+                                        AND coletado_em = (SELECT MAX(coletado_em) FROM busca_sitemaps WHERE fonte = 'google')
                                         ORDER BY sitemap"""))
 
     def mapa_paginas():
@@ -89,7 +89,7 @@ def dados_painel(c, filtro=None):
         mp = mapa_paginas()
         c.execute("""SELECT pagina, SUM(cliques) AS cliques, SUM(impressoes) AS impressoes,
                             SUM(posicao * impressoes) / NULLIF(SUM(impressoes), 0) AS pos
-                     FROM busca_consultas WHERE fonte = 'gsc' AND consulta = '*' AND data > current_date - 28
+                     FROM busca_consultas WHERE fonte = 'google' AND consulta = '*' AND data > current_date - 28
                      GROUP BY pagina""")
         por = {}
         for r in c.fetchall():
@@ -110,12 +110,12 @@ def dados_painel(c, filtro=None):
     secao('seo_clusters', seo_clusters)
     secao('consultas_novas', lambda: todos("""SELECT consulta, SUM(impressoes) AS impressoes, SUM(cliques) AS cliques,
                                                     ROUND(AVG(posicao)::numeric, 1) AS posicao
-                                             FROM busca_consultas WHERE fonte = 'gsc' AND consulta <> '*'
+                                             FROM busca_consultas WHERE fonte = 'google' AND consulta <> '*'
                                              GROUP BY consulta HAVING MIN(data) > current_date - 10
                                              ORDER BY 2 DESC LIMIT 25"""))
     secao('oportunidades', lambda: todos("""SELECT consulta, pagina, SUM(impressoes) AS impressoes, SUM(cliques) AS cliques,
                                                   ROUND((SUM(posicao * impressoes) / NULLIF(SUM(impressoes), 0))::numeric, 1) AS posicao
-                                           FROM busca_consultas WHERE fonte = 'gsc' AND consulta <> '*' AND data > current_date - 28
+                                           FROM busca_consultas WHERE fonte = 'google' AND consulta <> '*' AND data > current_date - 28
                                            GROUP BY 1, 2 HAVING SUM(impressoes) >= 30
                                               AND SUM(posicao * impressoes) / NULLIF(SUM(impressoes), 0) BETWEEN 4 AND 15
                                            ORDER BY 3 DESC LIMIT 30"""))
@@ -123,7 +123,7 @@ def dados_painel(c, filtro=None):
     def ctr_baixo():
         c.execute("""SELECT pagina, SUM(impressoes) AS impressoes, SUM(cliques) AS cliques,
                             SUM(posicao * impressoes) / NULLIF(SUM(impressoes), 0) AS posicao
-                     FROM busca_consultas WHERE fonte = 'gsc' AND consulta = '*' AND data > current_date - 28
+                     FROM busca_consultas WHERE fonte = 'google' AND consulta = '*' AND data > current_date - 28
                      GROUP BY 1 HAVING SUM(impressoes) >= 200""")
         saida = []
         for r in c.fetchall():
@@ -138,7 +138,7 @@ def dados_painel(c, filtro=None):
     secao('sem_impressao', lambda: todos(f"""SELECT p.url, p.tipo, p.publicado_em FROM conteudo_paginas p
                                              WHERE p.status = 'publicada' AND p.publicado_em < now() - interval '30 days'
                                                AND {w.replace('tipo', 'p.tipo').replace('cluster', 'p.cluster')}
-                                               AND NOT EXISTS (SELECT 1 FROM busca_consultas b WHERE b.fonte = 'gsc'
+                                               AND NOT EXISTS (SELECT 1 FROM busca_consultas b WHERE b.fonte = 'google'
                                                    AND b.consulta = '*' AND b.pagina = %s || p.url AND b.impressoes > 0)
                                              ORDER BY p.publicado_em LIMIT 30""", params + [cfg.SITE]))
     secao('geo_robos', lambda: todos("""SELECT path, robo, COUNT(*) AS n, MAX(created_at) AS ultimo FROM pageviews
