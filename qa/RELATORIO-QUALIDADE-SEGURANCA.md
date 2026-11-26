@@ -30,10 +30,13 @@ Também ficaram 25 commits de 29/10 que nunca foram integrados e precisam de dec
 | QA-SEC-002 | `/agendar` e `/api/agendar/*` públicos sem limite; cada acesso abre uma conexão por cliente | Média | `app.py` | corrigida (30/min por IP) | `test_rotas_de_agendamento_tem_limite` |
 | QA-SEC-004 | Sem Content-Security-Policy | Média | `app.py` | parcial: `object-src 'none'`, `base-uri 'self'`, `frame-ancestors 'self'` valendo; política completa em Report-Only com relatório em `/api/csp-report` | `test_cabecalhos_de_seguranca` |
 | QA-LGPD-001 | Logs gravavam e-mail de lead e de cliente (17 linhas) | Média | `app.py` | corrigida (filtro mascara e-mail, CPF e segredos) | `test_logs_sem_email_cpf_ou_segredo` |
-| QA-SEC-009 | Tokens da API v1 guardados em texto puro no banco | Média | `api_tokens` | **pendente** (guardar só o hash) | — |
+| QA-SEC-009 | Tokens da API v1 guardados em texto puro no banco | Média | `api_tokens` | corrigida em 26/11: só o SHA-256 e os 6 últimos caracteres; os antigos são convertidos na subida e o texto puro é apagado | `testes_integracao`: `test_token_da_api_guardado_so_como_hash`, `test_migracao_converte_token_antigo_em_texto_puro` |
 | QA-SEC-010 | Admin com chave única, sem MFA e sem registro de quem viu dados pessoais | Média | `/admin*` | **pendente** | — |
 | QA-SEC-008 | `/health` devolvia a mensagem do driver (host e usuário do banco) | Baixa | `app.py` | corrigida | `test_health_nao_vaza_detalhe_do_banco` |
 | QA-SEC-011 | Webhook do Mercado Pago sem assinatura (`MP_WEBHOOK_SECRET` ausente) | Baixa | `app.py` | **aceita**: o aviso só dispara consulta ao MP com o nosso token; com o segredo configurado, a assinatura também é exigida | `tests/test_pagamento.py` |
+| QA-SEC-012 | soupsieve 2.10 (dependência do beautifulsoup4) com 3 CVEs publicados depois de 09/11 (apontados pela auditoria semanal de 23/11) | Baixa | `requirements.txt` (indireta) | **aceita**: as versões corrigidas (3.0.2 e 4.0) exigem Python 3.11 e o container roda 3.10; nenhum código usa seletores CSS (`.select`). Ignorados por ID na auditoria; sai ao subir o Python do container | auditoria semanal |
+| QA-SEC-013 | Leitura passiva de produção (26/11, autorizada) | — | produção | **ok**: TLS 1.2/1.3 (1.0 e 1.1 recusados), certificado válido (renovação do Railway), HSTS, CSP, X-Frame-Options, nosniff, Referrer/Permissions-Policy; `/.env`, `/.git/config`, `/docs`, `/openapi.json`, `app.py` → 404; `/admin/api/*` → 401 | — |
+| QA-A11Y-001 | Acessibilidade: 8 críticos (7 caixas de seleção sem nome, 1 campo sem rótulo) e 247 sérios (contraste de texto, links só com ícone, links no texto só pela cor) | Alta | cadastro, painel, landing e páginas públicas | corrigida em 26/11: nomes acessíveis, sublinhado, cinza secundário #64748b → #7a889c e lilás de texto → #818cf8 só onde é texto sobre fundo escuro (e-mails intocados); `h1` no login e nas páginas de senha. **Aceito:** texto branco nos botões na cor da marca #6366f1 (4,46:1 contra 4,5:1); logotipo é isento | `testes_e2e/test_acessibilidade.py` |
 
 **Falsos positivos triados:**
 - **Bandit B608 (53 casos):** SQL com colunas em lista fechada, marcadores `%s` gerados ou schema validado.
@@ -79,9 +82,11 @@ Também ficaram 25 commits de 29/10 que nunca foram integrados e precisam de dec
 |---|---|
 | Regras de negócio e segurança (pytest, sem banco) | 234 testes; 232 passam e 2 exigem banco real (`test_conn_helper`, `/health`). Arquivos novos hoje: `test_seguranca_qa.py`, `test_pagamento.py`, `test_eventos.py`, `test_emails_pagantes.py`, `test_cota.py`, `test_indexnow.py`, `test_trafego.py`, `test_contas.py` |
 | Páginas públicas (SEO, JSON-LD, títulos, robots) | `test_seo.py`, `test_seo_pseo.py` (base sintética) |
-| Integração com banco real | **pendente**: precisa de Postgres descartável (Docker) ou branch do Neon |
+| Integração com banco real | **feito** (`testes_integracao/`, 10 testes): banco novo por rodada (pgserver local, sem Docker; `postgres:16` no CI), schema aplicado do zero. Cobre `/health`/`/ready`, cadastro, login/logout, isolamento entre clientes (ler, alterar, apagar lead de outro), lista fechada de campos, recuperação de senha ponta a ponta, pagamento (liberação única, renovação, valor menor), cota de 30 dias, funil de e-mail e descadastro, exportar e excluir os próprios dados |
 | Contrato e fuzzing da API (OpenAPI/Schemathesis) | **pendente**: o app não tem OpenAPI |
-| E2E no navegador (Playwright, 3 motores, celular), regressão visual, acessibilidade (axe) | **pendente** |
+| E2E no navegador (Playwright) | **feito** (`testes_e2e/`, 6 fluxos × Chromium, Firefox e WebKit × desktop e celular = 36 casos): páginas públicas sem erro de JS/console, cadastro → sair → entrar, painel com lead malicioso sem executar código, recuperação de senha pela tela, oferta no limite abrindo o pagamento sem boleto, cadastro só com teclado. O teste falha com erro no console. `e2e.yml`: em pull request e toda noite |
+| Acessibilidade WCAG 2.2 AA (axe-core) | **feito**: 9 páginas públicas + configuração + painel; barreira com zero crítico e zero sério, fora das exceções nomeadas (QA-A11Y-001) |
+| Regressão visual | **pendente**: conferida à mão por captura de tela em 26/11 (landing, preços, painel) |
 | Lighthouse | diário em produção (`lighthouse.yml`) |
 | Carga (k6), ZAP, varredura de TLS | **pendente**: só em homologação, ou com sua confirmação para a parte passiva em produção |
 
