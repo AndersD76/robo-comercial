@@ -1,0 +1,29 @@
+{% extends '_publico_base.html' %}
+{% block conteudo %}
+<nav class="crumbs" aria-label="Trilha"><a href="/">Início</a> › Sobre</nav>
+<h1>Sobre o TurboVenda</h1>
+<p>O TurboVenda é um software de prospecção B2B feito no Brasil. Ele encontra empresas para você vender, a partir da base
+pública de CNPJs da Receita Federal e de buscadores, completa telefone, e-mail, CNPJ e o nome do sócio que decide a compra,
+e faz a primeira abordagem por e-mail e WhatsApp com textos escritos por IA.</p>
+<h2>Para quem</h2>
+<p>Donos e gerentes comerciais de pequenas e médias empresas que vendem para outras empresas e não têm equipe de pré-vendas:
+indústrias, distribuidoras, prestadores de serviço B2B e representantes comerciais.</p>
+<h2>De onde vêm os dados</h2>
+<ul class="lista">
+  <li>Cadastro de empresas: dados abertos do CNPJ publicados pela Receita Federal (<a href="/empresas/sobre-os-dados">fonte e data</a>).</li>
+  <li>Descrição das atividades: classificação CNAE do IBGE (CONCLA).</li>
+  <li>Contatos de empresas: sites e páginas públicas das próprias empresas.</li>
+  <li>Não vendemos listas de pessoas físicas nem dados de CPF.</li>
+</ul>
+<h2>Quem está por trás</h2>
+<table class="dados"><tbody>
+  <tr><td>Empresa</td><td>{{ razao_social }}</td></tr>
+  {% if cnpj %}<tr><td>CNPJ</td><td>{{ cnpj }}</td></tr>{% endif %}
+  <tr><td>Cidade</td><td>{{ cidade }}</td></tr>
+  <tr><td>Contato</td><td><a href="mailto:suporte@turbovenda.com.br">suporte@turbovenda.com.br</a></td></tr>
+</tbody></table>
+<p>Como produzimos e revisamos o conteúdo do site: <a href="/politica-editorial">política editorial</a>.
+Privacidade e pedidos de titulares: <a href="/privacidade">política de privacidade</a>.</p>
+<div class="cta-box"><p>Veja o TurboVenda encontrar clientes para você.</p>
+  <a class="cta-btn" href="/cadastro?utm_source=site&amp;utm_medium=organic&amp;utm_campaign=sobre" data-cta="sobre">Testar grátis</a></div>
+{% endblock %}

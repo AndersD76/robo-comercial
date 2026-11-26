@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Prévia — {{ p.titulo }}</title>
+<style>
+  body{margin:0;background:#0b1220;color:#e2e8f0;font:15px/1.6 Inter,system-ui,sans-serif}
+  main{max-width:860px;margin:0 auto;padding:24px 16px 60px}
+  a{color:#a5b4fc} .meta{color:#94a3b8;font-size:13px} table{border-collapse:collapse} td,th{border:1px solid #334155;padding:6px}
+  .resposta{border-left:3px solid #818cf8;padding:8px 14px;background:#0d1526}
+  button{font:inherit;padding:6px 14px;border-radius:8px;border:0;cursor:pointer} .ok{background:#16a34a;color:#fff} .nao{background:#b91c1c;color:#fff}
+</style>
+</head>
+<body><main>
+  <p><a href="/admin/crescimento#revisao">← Fila de revisão</a></p>
+  <p class="meta">{{ p.url }} · {{ p.tipo }} · {{ p.cluster }} · status {{ p.status }}<br>
+    Título ({{ p.titulo|length }}): {{ p.titulo }}<br>Descrição ({{ (p.descricao or '')|length }}): {{ p.descricao }}</p>
+  <h1>{{ p.h1 }}</h1>
+  <div class="resposta">{{ p.resposta }}</div>
+  {{ p.corpo|safe }}
+  {% if p.faq %}<h2>Perguntas</h2>{% for f in p.faq %}<p><b>{{ f.pergunta }}</b><br>{{ f.resposta }}</p>{% endfor %}{% endif %}
+  {% if p.fontes %}<h2>Fontes</h2>{% for f in p.fontes %}<p><a href="{{ f.url }}">{{ f.nome }}</a></p>{% endfor %}{% endif %}
+  <form method="post" action="/admin/crescimento/pagina"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="url" value="{{ p.url }}">
+    <button class="ok" name="op" value="aprovar">Aprovar (entra na próxima onda)</button> <button class="nao" name="op" value="recusar">Recusar</button></form>
+</main></body></html>

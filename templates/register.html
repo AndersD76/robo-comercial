@@ -15,20 +15,7 @@
   <meta property="og:type" content="website">
   <meta property="og:locale" content="pt_BR">
   <meta property="og:site_name" content="TurboVenda">
-  <script>
-  (function(){
-    if(localStorage.getItem('cookie_consent')==='accepted'){
-      var s=document.createElement('script');
-      s.async=true;
-      s.src='https://www.googletagmanager.com/gtag/js?id={{ ga_id }}';
-      document.head.appendChild(s);
-      window.dataLayer=window.dataLayer||[];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js',new Date());
-      gtag('config','{{ ga_id }}');
-    }
-  })();
-  </script>
+{% include '_analytics.html' %}
   <link rel="canonical" href="https://www.turbovenda.com.br/cadastro">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" href="/static/favicon-96.png" type="image/png" sizes="96x96">

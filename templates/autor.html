@@ -1,0 +1,9 @@
+{% extends '_publico_base.html' %}
+{% block conteudo %}
+<nav class="crumbs" aria-label="Trilha"><a href="/">Início</a> › <a href="/sobre">Sobre</a> › {{ a.nome }}</nav>
+<h1>{{ a.nome }}</h1>
+{% if a.cargo %}<p class="meta-line">{{ a.cargo }} no TurboVenda</p>{% endif %}
+{% if a.bio %}<p>{{ a.bio }}</p>{% endif %}
+{% if a.linkedin %}<p><a href="{{ a.linkedin }}" rel="noopener me">Perfil no LinkedIn</a></p>{% endif %}
+<p>Como produzimos o conteúdo: <a href="/politica-editorial">política editorial</a>.</p>
+{% endblock %}

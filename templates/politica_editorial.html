@@ -1,0 +1,34 @@
+{% extends '_publico_base.html' %}
+{% block conteudo %}
+<nav class="crumbs" aria-label="Trilha"><a href="/">Início</a> › <a href="/sobre">Sobre</a> › Política editorial</nav>
+<h1>Política editorial</h1>
+<p class="meta-line">Atualizada em 26/11/2026.</p>
+<h2>Como os conteúdos são feitos</h2>
+<ul class="lista">
+  <li><b>Dados próprios:</b> as contagens de empresas vêm dos dados abertos do CNPJ da Receita Federal, com o mês da base, e
+      as descrições de atividade vêm da CNAE do IBGE. Nenhum cliente do TurboVenda é identificado.</li>
+  <li><b>Uso de IA:</b> parte dos textos (glossário, modelos, perguntas e guias) é escrita com apoio de IA (Claude, da
+      Anthropic), sempre a partir de dados e fontes que entregamos a ela.</li>
+  <li><b>Verificação antes de publicar:</b> toda página passa por uma checagem automática: responde a pergunta logo no
+      começo, traz algo próprio (dado, modelo, cálculo ou tabela), não repete outra página do site e só usa números que
+      vieram dos dados entregues.</li>
+  <li><b>Revisão humana:</b> página que cita lei ou traz número sem fonte não entra no ar sozinha: vai para revisão de uma
+      pessoa da equipe. Páginas que explicam a LGPD são sempre revisadas antes de publicar e citam o texto oficial do Planalto.</li>
+  <li><b>Comparativos</b> com concorrentes dizem para quem cada ferramenta é melhor, inclusive quando não é o TurboVenda,
+      e mostram a data em que os preços foram conferidos.</li>
+  <li><b>Atualização:</b> cada página mostra a data da última atualização. Páginas que perdem posição ou ficam
+      desatualizadas entram numa fila de revisão.</li>
+</ul>
+<h2>O que não fazemos</h2>
+<ul class="lista">
+  <li>Não publicamos depoimento, caso de cliente ou estatística de mercado sem fonte.</li>
+  <li>Não damos aconselhamento jurídico: as páginas sobre LGPD são informativas.</li>
+  <li>Não compramos links nem publicamos página feita só para buscador.</li>
+</ul>
+<h2>Correções</h2>
+<p>Encontrou um erro? Escreva para <a href="mailto:suporte@turbovenda.com.br">suporte@turbovenda.com.br</a> com o link da
+página. Corrigimos e registramos a data da atualização.</p>
+<h2>Remoção de dados</h2>
+<p>Empresas listadas nas páginas de dados podem pedir a remoção pelo mesmo e-mail, como descrito em
+<a href="/empresas/sobre-os-dados">sobre os dados</a>.</p>
+{% endblock %}

@@ -76,7 +76,9 @@ def perguntar(client, pergunta):
     for _ in range(4):
         r = client.beta.messages.create(
             model=MODELO, max_tokens=8000,
-            betas=['server-side-fallback-2026-07-01'], fallbacks='default',
+            # fallbacks via extra_body: o SDK 0.102 do servidor não tem o
+            # parâmetro e dava TypeError antes da primeira pergunta
+            betas=['server-side-fallback-2026-07-01'], extra_body={'fallbacks': 'default'},
             output_config={'effort': 'low'},
             tools=[{'type': 'web_search_20260209', 'name': 'web_search', 'max_uses': 3,
                     'user_location': {'type': 'approximate', 'country': 'BR',

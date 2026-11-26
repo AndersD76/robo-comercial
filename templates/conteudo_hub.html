@@ -1,0 +1,20 @@
+{% extends '_publico_base.html' %}
+{% block estilo %}
+    .letras{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 18px}
+    .letras a{color:#a5b4fc;text-decoration:none;border:1px solid rgba(255,255,255,.1);border-radius:7px;padding:3px 9px;font-size:13px}
+{% endblock %}
+{% block conteudo %}
+<nav class="crumbs" aria-label="Trilha"><a href="/">Início</a> › {{ hub_nome }}</nav>
+<h1>{{ h1 }}</h1>
+<p>{{ intro }}</p>
+{% if grupos|length > 6 %}
+<nav class="letras" aria-label="Índice">{% for g in grupos %}<a href="#g-{{ g.id }}">{{ g.nome }}</a>{% endfor %}</nav>
+{% endif %}
+{% for g in grupos %}
+<h2 id="g-{{ g.id }}">{{ g.nome }} <small>{{ g.itens|length }}</small></h2>
+<div class="grid">{% for i in g.itens %}<a href="{{ i.url }}"><span class="nome">{{ i.titulo }}</span><span class="qtd">→</span></a>{% endfor %}</div>
+{% endfor %}
+{% if not grupos %}<p>As primeiras páginas desta seção estão em revisão e entram no ar nas próximas semanas.</p>{% endif %}
+<div class="cta-box"><p>O TurboVenda encontra empresas do seu perfil e faz o primeiro contato sozinho.</p>
+  <a class="cta-btn" href="/cadastro?utm_source=site&amp;utm_medium=organic&amp;utm_campaign=hub-{{ hub_id }}" data-cta="hub-{{ hub_id }}">Testar grátis</a></div>
+{% endblock %}

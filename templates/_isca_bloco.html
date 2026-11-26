@@ -1,0 +1,19 @@
+{# Isca do cluster da página: no meio, no fim e (só no fim) a barra discreta
+   do celular. Sem pop-up: nada cobre o texto. Variáveis: isca (dict),
+   isca_id, isca_url, ev (props do evento), isca_fim (bool). #}
+{% if isca %}
+<aside class="cta-box isca-bloco" data-isca="{{ isca_id }}" aria-label="Ferramenta grátis">
+  <p><b>Ferramenta grátis:</b> {{ isca.nome }}. {{ isca.get('descricao', '')|truncate(120, True, '…') }}</p>
+  <a class="cta-btn" href="{{ isca_url }}?utm_source=site&amp;utm_medium=isca&amp;utm_campaign={{ ev.page_type }}-{{ 'fim' if isca_fim else 'meio' }}"
+     data-isca-link="{{ isca_id }}">Usar grátis</a>
+</aside>
+{% if isca_fim %}
+<div id="isca-barra" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:88;background:#0f172a;
+     border-top:1px solid rgba(99,102,241,.35);padding:10px 14px;align-items:center;justify-content:space-between;gap:10px">
+  <a href="{{ isca_url }}?utm_source=site&amp;utm_medium=isca&amp;utm_campaign={{ ev.page_type }}-barra" data-isca-link="{{ isca_id }}"
+     style="color:#e2e8f0;font-size:14px;text-decoration:none;flex:1">Grátis: <b style="color:#a5b4fc">{{ isca.nome }}</b> →</a>
+  <button type="button" aria-label="Fechar" id="isca-barra-fechar"
+     style="background:none;border:0;color:#cbd5e1;font-size:20px;cursor:pointer;padding:0 6px">×</button>
+</div>
+{% endif %}
+{% endif %}

@@ -39,6 +39,9 @@ def _paginas_publicas():
     paginas += [f"/blog/{p['slug']}" for p in A.BLOG_POSTS]
     paginas += [f"/para/{s['slug']}" for s in A.SEGMENTOS]
     paginas += [f"/alternativas/{a['slug']}" for a in A.ALTERNATIVAS]
+    # crescimento orgânico: iscas e institucionais (não dependem do banco)
+    import iscas
+    paginas += [iscas.url_de(k) for k in iscas.NOVAS] + ['/sobre', '/politica-editorial']
     return paginas
 
 

@@ -20,20 +20,7 @@
   <meta property="og:locale" content="pt_BR">
   <meta property="og:site_name" content="TurboVenda">
   <meta name="twitter:card" content="summary_large_image">
-  <script>
-  (function(){
-    if(localStorage.getItem('cookie_consent')==='accepted'){
-      var s=document.createElement('script');
-      s.async=true;
-      s.src='https://www.googletagmanager.com/gtag/js?id={{ ga_id }}';
-      document.head.appendChild(s);
-      window.dataLayer=window.dataLayer||[];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js',new Date());
-      gtag('config','{{ ga_id }}');
-    }
-  })();
-  </script>
+{% include '_analytics.html' %}
 {% include '_fontes.html' %}
   <link rel="stylesheet" href="/static/tokens.css">
   <link rel="stylesheet" href="/static/components.css">
@@ -129,6 +116,15 @@
   </a>
   {% endfor %}
 </div>
+
+{% if mais_posts %}
+<section style="max-width:1100px;margin:0 auto;padding:0 24px 40px">
+  <h2 style="font-size:1.3rem;margin:10px 0 14px">Guias e perguntas respondidas</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">
+  {% for p in mais_posts %}<a href="{{ p.url }}" style="color:#c7d2fe;text-decoration:none;background:#0d1526;border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:12px 14px;font-size:14px">{{ p.titulo }}</a>{% endfor %}
+  </div>
+</section>
+{% endif %}
 
 <section class="blog-cta">
   <h2>Pronto para automatizar sua prospecção?</h2>

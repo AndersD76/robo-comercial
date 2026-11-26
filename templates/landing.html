@@ -30,22 +30,7 @@
   <meta name="twitter:description" content="Encontre leads qualificados, envie mensagens personalizadas com IA e feche mais negócios.">
   <meta name="twitter:image" content="https://www.turbovenda.com.br/static/og-image.png">
 
-  <!-- Google Analytics — carregado apenas apos consentimento de cookies -->
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    function loadGA4() {
-      if (window._ga4Loaded) return;
-      window._ga4Loaded = true;
-      var s = document.createElement('script');
-      s.async = true;
-      s.src = 'https://www.googletagmanager.com/gtag/js?id={{ ga_id }}';
-      document.head.appendChild(s);
-      gtag('js', new Date());
-      gtag('config', '{{ ga_id }}');
-    }
-  </script>
-
+{% include '_analytics.html' %}
   <!-- Dados Estruturados JSON-LD -->
   <script type="application/ld+json">
   {

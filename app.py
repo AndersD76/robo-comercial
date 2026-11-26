@@ -176,7 +176,14 @@ def _conferir_saltos_do_proxy():
     valores = len([v for v in xff.split(',') if v.strip()])
     logger.info(f'proxy: X-Forwarded-For com {valores} valor(es); PROXY_SALTOS={_PROXY_SALTOS}')
 
-GA_MEASUREMENT_ID = os.environ.get('GA_MEASUREMENT_ID', 'G-NGSNSF3SPM')
+import crescimento as _crescimento  # noqa: E402
+import robos_ia as _robos_ia  # noqa: E402
+import sequencias as _sequencias  # noqa: E402
+# Ganchos preenchidos por rotas_crescimento.registrar (fim do arquivo)
+_render_pagina_conteudo = _sitemaps_crescimento = _urls_crescimento = _props_evento_crescimento = None
+_crescimento_blog = _ga4_compra = None
+GA_MEASUREMENT_ID = (os.environ.get('GA4_MEASUREMENT_ID') or os.environ.get('GA_MEASUREMENT_ID')
+                     or 'G-NGSNSF3SPM')
 
 # --- Encriptação de credenciais sensíveis no DB ---
 _ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY', '')
@@ -2713,6 +2720,7 @@ def blog_index():
     }, ensure_ascii=False)
     return render_template('blog.html',
                            posts=BLOG_POSTS, ld_json=[ld_blog, ld_trilha],
+                           mais_posts=_crescimento_blog() if _crescimento_blog else [],
                            ga_id=GA_MEASUREMENT_ID)
 
 
@@ -2720,7 +2728,9 @@ def blog_index():
 def blog_post(slug):
     post = next((p for p in BLOG_POSTS if p['slug'] == slug), None)
     if not post:
-        return render_template('404.html'), 404
+        # perguntas e guias gerados no banco (conteudo_paginas) moram no /blog também
+        pagina = _render_pagina_conteudo(f'/blog/{slug}') if _render_pagina_conteudo else None
+        return pagina if pagina is not None else (render_template('404.html'), 404)
     return render_template('blog_post.html',
                            post=post,
                            posts=BLOG_POSTS,
@@ -2936,6 +2946,8 @@ def sitemap_xml():
     for i in range(1, n_chunks + 1):
         xml += (f'  <sitemap>\n    <loc>https://www.turbovenda.com.br/sitemap-empresas-{i}.xml</loc>\n'
                 '  </sitemap>\n')
+    for loc in (_sitemaps_crescimento() if _sitemaps_crescimento else []):
+        xml += f'  <sitemap>\n    <loc>{loc}</loc>\n  </sitemap>\n'
     xml += '</sitemapindex>\n'
     return app.response_class(xml, mimetype='application/xml')
 
@@ -3085,6 +3097,8 @@ def _todas_urls_sitemap():
     # reenvia as programáticas (antes iam com None e nunca eram reavisadas)
     base = _pseo_data_base()
     urls += [(u, base) for u in _pseo_sitemap_urls()]
+    if _urls_crescimento:
+        urls += [(u, lm) for u, lm, _ in _urls_crescimento()]
     return dict(urls)
 
 
@@ -9837,6 +9851,8 @@ def _mp_aplicar(pay, uid_esperado=None):
         logger.info(f"MP: user {uid} -> plano {plano} (payment {pay.get('id')})")
         _evento('payment_succeeded', uid, plano=plano, valor=valor,
                 metodo=str(pay.get('payment_method_id') or ''), payment_id=str(pay.get('id')))
+        if _ga4_compra:   # compra no GA4 sai do servidor, nunca do navegador
+            threading.Thread(target=_ga4_compra, args=(uid, valor, plano, pay.get('id')), daemon=True).start()
     return status, plano
 
 
@@ -10580,6 +10596,8 @@ def _trafego_pageview(resp):
         interno = _urlparse(ref).netloc.lower().endswith('turbovenda.com.br')
         a = request.args
         verificado = robo in _ROBOS_DNS and _buscador_verificado()
+        if not verificado and robo in _robos_ia.FAIXAS:   # OpenAI e Perplexity: IP na faixa oficial
+            verificado = bool(_robos_ia.verificado(robo, request.remote_addr))
         pre = not robo and _e_precarregamento()
         _traf_enfileirar('pv', (
             request.path[:300], '' if interno else ref,
@@ -10656,6 +10674,12 @@ def api_trafego_evento():
     if nome in EVENTOS_DO_NAVEGADOR:
         _evento(nome, session.get('user_id'), origem=str(d.get('origem') or '')[:40],
                 plano=str(d.get('plano') or '')[:20])
+    elif nome in _crescimento.EVENTOS_NAVEGADOR_CRESCIMENTO and _props_evento_crescimento:
+        props = _props_evento_crescimento(d.get('props'))
+        caminho = str(d.get('path') or '')
+        if caminho.startswith('/') and len(caminho) <= 200:
+            props['path'] = caminho
+        _evento(nome, session.get('user_id'), **props)
     return ('', 204)
 
 
@@ -11143,10 +11167,24 @@ def _link_descadastro(uid):
 @app.route('/descadastrar/<token>')
 def descadastrar(token):
     """Descadastro em 1 clique (LGPD) dos e-mails de teste e de PIX não pago.
-    Avisos sobre um plano pago (vencimento) são transacionais e continuam."""
+    Avisos sobre um plano pago (vencimento) são transacionais e continuam.
+    Token l<id>.<hmac>: lead de isca (sai de toda a sequência daquele e-mail)."""
+    lead_id = _sequencias.lead_do_token(token, app.secret_key)
+    if lead_id:
+        conn = _conn()
+        try:
+            c = conn.cursor()
+            _sequencias.descadastrar(c, lead_id)
+            conn.commit()
+        finally:
+            conn.close()
+        _evento('email_unsubscribed', None, origem='isca')
     uid = token.split('.', 1)[0]
-    valido = uid.isdigit() and _hmac.compare_digest(_token_descadastro(int(uid)), token)
-    if valido:
+    valido = bool(lead_id) or (uid.isdigit() and _hmac.compare_digest(_token_descadastro(int(uid)), token))
+    if valido and lead_id:
+        titulo, texto = ('Pronto, você não vai mais receber estes e-mails.',
+                         'Saiu da sequência de dicas e ofertas do TurboVenda. Não enviaremos mais nada para este endereço.')
+    elif valido:
         conn = _conn()
         try:
             c = conn.cursor()
@@ -11261,6 +11299,18 @@ def assinar():
         session['login_next'] = destino
         return redirect(url_for('login'))
     return redirect(destino)
+
+
+# =============================================================================
+# Crescimento orgânico: iscas, conteúdo, CNAE, painel e jobs
+# (rotas_crescimento.py, painel_crescimento.py, jobs_crescimento.py)
+# =============================================================================
+
+import rotas_crescimento  # noqa: E402
+import jobs_crescimento  # noqa: E402
+
+rotas_crescimento.registrar(sys.modules[__name__])
+jobs_crescimento.registrar(sys.modules[__name__])
 
 
 # =============================================================================

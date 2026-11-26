@@ -18,20 +18,7 @@
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" href="/static/favicon-96.png" type="image/png" sizes="96x96">
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
-  <script>
-  (function(){
-    if(localStorage.getItem('cookie_consent')==='accepted'){
-      var s=document.createElement('script');
-      s.async=true;
-      s.src='https://www.googletagmanager.com/gtag/js?id={{ ga_id }}';
-      document.head.appendChild(s);
-      window.dataLayer=window.dataLayer||[];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js',new Date());
-      gtag('config','{{ ga_id }}');
-    }
-  })();
-  </script>
+{% include '_analytics.html' %}
 {% include '_fontes.html' %}
   {% for ld in ld_json|default([]) %}
   <script type="application/ld+json">{{ ld|safe }}</script>
@@ -63,6 +50,7 @@
     .texto a,.faq a,p a{color:#818cf8}
     ul.lista{margin:0 0 14px 20px;color:#cbd5e1;font-size:15px}
     ul.lista li{margin-bottom:6px}
+    ul.lista a,.resposta a,td a{color:#a5b4fc}
     .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
     .grid a,.grid .semlink{background:#0d1526;border:1px solid rgba(255,255,255,.06);border-radius:10px;
         padding:12px 15px;text-decoration:none;display:flex;justify-content:space-between;align-items:center;gap:8px;transition:.2s}

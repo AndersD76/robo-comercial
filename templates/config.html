@@ -157,20 +157,8 @@ function esc(v){return String(v==null?'':v).replace(/[&<>"'`]/g,c=>({'&':'&amp;'
 function escOu(v,html){return v?esc(v):html}
 function urlSegura(u){u=String(u||'').trim();if(!u)return '#';if(!/^https?:\/\//i.test(u))u='https://'+u;return /^https?:\/\/[^\s"'<>`]+$/i.test(u)?esc(u):'#'}
 
-  (function(){
-    window.dataLayer=window.dataLayer||[];
-    function gtag(){dataLayer.push(arguments);}
-    window.gtag=gtag;
-    if(localStorage.getItem('cookie_consent')==='accepted'){
-      var s=document.createElement('script');
-      s.async=true;
-      s.src='https://www.googletagmanager.com/gtag/js?id={{ ga_id }}';
-      document.head.appendChild(s);
-      gtag('js',new Date());
-      gtag('config','{{ ga_id }}');
-    }
-  })();
   </script>
+{% include '_analytics.html' %}
 </head>
 <body>
 {% if just_registered %}

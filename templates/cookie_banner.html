@@ -1,45 +1,60 @@
-<!-- Cookie Consent Banner -->
-<div id="cookie-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:10000;
+<!-- Banner de consentimento (LGPD): escolha por finalidade, nada marcado por padrão -->
+<div id="cookie-banner" role="dialog" aria-live="polite" aria-label="Preferências de cookies"
+    style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:10000;
     background:#0f172a;border-top:1px solid rgba(99,102,241,.3);padding:16px 24px;
     align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
   <p style="color:#e2e8f0;font-size:14px;margin:0;flex:1;min-width:240px;line-height:1.5">
-    Usamos cookies para análise de tráfego (Google Analytics). Nenhum dado pessoal é vendido.
+    Usamos cookies de análise (Google Analytics) só se você permitir. Nenhum dado pessoal é vendido.
     <a href="/privacidade" style="color:#818cf8;text-decoration:underline">Política de Privacidade</a>
   </p>
-  <div style="display:flex;gap:8px;flex-shrink:0">
+  <div id="cookie-opcoes" style="display:none;width:100%;color:#cbd5e1;font-size:14px;line-height:1.6">
+    <label style="display:flex;gap:8px;align-items:flex-start;margin:4px 0;color:#cbd5e1;font-weight:400">
+      <input type="checkbox" checked disabled style="width:auto;margin-top:4px"> <span><b>Necessários</b>: login, segurança e esta escolha. Sempre ativos.</span></label>
+    <label style="display:flex;gap:8px;align-items:flex-start;margin:4px 0;color:#cbd5e1;font-weight:400">
+      <input type="checkbox" id="cookie-analise" style="width:auto;margin-top:4px"> <span><b>Análise</b>: Google Analytics, para saber quais páginas ajudam.</span></label>
+    <label style="display:flex;gap:8px;align-items:flex-start;margin:4px 0;color:#cbd5e1;font-weight:400">
+      <input type="checkbox" id="cookie-marketing" style="width:auto;margin-top:4px"> <span><b>Marketing</b>: medir anúncios do Google. Hoje não usamos anúncios.</span></label>
+  </div>
+  <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap">
     <button id="cookie-accept" style="background:#6366f1;color:#fff;border:none;padding:10px 20px;
         border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:.2s">
-      Aceitar cookies
+      Aceitar todos
     </button>
-    <button id="cookie-reject" style="background:transparent;color:#94a3b8;border:1px solid rgba(255,255,255,.15);
+    <button id="cookie-reject" style="background:transparent;color:#cbd5e1;border:1px solid rgba(255,255,255,.25);
         padding:10px 20px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;transition:.2s">
-      Recusar
+      Só os necessários
+    </button>
+    <button id="cookie-config" style="background:transparent;color:#cbd5e1;border:1px solid rgba(255,255,255,.25);
+        padding:10px 20px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;transition:.2s">
+      Escolher
+    </button>
+    <button id="cookie-salvar" style="display:none;background:#6366f1;color:#fff;border:none;padding:10px 20px;
+        border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">
+      Salvar escolha
     </button>
   </div>
 </div>
 
 <!-- Botao para reabrir configuracao de cookies -->
-<button id="cookie-settings-btn" style="display:none;position:fixed;bottom:24px;left:24px;z-index:89;
-    background:#0f172a;color:#94a3b8;border:1px solid rgba(255,255,255,.1);padding:6px 12px;
-    border-radius:8px;font-size:11px;cursor:pointer;opacity:.7;transition:.2s"
-    onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.7'">
+<button id="cookie-settings-btn" aria-label="Preferências de cookies" style="display:none;position:fixed;bottom:24px;left:24px;z-index:89;
+    background:#0f172a;color:#cbd5e1;border:1px solid rgba(255,255,255,.15);padding:6px 12px;
+    border-radius:8px;font-size:11px;cursor:pointer;opacity:.85;transition:.2s"
+    onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.85'">
   Cookies
 </button>
 
 <script>
 (function(){
   var banner = document.getElementById('cookie-banner');
+  var opcoes = document.getElementById('cookie-opcoes');
   var settingsBtn = document.getElementById('cookie-settings-btn');
-  var consent = localStorage.getItem('cookie_consent');
+  var analise = document.getElementById('cookie-analise');
+  var marketing = document.getElementById('cookie-marketing');
+  var salvarBtn = document.getElementById('cookie-salvar');
+  function atual(){ try { return (window.tvConsent && window.tvConsent()) || null; } catch(e) { return null; } }
 
-  function showBanner() {
-    banner.style.display = 'flex';
-    settingsBtn.style.display = 'none';
-  }
-  function hideBanner() {
-    banner.style.display = 'none';
-    settingsBtn.style.display = 'block';
-  }
+  function showBanner() { banner.style.display = 'flex'; settingsBtn.style.display = 'none'; }
+  function hideBanner() { banner.style.display = 'none'; settingsBtn.style.display = 'block'; }
 
   // O servidor só enxerga cookie: espelha a escolha para ele respeitar a
   // recusa (não grava a origem da visita e apaga o que havia)
@@ -47,36 +62,34 @@
     document.cookie = 'tv_consent=' + v + ';path=/;max-age=31536000;samesite=lax' +
       (location.protocol === 'https:' ? ';secure' : '');
   }
-  if (consent) espelhar(consent);
-
-  document.getElementById('cookie-accept').addEventListener('click', function() {
-    localStorage.setItem('cookie_consent', 'accepted');
-    espelhar('accepted');
+  function gravar(a, m) {
+    try {
+      localStorage.setItem('tv_consent_v2', JSON.stringify({a: a ? 1 : 0, m: m ? 1 : 0, em: Date.now()}));
+      localStorage.setItem('cookie_consent', a ? 'accepted' : 'rejected');
+    } catch(e) {}
+    espelhar(a ? 'accepted' : 'rejected');
     hideBanner();
-    if(typeof loadGA4==='function') loadGA4();
-  });
+    if (typeof loadGA4 === 'function') loadGA4();
+    if (!a && window.gtag) gtag('consent', 'update', {analytics_storage: 'denied', ad_storage: 'denied',
+                                                       ad_user_data: 'denied', ad_personalization: 'denied'});
+  }
+  var c = atual();
+  if (c) espelhar(c.a ? 'accepted' : 'rejected');
 
-  document.getElementById('cookie-reject').addEventListener('click', function() {
-    localStorage.setItem('cookie_consent', 'rejected');
-    espelhar('rejected');
-    hideBanner();
+  document.getElementById('cookie-accept').addEventListener('click', function() { gravar(true, true); });
+  document.getElementById('cookie-reject').addEventListener('click', function() { gravar(false, false); });
+  document.getElementById('cookie-config').addEventListener('click', function() {
+    var c = atual() || {};
+    analise.checked = !!c.a; marketing.checked = !!c.m;
+    opcoes.style.display = 'block'; salvarBtn.style.display = 'inline-block';
   });
+  salvarBtn.addEventListener('click', function() { gravar(analise.checked, marketing.checked); });
 
-  settingsBtn.addEventListener('click', function() {
-    localStorage.removeItem('cookie_consent');
-    showBanner();
-  });
+  settingsBtn.addEventListener('click', function() { showBanner(); });
 
   // Ajustar posicao do botao Cookies no mobile (acima do sticky CTA)
   if (window.innerWidth < 769) settingsBtn.style.bottom = '80px';
 
-  if (consent === 'accepted') {
-    if(typeof loadGA4==='function') loadGA4();
-    settingsBtn.style.display = 'block';
-  } else if (consent === 'rejected') {
-    settingsBtn.style.display = 'block';
-  } else {
-    showBanner();
-  }
+  if (c) { settingsBtn.style.display = 'block'; } else { showBanner(); }
 })();
 </script>

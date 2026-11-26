@@ -1,0 +1,77 @@
+{% extends '_publico_base.html' %}
+{% block conteudo %}
+<nav class="crumbs" aria-label="Trilha"><a href="/">Início</a> › <a href="/cnae">CNAE</a> › {% if uf %}<a href="/cnae/{{ d.codigo }}">{{ d.formatado }}</a> › {{ uf_nome }}{% else %}{{ d.formatado }}{% endif %}</nav>
+<h1>{{ h1 }}</h1>
+<p class="meta-line">Descrição oficial do IBGE (CNAE 2.3) e contagem da base da Receita Federal{% if d.base_mes %} de {{ d.base_mes }}{% endif %}.</p>
+<div class="resposta" style="background:#0d1526;border-left:3px solid #818cf8;border-radius:10px;padding:14px 18px;margin:6px 0 22px"><p style="margin:0;color:#e2e8f0">{{ resposta }}</p></div>
+
+<div class="destaques">
+  <div class="destaque"><b>{{ '{:,}'.format(total).replace(',', '.') }}</b><span>empresas ativas com contato{% if uf %} {{ no_uf(uf) }}{% endif %}</span></div>
+  {% if not uf and d.est.com_email %}<div class="destaque"><b>{{ '{:,}'.format(d.est.com_email).replace(',', '.') }}</b><span>com e-mail público</span></div>{% endif %}
+  {% if not uf and d.est.com_socio %}<div class="destaque"><b>{{ '{:,}'.format(d.est.com_socio).replace(',', '.') }}</b><span>com sócio identificado</span></div>{% endif %}
+  <div class="destaque"><b>{{ d.formatado }}</b><span>código da subclasse</span></div>
+</div>
+
+<h2>O que é o CNAE {{ d.formatado }}</h2>
+<p>{{ d.nome }}. Faz parte da classe {{ d.hierarquia.classe.id }} ({{ d.hierarquia.classe.descricao|lower }}), do grupo
+{{ d.hierarquia.grupo.id }} ({{ d.hierarquia.grupo.descricao|lower }}) e da seção {{ d.hierarquia.secao.id }}
+({{ d.hierarquia.secao.descricao|lower }}).</p>
+{% if d.compreende %}<h3>Esta classe compreende</h3><ul class="lista">{% for x in d.compreende[:12] %}<li>{{ x }}</li>{% endfor %}</ul>{% endif %}
+{% if d.nao_compreende %}<h3>Esta classe não compreende</h3><ul class="lista">{% for x in d.nao_compreende[:12] %}<li>{{ x }}</li>{% endfor %}</ul>{% endif %}
+{% if d.atividades %}<h3>Atividades da subclasse ({{ d.atividades|length }})</h3><ul class="lista">{% for x in d.atividades[:25] %}<li>{{ x|capitalize }}</li>{% endfor %}</ul>{% endif %}
+
+{% include '_isca_bloco.html' %}
+
+{% if uf %}
+  {% if d.uf_dados %}
+  <h2>Cidades com mais empresas {{ no_uf(uf) }}</h2>
+  <table class="dados"><thead><tr><th>Cidade</th><th>Empresas</th></tr></thead><tbody>
+  {% for c in d.uf_dados.cidades %}<tr><td>{{ c.municipio }}</td><td class="num">{{ '{:,}'.format(c.n).replace(',', '.') }}</td></tr>{% endfor %}
+  </tbody></table>
+  <h2>Por porte {{ no_uf(uf) }}</h2>
+  <table class="dados"><thead><tr><th>Porte</th><th>Empresas</th></tr></thead><tbody>
+  {% for k, n in d.uf_dados.porte|dictsort(by='value', reverse=True) %}<tr><td>{{ portes.get(k, 'Não informado') }}</td><td class="num">{{ '{:,}'.format(n).replace(',', '.') }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% endif %}
+{% else %}
+  {% if d.est.por_uf %}
+  <h2>Empresas por estado</h2>
+  <table class="dados"><thead><tr><th>Estado</th><th>Empresas</th></tr></thead><tbody>
+  {% for x in d.est.por_uf %}<tr><td>{% if x.n >= limiar_uf %}<a href="/cnae/{{ d.codigo }}/{{ x.uf|lower }}">{{ ufs_nomes.get(x.uf, x.uf) }}</a>{% else %}{{ ufs_nomes.get(x.uf, x.uf) }}{% endif %}</td><td class="num">{{ '{:,}'.format(x.n).replace(',', '.') }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% endif %}
+  {% if d.est.cidades %}
+  <h2>Cidades com mais empresas</h2>
+  <table class="dados"><thead><tr><th>Cidade</th><th>Empresas</th></tr></thead><tbody>
+  {% for c in d.est.cidades %}<tr><td>{{ c.municipio }}/{{ c.uf }}</td><td class="num">{{ '{:,}'.format(c.n).replace(',', '.') }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% endif %}
+  {% if d.est.por_porte %}
+  <h2>Por porte</h2>
+  <table class="dados"><thead><tr><th>Porte</th><th>Empresas</th></tr></thead><tbody>
+  {% for x in d.est.por_porte %}<tr><td>{{ portes.get(x.porte, 'Não informado') }}</td><td class="num">{{ '{:,}'.format(x.n).replace(',', '.') }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% endif %}
+{% endif %}
+{% set anos = (d.uf_dados.por_ano if uf and d.uf_dados else d.est.get('por_ano', [])) %}
+{% if anos %}
+<h2>Abertura por ano (empresas ainda ativas)</h2>
+<table class="dados"><thead><tr><th>Ano</th><th>Empresas</th></tr></thead><tbody>
+{% for x in anos|reverse %}<tr><td>{{ x.ano }}</td><td class="num">{{ '{:,}'.format(x.n).replace(',', '.') }}</td></tr>{% endfor %}
+</tbody></table>
+{% endif %}
+
+<div class="cta-box"><p>Quer falar com essas empresas? O TurboVenda monta a lista do CNAE {{ d.formatado }}{% if uf %} {{ no_uf(uf) }}{% endif %} com telefone, e-mail e sócio, e faz o primeiro contato.</p>
+  <a class="cta-btn" href="/cadastro?utm_source=site&amp;utm_medium=pseo&amp;utm_campaign=cnae-{{ d.codigo }}" data-cta="cnae" data-cta-produto="1">Testar grátis</a></div>
+
+{% if relacionados %}
+<h2>Outros códigos do mesmo grupo</h2>
+<div class="grid">{% for r in relacionados %}<a href="/cnae/{{ r.codigo }}"><span class="nome">{{ r.formatado }} · {{ r.nome|truncate(60, True, '…') }}</span>{% if r.empresas %}<span class="qtd">{{ '{:,}'.format(r.empresas).replace(',', '.') }}</span>{% endif %}</a>{% endfor %}</div>
+{% endif %}
+
+<div class="faq"><h2>Perguntas frequentes</h2>
+{% for f in faq %}<details><summary>{{ f.pergunta }}</summary><p>{{ f.resposta }}</p></details>{% endfor %}
+</div>
+<p class="fonte">Fontes: <a href="{{ fonte_ibge.url }}" rel="noopener">{{ fonte_ibge.nome }}</a>; <a href="{{ fonte_receita.url }}" rel="noopener">{{ fonte_receita.nome }}</a>{% if d.base_mes %}, base de {{ d.base_mes }}{% endif %}. Contagem: empresas com situação ativa e telefone ou e-mail público, pelo CNAE principal. <a href="/empresas/sobre-os-dados">Sobre os dados</a>.</p>
+{% endblock %}
+{% block scripts %}{% include '_isca_eventos.html' %}{% endblock %}

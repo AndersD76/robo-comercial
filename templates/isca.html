@@ -1,0 +1,127 @@
+{% extends '_publico_base.html' %}
+{% block estilo %}
+    .resposta{background:#0d1526;border-left:3px solid #818cf8;border-radius:10px;padding:14px 18px;margin:6px 0 22px}
+    .resposta p{margin:0;color:#e2e8f0;font-size:16px}
+    fieldset{border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px 14px;margin:0 0 10px}
+    legend{color:#e2e8f0;font-size:14.5px;font-weight:600;padding:0 6px}
+    .opcoes{display:flex;gap:14px;flex-wrap:wrap}
+    .opcoes label,.marca{display:flex;gap:6px;align-items:center;margin:4px 0;color:#cbd5e1;font-weight:400;font-size:14.5px}
+    .opcoes input,.marca input{width:auto}
+    .resultado{border:1px solid rgba(99,102,241,.35);border-radius:14px;padding:20px 22px;margin:24px 0;background:#0b1324}
+    .resultado h2{margin-top:0}
+    .resultado pre{background:#0d1526;border-radius:10px;padding:12px;white-space:pre-wrap;color:#e2e8f0;font-family:inherit}
+    .resultado blockquote{border-left:3px solid rgba(129,140,248,.5);padding:6px 14px;color:#cbd5e1}
+    .captura{background:#0d1526;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:18px 20px;margin:18px 0}
+    .captura .linha{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+    .ok{color:#86efac;font-weight:600}
+    .erro{color:#fca5a5}
+    .acoes{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+    .link-btn{background:none;border:1px solid rgba(255,255,255,.2);color:#cbd5e1;border-radius:9px;padding:10px 16px;cursor:pointer;font-family:inherit;font-size:14px}
+{% endblock %}
+{% block conteudo %}
+<nav class="crumbs" aria-label="Trilha"><a href="/">Início</a> › <a href="/ferramentas">Ferramentas grátis</a> › {{ isca.nome }}</nav>
+<h1>{{ isca.h1 }}</h1>
+<div class="resposta"><p>{{ isca.resposta }}</p></div>
+
+{% if isca.campos %}
+<form method="get" action="{{ url }}" class="card" id="isca-form">
+  {% for c in isca.campos %}
+    {% set v = params.get(c.nome, c.get('padrao', '')) %}
+    {% if c.tipo == 'oculto' %}
+      <input type="hidden" name="{{ c.nome }}" value="{{ c.get('padrao', '1') }}">
+    {% elif c.tipo == 'escolha' and c.opcoes|length <= 3 %}
+      <fieldset><legend>{{ c.rotulo }}</legend><div class="opcoes">
+      {% for val, rot in c.opcoes %}<label><input type="radio" name="{{ c.nome }}" value="{{ val }}" {% if v == val %}checked{% endif %} required> {{ rot }}</label>{% endfor %}
+      </div></fieldset>
+    {% elif c.tipo == 'escolha' %}
+      <label for="f-{{ c.nome }}">{{ c.rotulo }}</label>
+      <select id="f-{{ c.nome }}" name="{{ c.nome }}">{% for val, rot in c.opcoes %}<option value="{{ val }}" {% if v == val %}selected{% endif %}>{{ rot }}</option>{% endfor %}</select>
+    {% elif c.tipo == 'segmento' %}
+      <label for="f-{{ c.nome }}">{{ c.rotulo }}</label>
+      <select id="f-{{ c.nome }}" name="{{ c.nome }}" required><option value="">Escolha…</option>{% for s in segmentos %}<option value="{{ s.slug }}" {% if v == s.slug %}selected{% endif %}>{{ s.label }}</option>{% endfor %}</select>
+    {% elif c.tipo == 'uf' %}
+      <label for="f-{{ c.nome }}">{{ c.rotulo }}</label>
+      <select id="f-{{ c.nome }}" name="{{ c.nome }}"><option value="">Brasil todo</option>{% for sigla, nome in ufs %}<option value="{{ sigla }}" {% if v|upper == sigla %}selected{% endif %}>{{ nome }}</option>{% endfor %}</select>
+    {% elif c.tipo == 'checkbox' %}
+      <label class="marca"><input type="checkbox" name="{{ c.nome }}" value="1" {% if v in ('1', 'on') %}checked{% endif %}> {{ c.rotulo }}</label>
+    {% elif c.tipo == 'numero' %}
+      <label for="f-{{ c.nome }}">{{ c.rotulo }}</label>
+      <input id="f-{{ c.nome }}" type="number" step="any" min="0" inputmode="decimal" name="{{ c.nome }}" value="{{ v }}">
+    {% else %}
+      <label for="f-{{ c.nome }}">{{ c.rotulo }}</label>
+      <input id="f-{{ c.nome }}" type="text" maxlength="200" name="{{ c.nome }}" value="{{ v }}">
+    {% endif %}
+  {% endfor %}
+  <p style="margin-top:14px"><button class="cta-btn" type="submit">{{ isca.botao or 'Ver resultado' }}</button></p>
+</form>
+{% endif %}
+
+{% if resultado %}
+<section class="resultado" id="resultado" aria-live="polite">
+  <h2>{% if isca.get('so_inscricao') %}O que você recebe{% else %}Seu resultado{% endif %}{% if resultado.resumo and not isca.get('sempre') %}: {{ resultado.resumo }}{% endif %}</h2>
+  {{ resultado.tela|safe }}
+  {% if not isca.get('so_inscricao') %}
+  <div class="acoes">
+    <a class="cta-btn" href="{{ cta[1] }}" data-cta="isca-{{ isca_id }}" data-cta-produto="1">{{ cta[0] }}</a>
+    {% if isca.campos %}<button type="button" class="link-btn" id="copiar">Copiar link do resultado</button>{% endif %}
+  </div>
+  {% endif %}
+</section>
+
+<section class="captura" id="captura">
+  <h2 style="margin-top:0">{% if isca.get('so_inscricao') %}Receba a primeira aula agora{% else %}Receba o resultado completo por e-mail{% endif %}</h2>
+  <form id="lead-form" novalidate>
+    <div class="linha">
+      <div><label for="l-email">E-mail</label><input id="l-email" type="email" name="email" required autocomplete="email"></div>
+      <div><label for="l-nome">Nome (opcional)</label><input id="l-nome" type="text" name="nome" maxlength="120" autocomplete="name"></div>
+      <div><label for="l-empresa">Empresa (opcional)</label><input id="l-empresa" type="text" name="empresa" maxlength="160" autocomplete="organization"></div>
+    </div>
+    <label class="marca"><input type="checkbox" name="opt_in" value="1"> Quero receber dicas de prospecção e ofertas do TurboVenda por e-mail (posso sair quando quiser).</label>
+    <p style="font-size:12.5px;color:#94a3b8;margin:6px 0 10px">Usamos o e-mail para mandar o que você pediu. Veja a <a href="/privacidade">política de privacidade</a>.</p>
+    <button class="cta-btn" type="submit">{% if isca.get('so_inscricao') %}Quero o curso{% else %}Enviar para meu e-mail{% endif %}</button>
+    <p id="lead-msg" role="status" style="margin-top:10px"></p>
+  </form>
+</section>
+{% endif %}
+
+<h2>Mais ferramentas grátis</h2>
+<div class="grid">{% for o in outras %}<a href="{{ o.url }}"><span class="nome">{{ o.nome }}</span><span class="qtd">→</span></a>{% endfor %}</div>
+{% if pilar %}<p style="margin-top:18px">Para ir além: <a href="{{ pilar }}">o guia completo de {{ cluster_nome|lower }}</a>.</p>{% endif %}
+{% endblock %}
+{% block scripts %}
+{% include '_isca_eventos.html' %}
+<script>
+(function(){
+  var EV = {{ ev|tojson }};
+  var temResultado = {{ 'true' if resultado and not isca.get('sempre') else 'false' }};
+  if (window.tvEventoPagina) {
+    tvEventoPagina('isca_vista', {origem: 'pagina'});
+    if (temResultado) tvEventoPagina('isca_concluida');
+  }
+  var form = document.getElementById('isca-form');
+  if (form) form.addEventListener('input', function f(){ if (window.tvEventoPagina) tvEventoPagina('isca_iniciada', {origem: 'pagina'}); form.removeEventListener('input', f); });
+  var copiar = document.getElementById('copiar');
+  if (copiar) copiar.addEventListener('click', function(){
+    try { navigator.clipboard.writeText(location.href); copiar.textContent = 'Link copiado'; } catch (e) {}
+  });
+  var lead = document.getElementById('lead-form');
+  if (!lead) return;
+  lead.addEventListener('submit', function(e){
+    e.preventDefault();
+    var msg = document.getElementById('lead-msg');
+    var email = lead.email.value.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { msg.className = 'erro'; msg.textContent = 'Confira o e-mail.'; return; }
+    var params = Object.fromEntries(new URLSearchParams(location.search));
+    fetch('/api/isca/{{ isca_id }}/lead', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email: email, nome: lead.nome.value, empresa: lead.empresa.value,
+                            opt_in: lead.opt_in.checked, params: params, consulta: EV.consulta_alvo || ''})})
+      .then(function(r){ return r.json().then(function(j){ return [r.ok, j]; }); })
+      .then(function(x){
+        if (x[0]) { msg.className = 'ok'; msg.textContent = 'Pronto! Confira sua caixa de entrada.'; lead.querySelector('button').disabled = true; }
+        else { msg.className = 'erro'; msg.textContent = x[1].erro || 'Não deu certo. Tente de novo.'; }
+      })
+      .catch(function(){ msg.className = 'erro'; msg.textContent = 'Sem conexão. Tente de novo.'; });
+  });
+})();
+</script>
+{% endblock %}

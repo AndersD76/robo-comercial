@@ -52,20 +52,7 @@
     ]
   }
   </script>
-  <script>
-  (function(){
-    if(localStorage.getItem('cookie_consent')==='accepted'){
-      var s=document.createElement('script');
-      s.async=true;
-      s.src='https://www.googletagmanager.com/gtag/js?id={{ ga_id }}';
-      document.head.appendChild(s);
-      window.dataLayer=window.dataLayer||[];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js',new Date());
-      gtag('config','{{ ga_id }}');
-    }
-  })();
-  </script>
+{% include '_analytics.html' %}
 {% include '_fontes.html' %}
   <link rel="stylesheet" href="/static/tokens.css">
   <link rel="stylesheet" href="/static/components.css">

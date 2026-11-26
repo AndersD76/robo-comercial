@@ -1,0 +1,55 @@
+{% extends '_publico_base.html' %}
+{% block estilo %}
+    .resposta{background:#0d1526;border-left:3px solid #818cf8;border-radius:10px;padding:14px 18px;margin:6px 0 22px}
+    .resposta p{margin:0;color:#e2e8f0;font-size:16px}
+    .sumario{background:#0d1526;border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:14px 18px;margin:0 0 26px}
+    .sumario b{display:block;color:#e2e8f0;font-size:13px;margin-bottom:6px}
+    .sumario a{display:block;color:#a5b4fc;font-size:14px;text-decoration:none;padding:3px 0}
+    .texto table{width:100%;border-collapse:collapse;font-size:14px;margin:6px 0 18px}
+    .texto th{text-align:left;color:#94a3b8;font-weight:600;font-size:12.5px;padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.1)}
+    .texto td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.05);color:#e2e8f0}
+    .texto ul,.texto ol{margin:0 0 14px 22px;color:#cbd5e1;font-size:15px}
+    .texto li{margin-bottom:6px}
+    .texto blockquote{border-left:3px solid rgba(129,140,248,.5);padding:6px 14px;margin:0 0 14px;color:#cbd5e1;font-style:italic}
+    .texto pre{background:#0d1526;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px;white-space:pre-wrap;
+        color:#e2e8f0;font-family:inherit;font-size:14.5px;margin:0 0 16px}
+    .rel a{display:block;color:#a5b4fc;text-decoration:none;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:14.5px}
+    .autor{display:flex;gap:10px;align-items:center;color:#94a3b8;font-size:13px;margin-bottom:22px}
+    .autor a{color:#a5b4fc}
+{% endblock %}
+{% block conteudo %}
+<nav class="crumbs" aria-label="Trilha">{% for nome, link in migalhas %}{% if not loop.last %}<a href="{{ link }}">{{ nome }}</a> › {% else %}{{ nome }}{% endif %}{% endfor %}</nav>
+<article>
+<h1>{{ p.h1 }}</h1>
+<div class="autor">
+  <span>Por {% if autor and autor.nome %}<a href="{{ autor.url }}">{{ autor.nome }}</a>{% else %}<a href="/sobre">Equipe TurboVenda</a>{% endif %}
+  · atualizado em {{ p.atualizado_em.strftime('%d/%m/%Y') if p.atualizado_em else '' }}
+  · <a href="/politica-editorial">como fazemos</a></span>
+</div>
+{% if p.resposta %}<div class="resposta"><p>{{ p.resposta }}</p></div>{% endif %}
+{% if sumario|length >= 3 %}
+<nav class="sumario" aria-label="Sumário"><b>Nesta página</b>{% for ident, titulo in sumario %}<a href="#{{ ident }}">{{ titulo }}</a>{% endfor %}</nav>
+{% endif %}
+<div class="texto">{{ corpo_1|safe }}</div>
+{% include '_isca_bloco.html' %}
+<div class="texto">{{ corpo_2|safe }}</div>
+{% if p.faq %}
+<section class="faq"><h2 id="perguntas">Perguntas frequentes</h2>
+{% for f in p.faq %}<details><summary>{{ f.pergunta }}</summary><p>{{ f.resposta }}</p></details>{% endfor %}
+</section>
+{% endif %}
+{% with isca_fim=True %}{% include '_isca_bloco.html' %}{% endwith %}
+{% if relacionados %}
+<section class="rel"><h2>Leia também</h2>
+{% for r in relacionados %}<a href="{{ r.url }}">{{ r.titulo }}</a>{% endfor %}
+{% if hub %}<a href="{{ hub[1] }}">Ver tudo em {{ hub[0] }} →</a>{% endif %}
+</section>
+{% endif %}
+<div class="cta-box"><p>{{ comercial_texto }}</p><a class="cta-btn" href="{{ comercial_link }}" data-cta="conteudo-rodape"
+   data-cta-produto="1">Testar grátis</a></div>
+{% if p.fontes %}
+<div class="fonte"><b>Fontes</b><br>{% for f in p.fontes %}{% if f.url %}<a href="{{ f.url }}" rel="noopener">{{ f.nome }}</a>{% else %}{{ f.nome }}{% endif %}{% if f.consultado_em %} (consultado em {{ f.consultado_em }}){% endif %}<br>{% endfor %}</div>
+{% endif %}
+</article>
+{% endblock %}
+{% block scripts %}{% include '_isca_eventos.html' %}{% endblock %}

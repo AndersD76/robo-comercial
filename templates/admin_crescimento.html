@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Crescimento orgânico — Admin TurboVenda</title>
+<style>
+  body{margin:0;background:#0b1220;color:#e2e8f0;font:15px/1.5 Inter,system-ui,sans-serif}
+  main{max-width:1200px;margin:0 auto;padding:24px 16px 60px}
+  h1{font-size:1.5rem;margin:0 0 4px} h2{font-size:1.1rem;margin:34px 0 10px;scroll-margin-top:70px}
+  .sub{color:#94a3b8;margin:0 0 16px}
+  nav.abas{position:sticky;top:0;background:#0b1220;padding:8px 0;z-index:5;display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid rgba(255,255,255,.08)}
+  nav.abas a{color:#cbd5e1;text-decoration:none;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:4px 10px;font-size:13px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+  .card{background:#0d1526;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:14px}
+  .card b{display:block;font-size:1.4rem;color:#fff} .card span{color:#94a3b8;font-size:13px}
+  .tab{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:6px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.06);vertical-align:top}
+  th{color:#94a3b8;font-weight:600}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+  .vazio{color:#94a3b8;background:#0d1526;border:1px dashed rgba(255,255,255,.12);border-radius:10px;padding:12px}
+  form.inline{display:inline} button,select,input{font:inherit;font-size:13px}
+  button{background:#1e293b;color:#e2e8f0;border:1px solid rgba(255,255,255,.15);border-radius:7px;padding:3px 9px;cursor:pointer}
+  button.ok{background:#14532d} button.nao{background:#7f1d1d}
+  select,input{background:#0d1526;color:#e2e8f0;border:1px solid rgba(255,255,255,.15);border-radius:7px;padding:4px 6px}
+  a{color:#a5b4fc} .erro{color:#fca5a5} small{color:#94a3b8}
+  details pre{white-space:pre-wrap;background:#0d1526;border-radius:8px;padding:10px;font-size:13px}
+</style>
+</head>
+<body><main>
+{% macro tabela(linhas, colunas, vazio='Nada ainda.') %}
+  {% if linhas %}
+  <div class="tab"><table><thead><tr>{% for c, rot in colunas %}<th{% if c.startswith('#') %} class="n"{% endif %}>{{ rot }}</th>{% endfor %}</tr></thead><tbody>
+  {% for r in linhas %}<tr>{% for c, rot in colunas %}{% set k = c.lstrip('#') %}<td{% if c.startswith('#') %} class="n"{% endif %}>{{ r[k] if r[k] is not none else '—' }}</td>{% endfor %}</tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="vazio">{{ vazio }}</p>{% endif %}
+{% endmacro %}
+  <p><a href="/admin/dashboard">← Admin</a> · <a href="/admin/organico">Orgânico</a> · <a href="/admin/receita">Receita</a> · <a href="/admin/trafego">Tráfego</a></p>
+  <h1>Crescimento orgânico</h1>
+  <p class="sub">Conteúdo, iscas, SEO, IA e conversão. Últimos 28 dias, salvo indicação. Resumo semanal por e-mail às segundas, 8h30.</p>
+  <form method="get" class="sub">
+    <select name="tipo"><option value="">Todos os tipos</option>{% for k, t in tipos.items() %}<option value="{{ k }}" {% if filtro.tipo == k %}selected{% endif %}>{{ t.nome }}</option>{% endfor %}</select>
+    <select name="cluster"><option value="">Todos os clusters</option>{% for k, c in clusters.items() %}<option value="{{ k }}" {% if filtro.cluster == k %}selected{% endif %}>{{ c.nome }}</option>{% endfor %}</select>
+    <select name="isca"><option value="">Todas as iscas</option>{% for k, i in iscas.items() %}<option value="{{ k }}" {% if filtro.isca == k %}selected{% endif %}>{{ i.nome }}</option>{% endfor %}</select>
+    <button type="submit">Filtrar</button>
+  </form>
+  {% if d._erros %}<p class="erro">Seções sem dados ainda: {{ d._erros|join(', ') }}</p>{% endif %}
+  <nav class="abas"><a href="#conteudo">Conteúdo</a><a href="#seo">SEO</a><a href="#geo">IA</a><a href="#conversao">Conversão</a>
+    <a href="#top">Top 20</a><a href="#revisao">Revisão</a><a href="#leads">Leads</a><a href="#links">Links</a>
+    <a href="#distribuicao">Distribuição</a><a href="#mapa">Mapa</a><a href="#tempo">Linha do tempo</a><a href="#custo">Custos</a></nav>
+
+  <h2 id="conteudo">Conteúdo: publicado × na fila</h2>
+  {{ tabela(d.status, [('tipo','Tipo'),('status','Status'),('#n','Páginas')]) }}
+  <form class="inline" method="post" action="/admin/crescimento/onda"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="number" name="limite" value="400" min="1" max="2000" style="width:80px"> <button type="submit">Publicar onda agora</button></form>
+  <small>A onda semanal sai sozinha às segundas, 9h. Tipo com onda abaixo de 50% indexada em 21 dias é pausado.</small>
+  <h3>Ondas</h3>
+  {{ tabela(d.ondas, [('id','Onda'),('tipo','Tipo'),('publicada_em','Publicada'),('#paginas','Páginas'),('#inspecionadas','Inspecionadas'),('#indexadas','Indexadas'),('medida_em','Medida em')]) }}
+  {% if d.pausas %}<h3>Tipos pausados</h3>
+  {% for p in d.pausas %}<p>{{ p.tipo }}: {{ p.motivo }} <form class="inline" method="post" action="/admin/crescimento/retomar"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="tipo" value="{{ p.tipo }}"><button>Retomar</button></form></p>{% endfor %}{% endif %}
+  <h3>Sitemaps no Search Console (enviadas × indexadas)</h3>
+  {{ tabela(d.indexacao, [('sitemap','Sitemap'),('#enviadas','Enviadas'),('#indexadas','Indexadas')], 'Aparece depois da ingestão diária das 6h.') }}
+
+  <h2 id="seo">SEO por cluster (Search Console)</h2>
+  {{ tabela(d.seo_clusters, [('nome','Cluster'),('#paginas','Páginas'),('#impressoes','Impressões'),('#cliques','Cliques'),('#ctr','CTR %'),('#posicao','Posição')]) }}
+  <h3>Consultas novas (primeira aparição nos últimos 10 dias)</h3>
+  {{ tabela(d.consultas_novas, [('consulta','Consulta'),('#impressoes','Impressões'),('#cliques','Cliques'),('#posicao','Posição')]) }}
+  <h3>Oportunidades: posição 4 a 15 (reforçar a página)</h3>
+  {{ tabela(d.oportunidades, [('consulta','Consulta'),('pagina','Página'),('#impressoes','Impressões'),('#cliques','Cliques'),('#posicao','Posição')]) }}
+  <h3>CTR abaixo do esperado para a posição (reescrever o título)</h3>
+  {{ tabela(d.ctr_baixo, [('pagina','Página'),('#impressoes','Impressões'),('#ctr','CTR %'),('#esperado','Esperado %'),('#posicao','Posição')]) }}
+  <h3>Publicadas há mais de 30 dias sem impressão</h3>
+  {{ tabela(d.sem_impressao, [('url','Página'),('tipo','Tipo'),('publicado_em','Publicada')]) }}
+
+  <h2 id="geo">IA: robôs, visitas e citações</h2>
+  <div class="cards">{% for s in d.geo_sov %}<div class="card"><b>{{ s.citado or 0 }} de {{ s.perguntas }}</b><span>citações do TurboVenda (rodada {{ s.rodada }}); nos resultados: {{ s.nos_resultados or 0 }}</span></div>{% endfor %}</div>
+  <h3>Robôs de IA por página</h3>
+  {{ tabela(d.geo_robos, [('path','Página'),('robo','Robô'),('#n','Acessos'),('ultimo','Último')]) }}
+  <h3>Visitas vindas de assistentes de IA</h3>
+  {{ tabela(d.geo_visitas, [('path','Página de entrada'),('#n','Visitas')]) }}
+
+  <h2 id="conversao">Conversão</h2>
+  {{ tabela(d.funil_organico, [('etapa','Etapa'),('#n','Quantidade')]) }}
+  <h3>Por isca</h3>
+  {{ tabela(d.funil_iscas, [('nome','Isca'),('#vistas','Vista'),('#iniciadas','Iniciada'),('#concluidas','Concluída'),('#leads','Lead'),('#cta','Clique no produto'),('#conv','Lead/vista %')]) }}
+  <h3>Receita por cluster (180 dias, primeiro e último toque)</h3>
+  {{ tabela(d.receita_cluster, [('cluster','Cluster'),('#primeiro','Primeiro toque R$'),('#ultimo','Último toque R$')], 'Nenhum pagamento com origem orgânica ainda.') }}
+
+  <h2 id="top">Top 20</h2>
+  <h3>Páginas por lead (90 dias)</h3>
+  {{ tabela(d.top_leads, [('pagina','Página'),('#leads','Leads')]) }}
+  <h3>Páginas com visita orgânica e nenhum lead</h3>
+  {{ tabela(d.top_sem_lead, [('path','Página'),('#visitas','Visitas')]) }}
+
+  <h2 id="revisao">Fila de revisão</h2>
+  <p class="sub">Lei explicada sempre passa aqui. Outras páginas chegam quando têm número sem fonte, citam norma sem fonte oficial ou não passaram no portão.</p>
+  {% if d.revisao %}<div class="tab"><table><thead><tr><th>Página</th><th>Tipo</th><th>Status</th><th>Motivo</th><th></th></tr></thead><tbody>
+  {% for r in d.revisao %}<tr><td><a href="/admin/crescimento/ver?url={{ r.url|urlencode }}">{{ r.titulo or r.url }}</a><br><small>{{ r.url }}</small></td><td>{{ r.tipo }}</td><td>{{ r.status }}</td><td><small>{{ r.motivo or '' }}</small></td>
+  <td><form class="inline" method="post" action="/admin/crescimento/pagina"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="url" value="{{ r.url }}">
+    <button class="ok" name="op" value="aprovar">Aprovar</button> <button class="nao" name="op" value="recusar">Recusar</button></form></td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="vazio">Fila vazia.</p>{% endif %}
+
+  <h2 id="leads">Leads das iscas (últimos 50)</h2>
+  {{ tabela(d.leads, [('criado_em','Quando'),('email','E-mail'),('nome','Nome'),('empresa','Empresa'),('isca','Isca'),('resumo','Resultado'),('pagina','Página'),('opt_in_marketing','Marketing'),('#passo_sequencia','E-mail nº')]) }}
+
+  <h2 id="links">Alvos de link</h2>
+  {% if d.alvos %}<div class="tab"><table><thead><tr><th>Alvo</th><th>Tipo</th><th>Página do link</th><th>Ativo</th><th>Mensagem</th><th>Status</th></tr></thead><tbody>
+  {% for a in d.alvos %}<tr><td><a href="{{ a.url }}" rel="noopener" target="_blank">{{ a.nome }}</a></td><td>{{ a.tipo }}</td><td><small>{{ a.pagina_alvo }}</small></td><td><small>{{ a.ativo }}</small></td>
+    <td><details><summary>ver</summary><pre>{{ a.mensagem }}</pre></details></td>
+    <td><form class="inline" method="post" action="/admin/crescimento/alvo"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="id" value="{{ a.id }}">
+      <select name="status" onchange="this.form.submit()">{% for s in ['novo','contatado','respondeu','conseguido','recusado','descartado'] %}<option {% if a.status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></form></td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="vazio">Nada ainda.</p>{% endif %}
+  <h3>Artigos de convidado e textos de diretório (prontos para disparar)</h3>
+  {% for p in d.pecas %}<details><summary><b>{{ p.tipo }}</b>: {{ p.titulo }} {% if p.destino %}<small>→ {{ p.destino }}</small>{% endif %}</summary><pre>{{ p.texto }}…</pre></details>{% else %}<p class="vazio">Nada ainda.</p>{% endfor %}
+
+  <h2 id="distribuicao">Fila de distribuição (LinkedIn e vídeo curto)</h2>
+  {% if d.distribuicao %}<div class="tab"><table><thead><tr><th>Página</th><th>Canal</th><th>Texto</th><th>Status</th></tr></thead><tbody>
+  {% for r in d.distribuicao %}<tr><td><small>{{ r.url }}</small></td><td>{{ r.canal }}</td><td><details><summary>ver</summary><pre>{{ r.texto }}
+
+{{ r.link_utm }}</pre></details></td>
+    <td><form class="inline" method="post" action="/admin/crescimento/distribuicao"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="id" value="{{ r.id }}">
+      <select name="status" onchange="this.form.submit()">{% for s in ['rascunho','aprovado','publicado','descartado'] %}<option {% if r.status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></form></td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="vazio">Nada ainda.</p>{% endif %}
+
+  <h2 id="mapa">Mapa de buscas</h2>
+  {% if d.mapa_total %}<div class="cards"><div class="card"><b>{{ d.mapa_total[0].n }}</b><span>consultas no mapa</span></div><div class="card"><b>{{ d.mapa_total[0].com_pagina }}</b><span>com página</span></div></div>{% endif %}
+  {{ tabela(d.mapa, [('cluster','Cluster'),('intencao','Intenção'),('#consultas','Consultas'),('#com_pagina','Com página')]) }}
+  <h3>Prioridades sem página</h3>
+  {{ tabela(d.mapa_sem_pagina, [('consulta','Consulta'),('cluster','Cluster'),('tipo_pagina','Tipo'),('intencao','Intenção'),('#prioridade','Prioridade'),('#impressoes_28d','Impressões 28d')]) }}
+
+  <h2 id="tempo">Linha do tempo e linha de base</h2>
+  {{ tabela(d.anotacoes, [('em','Quando'),('tipo','Tipo'),('texto','O quê')]) }}
+  <h3>Linha de base (primeiro registro × hoje)</h3>
+  {{ tabela(d.linha_base, [('metrica','Métrica'),('desde','Desde'),('#inicial','Inicial'),('#atual','Atual')]) }}
+
+  <h2 id="custo">Custo da produção com IA</h2>
+  {% if d.custo_mes %}<div class="cards"><div class="card"><b>US$ {{ '%.2f'|format(d.custo_mes[0].usd|float) }}</b><span>neste mês ({{ d.custo_mes[0].paginas }} páginas geradas)</span></div></div>{% endif %}
+  {{ tabela(d.lotes, [('criado_em','Criado'),('status','Status'),('#pedidos','Pedidos'),('#concluidos','Prontas'),('#falhas','Falhas'),('#custo_usd','US$')]) }}
+</main></body></html>

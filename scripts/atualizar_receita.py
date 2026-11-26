@@ -125,6 +125,14 @@ def atualizar_relatorio(indice, dsn_arquivo):
                        creationflags=SEM_JANELA | PRIORIDADE_BAIXA)
     if r.returncode != 0:
         print(f'[aviso] relatório de dados falhou (código {r.returncode})')
+    # páginas /cnae/<código>: contagens por CNAE, estado, porte e ano (só agregados)
+    sys.stdout.flush()
+    r = subprocess.run([sys.executable, '-u', os.path.join(AQUI, 'estatisticas_cnae.py'),
+                        '--indice', indice, '--dsn-arquivo', dsn_arquivo],
+                       stdout=sys.stdout, stderr=subprocess.STDOUT,
+                       creationflags=SEM_JANELA | PRIORIDADE_BAIXA)
+    if r.returncode != 0:
+        print(f'[aviso] estatísticas de CNAE falharam (código {r.returncode})')
 
 
 def limpar_meses_antigos(pasta_zips, manter=2):

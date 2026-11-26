@@ -1,0 +1,37 @@
+{# Eventos objeto_ação com as propriedades da página (ev: page_type, cluster,
+   consulta_alvo, isca_id). isca_vista quando o bloco aparece na tela. #}
+<script>
+(function(){
+  var EV = {{ ev|tojson }};
+  function manda(nome, extra){ if (window.tvEvento) tvEvento(nome, Object.assign({}, EV, extra || {})); }
+  window.tvEventoPagina = manda;
+  var vistos = {};
+  var blocos = document.querySelectorAll('[data-isca]');
+  if ('IntersectionObserver' in window) {
+    var obs = new IntersectionObserver(function(es){
+      es.forEach(function(e){ if (e.isIntersecting && !vistos.v) { vistos.v = 1; manda('isca_vista'); } });
+    }, {threshold: .5});
+    blocos.forEach(function(b){ obs.observe(b); });
+  }
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('[data-isca-link]');
+    if (a) manda('isca_iniciada', {origem: 'bloco'});
+    var c = e.target.closest && e.target.closest('[data-cta-produto]');
+    if (c) manda('cta_produto_clicado', {cta: c.getAttribute('data-cta') || ''});
+  });
+  var barra = document.getElementById('isca-barra');
+  if (barra && window.innerWidth < 769) {
+    var fechada = false;
+    try { fechada = sessionStorage.getItem('isca_barra') === '0'; } catch (e) {}
+    if (!fechada) {
+      window.addEventListener('scroll', function mostra(){
+        if (window.scrollY > 600) { barra.style.display = 'flex'; window.removeEventListener('scroll', mostra); }
+      }, {passive: true});
+    }
+    document.getElementById('isca-barra-fechar').addEventListener('click', function(){
+      barra.style.display = 'none';
+      try { sessionStorage.setItem('isca_barra', '0'); } catch (e) {}
+    });
+  }
+})();
+</script>

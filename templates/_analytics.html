@@ -1,0 +1,43 @@
+{# Consent Mode v2 em modo básico: o padrão é negado e nenhum script do Google
+   carrega antes da escolha. A escolha fica em localStorage tv_consent_v2
+   ({"a":1|0 análise, "m":1|0 marketing}) e no cookie tv_consent
+   (accepted/rejected) para o servidor respeitar a atribuição. Eventos vão
+   sempre para a tabela própria (sem dado pessoal) e para o GA4 só com aceite. #}
+<script>
+window.dataLayer=window.dataLayer||[];
+function gtag(){dataLayer.push(arguments);}
+gtag('consent','default',{ad_storage:'denied',ad_user_data:'denied',ad_personalization:'denied',analytics_storage:'denied',functionality_storage:'granted',security_storage:'granted',wait_for_update:500});
+(function(){
+  var ID='{{ ga_medicao }}';
+  function ler(){
+    try{
+      var j=JSON.parse(localStorage.getItem('tv_consent_v2')||'null');
+      if(j&&typeof j==='object')return j;
+      var v=localStorage.getItem('cookie_consent');
+      if(v==='accepted')return {a:1,m:0};
+      if(v==='rejected')return {a:0,m:0};
+    }catch(e){}
+    return null;
+  }
+  window.tvConsent=ler;
+  window.loadGA4=function(){
+    var c=ler();
+    if(!c||!c.a||!ID)return;
+    gtag('consent','update',{analytics_storage:'granted',ad_storage:c.m?'granted':'denied',ad_user_data:c.m?'granted':'denied',ad_personalization:c.m?'granted':'denied'});
+    if(window._ga4Loaded)return;
+    window._ga4Loaded=true;
+    var s=document.createElement('script');s.async=true;s.src='https://www.googletagmanager.com/gtag/js?id='+ID;document.head.appendChild(s);
+    gtag('js',new Date());gtag('config',ID);
+  };
+  window.loadGA4();
+  window.tvEvento=function(nome,props){
+    props=props||{};
+    try{if(window._ga4Loaded)gtag('event',nome,props);}catch(e){}
+    try{
+      var corpo=JSON.stringify({nome:nome,props:props,path:location.pathname});
+      if(navigator.sendBeacon){navigator.sendBeacon('/api/t/evento',new Blob([corpo],{type:'application/json'}));}
+      else{fetch('/api/t/evento',{method:'POST',headers:{'Content-Type':'application/json'},body:corpo,keepalive:true});}
+    }catch(e){}
+  };
+})();
+</script>

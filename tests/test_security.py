@@ -165,18 +165,25 @@ def test_cookie_consent_banner_exists():
 def test_cookie_consent_in_key_templates():
     """Templates que carregam GA devem checar cookie_consent antes."""
     # Templates que passam ga_id e portanto devem checar consentimento
-    key_templates = ['dashboard.html', 'precos.html', 'blog.html']
+    # A checagem mora em _analytics.html (Consent Mode v2, padrão negado);
+    # cada template que carrega o GA tem de incluí-lo, e nenhum carrega o
+    # gtag.js por conta própria.
+    key_templates = ['dashboard.html', 'precos.html', 'blog.html', 'landing.html', '_publico_base.html']
     missing = []
     for tpl_name in key_templates:
         tpl_path = os.path.join(_TEMPLATES_DIR, tpl_name)
         if not os.path.exists(tpl_path):
             continue
         content = _read_file(tpl_path)
-        if 'cookie_consent' not in content:
+        if "_analytics.html" not in content or 'googletagmanager.com/gtag/js' in content:
             missing.append(tpl_name)
     assert not missing, (
-        f"Templates sem checagem de cookie_consent: {', '.join(missing)}"
+        f"Templates sem o _analytics.html (consentimento): {', '.join(missing)}"
     )
+    analytics = _read_file(os.path.join(_TEMPLATES_DIR, '_analytics.html'))
+    assert "gtag('consent','default'" in analytics and "analytics_storage:'denied'" in analytics
+    assert 'cookie_consent' in analytics and 'tv_consent_v2' in analytics
+    assert 'if(!c||!c.a||!ID)return;' in analytics   # sem aceite de análise, o gtag.js não carrega
 
 
 # =========================================================================

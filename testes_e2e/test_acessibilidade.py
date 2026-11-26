@@ -42,7 +42,8 @@ def test_paginas_sem_violacao_critica(navegador, ambiente, resultados):
     sitemap = p.request.get(base + '/sitemap-empresas-1.xml').text()
     emp = re.search(r'<loc>https://www\.turbovenda\.com\.br(/empresas/[^/<]+/(?!estado)[^/<]+)</loc>', sitemap)
     publicas = ['/', '/precos', '/blog', '/cadastro', '/login', '/esqueci-senha', '/ferramentas/calculadora-de-leads',
-                '/privacidade'] + ([emp.group(1)] if emp else [])
+                '/privacidade', '/sobre', '/ferramentas/diagnostico-de-prospeccao', '/ferramentas/calculadora-de-cac',
+                '/ferramentas/gerador-de-cadencia-de-prospeccao?canal_email=1&canal_whatsapp=1&dias=14'] +         ([emp.group(1)] if emp else [])
     for caminho in publicas:
         p.goto(base + caminho, wait_until='load')
         resultados[caminho] = _axe(p)
