@@ -8,7 +8,7 @@
 - **Formato:** `/ferramentas/socios-pelo-cnpj`, com resultado em URL própria só para empresas (nunca indexar páginas por pessoa física).
 
 ## Decisão necessária (TODO-VALIDAR)
-- Os 8,6 mi registros de sócios estão só no índice local do PC (`C:\cnpj\indice.sqlite`), não no Postgres. A ferramenta exige subir a tabela de sócios para o banco de produção: custo de armazenamento e de memória no Neon.
+- Os 8,6 mi registros de sócios estão só no índice local do PC (`D:\cnpj\indice.sqlite`), não no Postgres. A ferramenta exige subir a tabela de sócios para o banco de produção: custo de armazenamento e de memória no Neon.
 - LGPD: o QSA é dado público da Receita, mas nome de pessoa física exige cuidado — não criar páginas indexáveis por nome de sócio, só consulta pelo CNPJ, com canal de remoção (já existe em `/empresas/sobre-os-dados`).
 
 ## Estrutura (se aprovado)

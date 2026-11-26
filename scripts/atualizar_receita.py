@@ -139,7 +139,7 @@ def limpar_meses_antigos(pasta_zips, manter=2):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument('--indice', default='C:/cnpj/indice.sqlite')
+    ap.add_argument('--indice', default='D:/cnpj/indice.sqlite')
     ap.add_argument('--zips', default='D:/cnpj',
                     help='onde guardar os zips, uma pasta por mês')
     ap.add_argument('--tarefa-worker', default='TurboVenda-Receita')

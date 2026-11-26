@@ -19,7 +19,7 @@
 
 param(
     [string]$DatabaseUrl = '',
-    [string]$Indice = 'C:\cnpj\indice.sqlite',
+    [string]$Indice = 'D:\cnpj\indice.sqlite',
     [string]$Zips = 'D:\cnpj',
     [int]$MinutosIntervalo = 15
 )

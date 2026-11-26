@@ -157,7 +157,7 @@ def trocar(conn):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument('--indice', default='C:/cnpj/indice.sqlite')
+    ap.add_argument('--indice', default='D:/cnpj/indice.sqlite')
     ap.add_argument('--dsn-arquivo', default=os.path.expandvars(
         r'%LOCALAPPDATA%\TurboVenda\database_url.txt'))
     ap.add_argument('--manter-antiga', action='store_true')

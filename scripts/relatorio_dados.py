@@ -1,6 +1,6 @@
 """Relatório de dados próprios: números agregados da base da Receita.
 
-Calcula a partir do índice local completo (C:/cnpj/indice.sqlite, todos os
+Calcula a partir do índice local completo (D:/cnpj/indice.sqlite, todos os
 estados, empresas ativas com telefone ou e-mail) e grava só o resumo
 agregado na tabela `relatorio_dados` do Postgres, de onde a página
 /dados/empresas-ativas-no-brasil lê. Nenhum dado de empresa individual sai
@@ -68,7 +68,7 @@ def calcular(caminho):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument('--indice', default='C:/cnpj/indice.sqlite')
+    ap.add_argument('--indice', default='D:/cnpj/indice.sqlite')
     ap.add_argument('--dsn-arquivo', help='arquivo com a DATABASE_URL (senão usa a variável)')
     ap.add_argument('--saida-json', help='também grava o resumo neste arquivo')
     args = ap.parse_args()
