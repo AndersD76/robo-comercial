@@ -163,7 +163,11 @@ def passada(m, agora=None, forcar=()):
             c.execute("SELECT COUNT(*) AS n FROM cnae_ibge")
             ibge_vazio = c.fetchone()['n'] == 0
             etapa('ibge', nunca('ibge', 30) and (ibge_vazio or agora.hour in (3, 4, 5)), lambda: importar_ibge(c))
-            etapa('dados', nunca('dados') and agora.hour >= 4, lambda: preparar_dados(m, c))
+            c.execute("""SELECT (SELECT COUNT(*) FROM cnae_estatisticas) > 0
+                                AND NOT EXISTS (SELECT 1 FROM conteudo_paginas WHERE tipo = 'programatica') AS falta""")
+            falta_cnae = c.fetchone()['falta']
+            etapa('dados', (nunca('dados') and agora.hour >= 4) or falta_cnae, lambda: preparar_dados(m, c))
+            etapa('reavaliar', nunca('reavaliar'), lambda: reavaliar(m, c))
             etapa('primeira_onda', _sem_ondas(c), lambda: cm.publicar_onda(c, limite_total=ONDA_TAMANHO))
             cliente = _cliente_ia()
             if cliente:
@@ -335,14 +339,43 @@ def _avaliador(m):
     def avaliar(cur, pg, ctx):
         g = m._crescimento_grafo() if getattr(m, '_crescimento_grafo', None) else {}
         indice = g.get('indice')
+        # a leva inteira do cluster (no ar, aprovadas e as que estão sendo
+        # geradas/avaliadas): o grafo é recalculado a cada onda e garante 3
+        # entradas quando o cluster tem 4+ páginas no ar
         cur.execute("""SELECT COUNT(*) AS n FROM conteudo_paginas WHERE cluster = %s AND url <> %s
-                       AND status IN ('publicada', 'aprovada') AND tipo <> 'programatica'""", (pg.get('cluster'), pg['url']))
+                       AND status NOT IN ('recusada', 'pausada') AND tipo <> 'programatica'""",
+                    (pg.get('cluster'), pg['url']))
         vizinhas = cur.fetchone()['n']
         # hub do tipo (sempre lista) + vizinhas do cluster (grafo garante 3 entradas)
         entrada = 1 + min(3, vizinhas) + (1 if pg['tipo'] in ('satelite', 'pilar') else 0)
         return cm.avaliar(pg, indice=indice, links_entrada=entrada, numeros_permitidos=sem.numeros_permitidos(ctx, pg),
                           iscas_validas=set(iscas.ISCAS), links_saida_auto=min(5, vizinhas))
     return avaliar
+
+
+def reavaliar(m, c, limite=400):
+    """Portão de novo nas páginas já geradas (rascunho e revisão, menos lei
+    explicada): o contexto do cluster muda conforme a leva cresce, e regra
+    nova do portão vale para o que já foi pago. Sem chamada à IA."""
+    import json as _json
+    c.execute("""SELECT url, tipo, cluster, consulta, titulo, descricao, h1, resposta, corpo, faq, fontes, extra, isca, status
+                 FROM conteudo_paginas WHERE status IN ('rascunho', 'revisao') AND tipo <> 'norma'
+                   AND corpo IS NOT NULL ORDER BY atualizado_em LIMIT %s""", (limite,))
+    linhas = [dict(r) for r in c.fetchall()]
+    ctx_de, avaliar = _contexto_fn(m, c), _avaliador(m)
+    mudou = {}
+    for pg in linhas:
+        for k in ('faq', 'fontes', 'extra'):
+            if isinstance(pg.get(k), str):
+                pg[k] = _json.loads(pg[k])
+        r = avaliar(c, pg, ctx_de(c, pg))
+        novo = 'revisao' if r['revisao'] else ('aprovada' if r['aprovado'] else 'rascunho')
+        cm.registrar_avaliacao(c, pg['url'], r)
+        if novo != pg['status']:
+            c.execute('UPDATE conteudo_paginas SET status = %s, atualizado_em = now() WHERE url = %s', (novo, pg['url']))
+            mudou[novo] = mudou.get(novo, 0) + 1
+    c.connection.commit()
+    return {'avaliadas': len(linhas), 'mudaram': mudou}
 
 
 # ---------------------------------------------------------------------------

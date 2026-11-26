@@ -207,6 +207,17 @@ DOMINIOS_OFICIAIS = ('planalto.gov.br', 'gov.br', 'ibge.gov.br', 'receita.fazend
                      'anatel.gov.br', 'procon', 'sebrae.com.br', 'bcb.gov.br')
 
 
+_RE_EXEMPLO = re.compile(r'<(p|li|tr|blockquote)>(?:(?!</\1>).)*?(exemplo hipot[ée]tico|\bimagine\b|\bsuponha\b)'
+                         r'(?:(?!</\1>).)*?</\1>', re.S | re.I)
+
+
+def sem_exemplos(html):
+    """Tira o que se declara hipotético (modelo em <pre>, parágrafo que começa
+    com "Exemplo hipotético", "imagine", "suponha"): número de exemplo não é
+    fato. Número solto fora disso continua pedindo fonte."""
+    return _RE_EXEMPLO.sub(' ', re.sub(r'<pre>.*?</pre>', ' ', html or '', flags=re.S))
+
+
 def fonte_oficial(fontes):
     return any(any(d in (f.get('url') or '') for d in DOMINIOS_OFICIAIS) for f in (fontes or []))
 
@@ -331,7 +342,7 @@ def avaliar(p, indice=None, links_entrada=0, numeros_permitidos=frozenset(), isc
     checks['resposta_direta'] = 30 <= n_resp <= 75 and cobre >= .5
     checks['valor_proprio'] = bool(extra.get('valor_proprio')) and bool(
         re.search(r'<(table|pre|ol)\b', corpo) or extra.get('dados_usados'))
-    suspeitos = numeros_suspeitos(' '.join([texto, resposta, faq_txt]), numeros_permitidos)
+    suspeitos = numeros_suspeitos(' '.join([texto_puro(sem_exemplos(corpo)), resposta, faq_txt]), numeros_permitidos)
     checks['numeros_com_fonte'] = not suspeitos
     tem_norma = bool(_RE_NORMA.search(texto + ' ' + faq_txt))
     checks['norma_com_fonte_oficial'] = not tem_norma or fonte_oficial(p.get('fontes'))

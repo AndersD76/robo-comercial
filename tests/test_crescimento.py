@@ -323,3 +323,12 @@ def test_onda_redistribui_a_cota_que_sobra():
 
     r = cm.publicar_onda(Cur(), limite_total=400)
     assert r == {'glossario': 10, 'modelo': 30, 'programatica': 360}
+
+
+def test_numero_de_exemplo_declarado_passa_e_estatistica_solta_nao():
+    corpo = ('<p>Exemplo hipotético: com meta de R$ 60.000 e ticket de R$ 5.000, são 12 vendas.</p>'
+             '<li>Imagine 1.000 leads por mês.</li><pre>Valor: R$ 300</pre>'
+             '<p>No Brasil, 72% das empresas não prospectam.</p>')
+    texto = cm.texto_puro(cm.sem_exemplos(corpo))
+    assert cm.numeros_suspeitos(texto, set()) == ['72%']
+    assert 'R$ 60.000' not in texto and '1.000' not in texto and 'R$ 300' not in texto

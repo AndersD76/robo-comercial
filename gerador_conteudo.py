@@ -64,8 +64,9 @@ Leitor: dono ou gerente comercial de pequena e média empresa que vende para out
 Regras que não podem ser quebradas:
 1. Português do Brasil, acentuação correta, no vocabulário que esse leitor usa ao pesquisar no Google.
 2. Nenhum número, porcentagem, valor em reais, prazo, artigo de lei, norma, estudo, caso, cliente ou depoimento que não
-   esteja em DADOS, FONTES ou PRODUTO. Sem estatística de mercado. Se precisar de número, use só os entregues.
-   Em exemplos, use valores claramente hipotéticos e diga que são exemplo ("imagine uma meta de...").
+   esteja em DADOS, FONTES ou PRODUTO. Sem estatística de mercado ("X% das empresas...", "milhões de...").
+   Exemplo com números só num parágrafo ou item que comece com "Exemplo hipotético:" (ou dentro de <pre>),
+   com números redondos. Fora disso, nenhum número que não venha de DADOS.
 3. Link interno só para URLs da lista LINKS (use o caminho exato, começando com /). Pelo menos 3 links internos no corpo.
    Nenhum link externo no corpo.
 4. HTML do corpo só com: p, h3, ul, ol, li, strong, em, a, table, thead, tbody, tr, th, td, blockquote, pre.
