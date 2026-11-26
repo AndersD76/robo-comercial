@@ -9073,6 +9073,29 @@ def email_track_click(token):
     return redirect(redirect_url)
 
 
+SVIX_TOLERANCIA_S = 300   # aviso com horário fora de ±5 min é recusado (reenvio de aviso antigo)
+
+
+def _svix_valido(segredo, msg_id, ts, assinaturas, corpo, agora=None):
+    """Confere a assinatura do Resend (padrão Svix): HMAC-SHA256 de
+    'id.timestamp.corpo' com o segredo whsec_, e o horário dentro da tolerância."""
+    import base64
+    try:
+        ts_int = int(ts)
+    except (TypeError, ValueError):
+        return False
+    if abs((agora if agora is not None else time.time()) - ts_int) > SVIX_TOLERANCIA_S:
+        return False
+    try:
+        chave = base64.b64decode(segredo.split('_')[-1] if '_' in segredo else segredo)
+    except Exception:
+        return False
+    esperado = base64.b64encode(
+        _hmac.new(chave, f'{msg_id}.{ts}.{corpo}'.encode(), 'sha256').digest()).decode()
+    recebidas = [s.split(',')[-1] for s in (assinaturas or '').split(' ') if s]
+    return any(_hmac.compare_digest(esperado, s) for s in recebidas)
+
+
 @app.route('/webhook/email', methods=['POST'])
 def webhook_email():
     """Webhook do Resend para eventos de email (bounce, complaint, etc)."""
@@ -9088,17 +9111,8 @@ def webhook_email():
     if not svix_sig or not svix_ts:
         return jsonify({'error': 'missing signature'}), 401
     body = request.get_data(as_text=True)
-    to_sign = f'{svix_id}.{svix_ts}.{body}'
-    import base64
-    secret_bytes = base64.b64decode(resend_wh_secret.split('_')[-1]
-                                    if '_' in resend_wh_secret
-                                    else resend_wh_secret)
-    sig = base64.b64encode(
-        _hmac.new(secret_bytes, to_sign.encode(), 'sha256').digest()
-    ).decode()
-    sigs = [s.split(',')[-1] for s in svix_sig.split(' ')]
-    if not any(_hmac.compare_digest(sig, s) for s in sigs):
-        logger.error('Webhook assinatura invalida')
+    if not _svix_valido(resend_wh_secret, svix_id, svix_ts, svix_sig, body):
+        logger.error('Webhook assinatura invalida ou fora do horario')
         return jsonify({'error': 'invalid signature'}), 401
 
     data = request.get_json(silent=True) or {}
@@ -9109,22 +9123,27 @@ def webhook_email():
         to_email = payload['to'][0]
     elif isinstance(payload.get('to'), str):
         to_email = payload['to']
+    to_email = (to_email or '').strip()
     logger.info(f'webhook {event_type} to={to_email}')
-    if event_type in ('email.bounced', 'email.complained'):
+    if event_type in ('email.bounced', 'email.complained') and to_email:
         conn = None
         try:
             conn = psycopg2.connect(
                 DATABASE_URL,
                 cursor_factory=psycopg2.extras.RealDictCursor)
             c = conn.cursor()
+            # endereço que volta ou reclama não recebe mais e-mail de marketing
+            # do TurboVenda (protege a reputação do domínio de envio)
+            c.execute('UPDATE users SET emails_marketing_off = TRUE '
+                      'WHERE LOWER(email) = LOWER(%s)', (to_email,))
+            conn.commit()
             c.execute('SELECT id, schema_name FROM users')
             users = c.fetchall()
             conn.close()
             conn = None
-            for u in users:
-                sch = u.get('schema_name')
-                if not sch:
-                    continue
+            # todos os clientes: o domínio de envio é o mesmo, então um endereço
+            # que voltou ou reclamou não deve ser contatado por nenhum deles
+            for sch in sorted({u.get('schema_name') for u in users if u.get('schema_name')}):
                 conn2 = None
                 try:
                     conn2 = _conn(sch)
@@ -9132,11 +9151,9 @@ def webhook_email():
                     bounce_status = 'bounce' if 'bounce' in event_type else 'spam'
                     c2.execute(
                         "UPDATE empresas SET status = %s "
-                        "WHERE email = %s AND status IN ('novo','contactada')",
+                        "WHERE LOWER(email) = LOWER(%s) AND status IN ('novo','contactada')",
                         (bounce_status, to_email))
-                    if c2.rowcount > 0:
-                        conn2.commit()
-                        break
+                    conn2.commit()
                 except Exception:
                     pass
                 finally:

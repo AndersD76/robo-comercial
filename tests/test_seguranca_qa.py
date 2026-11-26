@@ -179,3 +179,76 @@ def test_health_nao_vaza_detalhe_do_banco(monkeypatch):
     for rota in ('/health', '/ready'):
         r = app.app.test_client().get(rota)
         assert r.status_code == 503 and 'neon' not in r.get_data(as_text=True)
+
+
+# QA-SEC-013: webhook do Resend aceitava aviso antigo reenviado (sem conferir o horário)
+def _assinar_svix(segredo, msg_id, ts, corpo):
+    import base64
+    import hashlib
+    import hmac
+    chave = base64.b64decode(segredo.split('_')[-1])
+    return 'v1,' + base64.b64encode(hmac.new(chave, f'{msg_id}.{ts}.{corpo}'.encode(), hashlib.sha256).digest()).decode()
+
+
+def test_webhook_resend_confere_assinatura_e_horario(monkeypatch):
+    import base64
+    segredo = 'whsec_' + base64.b64encode(b'segredo-sintetico-de-teste-32by').decode()
+    monkeypatch.setenv('RESEND_WEBHOOK_SECRET', segredo)
+    gravou = []
+    monkeypatch.setattr(app.psycopg2, 'connect', lambda *a, **k: gravou.append(a) or pytest.fail('não devia gravar'))
+    corpo = '{"type":"email.delivered","data":{"to":["x@exemplo.com.br"]}}'
+    agora = int(time.time())
+    c = app.app.test_client()
+
+    def enviar(ts, assinatura):
+        return c.post('/webhook/email', data=corpo, content_type='application/json',
+                      headers={'svix-id': 'msg_1', 'svix-timestamp': str(ts), 'svix-signature': assinatura})
+
+    assert enviar(agora, _assinar_svix(segredo, 'msg_1', agora, corpo)).status_code == 200
+    antigo = agora - 3600   # assinatura correta, mas de uma hora atrás: reenvio
+    assert enviar(antigo, _assinar_svix(segredo, 'msg_1', antigo, corpo)).status_code == 401
+    outro = 'whsec_' + base64.b64encode(b'outro-segredo-qualquer-32-bytes!').decode()
+    assert enviar(agora, _assinar_svix(outro, 'msg_1', agora, corpo)).status_code == 401
+    assert enviar(agora, 'v1,' + 'A' * 44).status_code == 401
+    assert enviar('nao-e-numero', _assinar_svix(segredo, 'msg_1', agora, corpo)).status_code == 401
+    assert not gravou   # evento que não é bounce/reclamação não toca o banco
+
+
+def test_webhook_resend_bounce_marca_todos_os_clientes_e_o_usuario(monkeypatch):
+    import base64
+    segredo = 'whsec_' + base64.b64encode(b'segredo-sintetico-de-teste-32by').decode()
+    monkeypatch.setenv('RESEND_WEBHOOK_SECRET', segredo)
+    feitos = []
+
+    class Cur:
+        rowcount = 1
+
+        def execute(self, sql, params=None):
+            feitos.append((' '.join(sql.split()), params))
+
+        def fetchall(self):
+            return [{'id': 1, 'schema_name': 'emp_1'}, {'id': 2, 'schema_name': 'emp_2'}]
+
+    class Conn:
+        def cursor(self):
+            return Cur()
+
+        def commit(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(app.psycopg2, 'connect', lambda *a, **k: Conn())
+    esquemas = []
+    monkeypatch.setattr(app, '_conn', lambda sch: esquemas.append(sch) or Conn())
+    corpo = '{"type":"email.bounced","data":{"to":["Fulano@Exemplo.com.br"]}}'
+    agora = int(time.time())
+    r = app.app.test_client().post(
+        '/webhook/email', data=corpo, content_type='application/json',
+        headers={'svix-id': 'msg_2', 'svix-timestamp': str(agora),
+                 'svix-signature': _assinar_svix(segredo, 'msg_2', agora, corpo)})
+    assert r.status_code == 200
+    assert esquemas == ['emp_1', 'emp_2']   # não para no primeiro cliente
+    assert any('emails_marketing_off = TRUE' in s for s, _ in feitos)
+    assert sum(1 for s, p in feitos if s.startswith('UPDATE empresas') and p == ('bounce', 'Fulano@Exemplo.com.br')) == 2
