@@ -27,7 +27,7 @@ from whatsapp import WhatsAppBot
 from mensagens import GeradorMensagens
 from config import (
     HORARIO_INICIO, HORARIO_FIM, DIAS_ATIVOS, TERMOS_BUSCA,
-    CNAES_ALVO, PALAVRAS_POSITIVAS, PALAVRAS_NEGATIVAS,
+    CNAES_ALVO, PALAVRAS_POSITIVAS, PALAVRAS_NEGATIVAS, ESTADOS_PRIORIDADE,
     SCORE_TEM_WHATSAPP, SCORE_TEM_EMAIL, SCORE_TEM_SITE,
     SCORE_CNAE_INDUSTRIAL, SCORE_PORTE_MEDIO_GRANDE,
     CNPJ_API_URL, CNPJ_API_DELAY,
@@ -340,6 +340,9 @@ async def ciclo_busca(buscador_ext=None):
 
     proprio = buscador_ext is None
     buscador = buscador_ext or Buscador()
+    if proprio:
+        # Robô da Pili: pontua pelas palavras do agro dela (config.py)
+        buscador.configurar_icp(PALAVRAS_POSITIVAS, ESTADOS_PRIORIDADE)
     try:
         if proprio:
             await buscador.iniciar()
@@ -836,6 +839,8 @@ async def main():
     # Buscador persistente — evita criar Chromium novo a cada ciclo
     from buscador import Buscador
     buscador = Buscador()
+    # Robô da Pili: pontua pelas palavras do agro dela (config.py)
+    buscador.configurar_icp(PALAVRAS_POSITIVAS, ESTADOS_PRIORIDADE)
     buscador_pronto = False
 
     ciclo_num = 0

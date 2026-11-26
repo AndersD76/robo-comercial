@@ -20,8 +20,45 @@ import httpx
 
 from config import (
     TERMOS_BUSCA, INTERVALO_BUSCA_MIN, INTERVALO_BUSCA_MAX,
-    PALAVRAS_POSITIVAS, PALAVRAS_NEGATIVAS, ESTADOS_PRIORIDADE
+    PALAVRAS_NEGATIVAS,
 )
+
+_UFS = {'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS',
+        'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC',
+        'SP', 'SE', 'TO'}
+# Palavras de formato de busca, que não dizem nada sobre o ICP do cliente
+_PALAVRAS_DE_TERMO = {
+    'contato', 'telefone', 'email', 'mail', 'whatsapp', 'site', 'empresa',
+    'empresas', 'para', 'como', 'onde', 'perto', 'mais', 'melhor', 'melhores',
+    'regiao', 'cidade', 'estado', 'brasil', 'ltda', 'comercio', 'servicos',
+    'orcamento', 'endereco', 'fale', 'conosco', 'zona', 'centro',
+}
+
+
+def _sem_acento(texto):
+    import unicodedata
+    return ''.join(c for c in unicodedata.normalize('NFD', texto or '')
+                   if unicodedata.category(c) != 'Mn')
+
+
+def palavras_icp(termos, limite=40):
+    """Palavras que descrevem o que o cliente procura, tiradas dos termos de
+    busca do PRÓPRIO cliente (sem UF, operador site: nem palavra de formato
+    como "contato"). Antes a pontuação usava as palavras do agro da Pili
+    (grãos, silo, soja) para todo cliente. As que aparecem em mais termos
+    vêm primeiro."""
+    from collections import Counter
+    cont = Counter()
+    for termo in termos or []:
+        t = re.sub(r'\bsite:\S+', ' ', _sem_acento(str(termo)).lower())
+        vistas = set()
+        for p in re.findall(r'[a-z0-9]+', t):
+            if (len(p) < 4 or p.isdigit() or p in _PALAVRAS_DE_TERMO
+                    or p.upper() in _UFS or p in vistas):
+                continue
+            vistas.add(p)
+            cont[p] += 1
+    return [p for p, _ in cont.most_common(limite)]
 
 
 class Buscador:
@@ -32,6 +69,10 @@ class Buscador:
         self.context = None
         self.page = None
         self._pw = None
+        # Pontuação: palavras do ICP do PRÓPRIO cliente e os estados dele
+        # (configurar_icp). Antes eram as do agro da Pili para todo cliente.
+        self.palavras_positivas = []
+        self.estados_prioridade = []
         self.sites_ignorar = {
             'facebook.com', 'instagram.com', 'linkedin.com', 'twitter.com',
             'youtube.com', 'wikipedia.org', 'reclameaqui.com.br', 'olx.com.br',
@@ -1012,13 +1053,22 @@ class Buscador:
             return None
         return email
 
+    def configurar_icp(self, palavras_positivas=None, estados_prioridade=None):
+        """Palavras e estados que dão pontos na relevância do resultado."""
+        self.palavras_positivas = [_sem_acento(str(p)).lower() for p in
+                                   (palavras_positivas or []) if str(p).strip()]
+        self.estados_prioridade = [str(u).strip().upper() for u in
+                                   (estados_prioridade or []) if str(u).strip()]
+
     def _calcular_relevancia(self, resultado):
-        """Calcula relevancia de um resultado de busca"""
+        """Relevância do resultado para o cliente: palavras do ICP dele
+        (configurar_icp), nada de blog/lista, telefone e .com.br."""
         texto = (resultado.get('titulo', '') + ' ' + resultado.get('snippet', '')).lower()
+        texto_sa = ' ' + _sem_acento(texto) + ' '
         score = 0
 
-        for palavra in PALAVRAS_POSITIVAS:
-            if palavra in texto:
+        for palavra in self.palavras_positivas:
+            if palavra in texto_sa:
                 score += 5
 
         for palavra in PALAVRAS_NEGATIVAS:
@@ -1031,8 +1081,11 @@ class Buscador:
         if '.com.br' in resultado.get('dominio', ''):
             score += 3
 
-        for estado in ESTADOS_PRIORIDADE:
-            if f' {estado} ' in texto or f' {estado},' in texto:
+        # (antes comparava a UF maiúscula com o texto em minúsculas e nunca
+        # pontuava)
+        for estado in self.estados_prioridade:
+            uf = estado.lower()
+            if f' {uf} ' in texto_sa or f' {uf},' in texto_sa or f'/{uf} ' in texto_sa:
                 score += 2
                 break
 

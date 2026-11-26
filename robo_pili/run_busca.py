@@ -137,7 +137,7 @@ def _dominio_recebe_email(email):
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from buscador import Buscador  # noqa: E402
+from buscador import Buscador, palavras_icp  # noqa: E402
 from validacao_contato import (dominio_plataforma, email_valido,  # noqa: E402
                                limpar_contatos, normalizar_telefone,
                                telefones_do_texto)
@@ -724,9 +724,9 @@ def salvar_empresa(schema: str, dados: dict):
                     conn.close()
                     return None  # já existe
 
-        # Verifica telefone/whatsapp duplicado
-        tel = dados.get('whatsapp') or dados.get('telefone')
-        if tel:
+        # Mesma empresa com outro site: confere os dois números e o e-mail
+        # (antes só um dos números, e a empresa entrava duas vezes)
+        for tel in {dados.get('whatsapp'), dados.get('telefone')} - {None, ''}:
             numero = ''.join(filter(str.isdigit, str(tel)))
             if len(numero) >= 8:
                 c.execute("SELECT id FROM empresas WHERE whatsapp LIKE %s OR telefone LIKE %s",
@@ -734,6 +734,12 @@ def salvar_empresa(schema: str, dados: dict):
                 if c.fetchone():
                     conn.close()
                     return None
+        if dados.get('email'):
+            c.execute("SELECT id FROM empresas WHERE LOWER(email) = LOWER(%s)",
+                      (dados['email'].strip(),))
+            if c.fetchone():
+                conn.close()
+                return None
 
         c.execute("""INSERT INTO empresas (
             cnpj, razao_social, nome_fantasia, segmento, porte, funcionarios,
@@ -1211,6 +1217,40 @@ def _resultado_para_empresa(r):
 _RESULTADOS_POR_BUSCA = 20
 
 
+def _salvar_decisores(schema: str, empresa_id, decisores: list):
+    """Grava os decisores raspados do site como contatos do lead novo, depois
+    do sócio da Receita e sem repetir nome."""
+    if not empresa_id or not decisores:
+        return []
+    novos = []
+    try:
+        conn = _conn(schema)
+        try:
+            c = conn.cursor()
+            for dec in decisores:
+                nome = (dec.get('nome') or '').strip()
+                if not nome:
+                    continue
+                c.execute('SELECT 1 FROM contatos WHERE empresa_id = %s '
+                          'AND LOWER(nome) = LOWER(%s)', (empresa_id, nome))
+                if c.fetchone():
+                    continue
+                # sem a coluna "fonte" (falta em parte dos schemas)
+                c.execute('INSERT INTO contatos (empresa_id, nome, cargo, '
+                          'decisor) VALUES (%s, %s, %s, 1)',
+                          (empresa_id, nome[:100], (dec.get('cargo') or '')[:60]))
+                novos.append(dec)
+            conn.commit()
+        finally:
+            conn.close()
+        for dec in novos:
+            print(f'[{schema}]     👤 {dec["nome"]} — {dec.get("cargo")}',
+                  flush=True)
+    except Exception as e:
+        print(f'[{schema}]     ⚠ decisores do site: {e}', flush=True)
+    return novos
+
+
 async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
                       palavras_concorrente: list = None,
                       evitar: list = None, estados: list = None,
@@ -1438,6 +1478,10 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
                     _c.close()
                 except Exception as e:
                     print(f'[{schema}]     ⚠ decisor: {e}', flush=True)
+            # Decisores raspados do site ("Fulano - Diretor Comercial"). Este
+            # bloco ficava no ramo do lead DUPLICADO, com empresa_id vazio, e
+            # nunca rodava: nenhum decisor do site era salvo.
+            _salvar_decisores(schema, empresa_id, decisores)
             nome = lead.get('nome_fantasia') or lead.get('website') or 'Lead'
             score = lead.get('score', 0)
             partes = ['TEL', 'EMAIL']
@@ -1484,25 +1528,6 @@ async def ciclo_busca(schema: str, buscador: Buscador, termos: list,
                     pass
         else:
             print(f'[{schema}]   ↩ Duplicado: {lead.get("website", "?")}', flush=True)
-
-            # Salva decisores como contatos da empresa
-            if decisores and empresa_id:
-                try:
-                    conn = _conn(schema)
-                    c = conn.cursor()
-                    for dec in decisores:
-                        # Verifica se já existe
-                        c.execute("SELECT id FROM contatos WHERE empresa_id=%s AND nome=%s",
-                                  (empresa_id, dec['nome']))
-                        if not c.fetchone():
-                            c.execute("INSERT INTO contatos (empresa_id, nome, cargo, decisor) VALUES (%s,%s,%s,1)",
-                                      (empresa_id, dec['nome'], dec['cargo']))
-                    conn.commit()
-                    conn.close()
-                    for dec in decisores:
-                        print(f'[{schema}]     👤 {dec["nome"]} — {dec["cargo"]}', flush=True)
-                except Exception:
-                    pass
 
     incrementar(schema, 'buscas')
 
@@ -1559,6 +1584,7 @@ async def main_loop(schema: str):
     termos_esgotados = set()
     # Rodadas sem novos leads por termo
     termo_sem_novos = {}
+    termos_icp = None  # termos usados no último cálculo da pontuação
 
     while True:
         ciclo += 1
@@ -1574,6 +1600,16 @@ async def main_loop(schema: str):
             log_db(schema, 'erro', 'Sem termos de busca: robô encerrado (configure em /configurar)')
             await buscador.fechar()
             return
+
+        # Pontuação pelo ICP do próprio cliente (palavras dos termos dele e os
+        # estados escolhidos), recalculada quando ele muda os termos
+        if termos != termos_icp:
+            termos_icp = termos
+            palavras = palavras_icp(termos)
+            buscador.configurar_icp(palavras, estados_ok)
+            if palavras:
+                print(f'[{schema}] Pontuação pelo ICP: {", ".join(palavras[:8])}',
+                      flush=True)
 
         # Filtra termos não esgotados
         termos_ativos = [t for t in termos if t not in termos_esgotados]

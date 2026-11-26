@@ -411,10 +411,13 @@ async def main(schema: str):
     log_acao('info', f'[{schema}] Bot iniciado')
 
     # 7. Buscador (só abre o Chromium quando Serper/HTTP falham)
-    from buscador import Buscador
-    from run_busca import ciclo_busca, plano_vencido
+    from buscador import Buscador, palavras_icp
+    from run_busca import ciclo_busca, plano_vencido, get_estados_atuacao
     from whatsapp import _write_wa_status
     buscador = Buscador()
+    # Pontuação pelo ICP do cliente (palavras dos termos dele + estados)
+    buscador.configurar_icp(palavras_icp(_cfg.TERMOS_BUSCA),
+                            get_estados_atuacao(schema))
     ciclo_num = 0
     reabrir_wa_em = 0.0  # time.monotonic() da próxima tentativa de reabrir
 
