@@ -196,6 +196,7 @@ def consultas_para_expandir():
 def expandir(cur, http, limite=600, pausa=1.2, agora=None):
     """Faz até `limite` consultas ao autocomplete que não foram feitas nos
     últimos 30 dias. Devolve (pedidos, consultas novas)."""
+    cur.execute('SET search_path TO public')
     cur.execute("""CREATE TABLE IF NOT EXISTS mapa_expansao (
         pedido TEXT PRIMARY KEY, feito_em TIMESTAMPTZ DEFAULT now(), sugestoes INTEGER)""")
     cur.execute("SELECT pedido FROM mapa_expansao WHERE feito_em > now() - interval '30 days'")

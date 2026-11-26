@@ -34,12 +34,52 @@ _estado = {'deploy_anotado': False}
 def registrar(m):
     m._crescimento_passada = lambda agora=None, forcar=(): passada(m, agora, forcar)
     m._ga4_compra = lambda *a, **k: ga4_compra(m, *a, **k)
+    m._reparar_sombras = lambda: reparar_sombras(m)
     if m.DATABASE_URL and os.environ.get('RAILWAY_ENVIRONMENT_ID'):
         threading.Thread(target=_loop, args=(m,), daemon=True).start()
 
 
+DDL_EXECUCOES = """CREATE TABLE IF NOT EXISTS conteudo_execucoes (
+    etapa TEXT PRIMARY KEY, em TIMESTAMPTZ DEFAULT now(), resultado TEXT)"""
+DDL_EXPANSAO = """CREATE TABLE IF NOT EXISTS mapa_expansao (
+    pedido TEXT PRIMARY KEY, feito_em TIMESTAMPTZ DEFAULT now(), sugestoes INTEGER)"""
+
+
+def reparar_sombras(m):
+    """Tabelas do public criadas em schema de cliente (pooler): leva as linhas
+    para o public e apaga a sombra. Conexão nova e direta, search_path public."""
+    import psycopg2
+    import psycopg2.extras
+    import reparo_schemas
+    conn = psycopg2.connect(m.DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        c = conn.cursor()
+        c.execute('SELECT pg_try_advisory_lock(%s) AS ok', (reparo_schemas.TRAVA,))
+        if not c.fetchone()['ok']:
+            return []
+        try:
+            c.execute('SET search_path TO public')
+            cfg.criar_tabelas(c)
+            c.execute(DDL_EXECUCOES)
+            c.execute(DDL_EXPANSAO)
+            conn.commit()
+            return reparo_schemas.reparar(conn, log=m.logger.info)
+        finally:
+            conn.rollback()
+            c.execute('SELECT pg_advisory_unlock(%s)', (reparo_schemas.TRAVA,))
+            conn.commit()
+    finally:
+        conn.close()
+
+
 def _loop(m):
-    time.sleep(240)
+    time.sleep(45)
+    try:
+        r = reparar_sombras(m)
+        m.logger.info(f'reparo de schemas: {len(r)} tabela(s) sombra reparada(s)')
+    except Exception:
+        m.logger.exception('reparo de schemas falhou')
+    time.sleep(195)
     while True:
         try:
             passada(m)
@@ -88,9 +128,9 @@ def passada(m, agora=None, forcar=()):
             return {'trava': False}
         feito = {}
         try:
+            c.execute('SET search_path TO public')
             cfg.criar_tabelas(c)
-            c.execute("""CREATE TABLE IF NOT EXISTS conteudo_execucoes (
-                         etapa TEXT PRIMARY KEY, em TIMESTAMPTZ DEFAULT now(), resultado TEXT)""")
+            c.execute(DDL_EXECUCOES)
             conn.commit()
             _anotar_deploy(c)
             conn.commit()
@@ -118,6 +158,7 @@ def passada(m, agora=None, forcar=()):
                 return u is None or u < _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=dias)
 
             link_lead = lambda i: f'{m.APP_URL}/descadastrar/{seq.token_lead(i, m.app.secret_key)}'  # noqa: E731
+            etapa('reparo', nunca('reparo'), lambda: len(reparar_sombras(m)))
             etapa('sequencias', True, lambda: seq.rodar(conn, m._send_system_email, link_lead, oferta_dias=m.TRIAL_DAYS))
             c.execute("SELECT COUNT(*) AS n FROM cnae_ibge")
             ibge_vazio = c.fetchone()['n'] == 0

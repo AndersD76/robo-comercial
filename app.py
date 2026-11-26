@@ -427,6 +427,15 @@ if DATABASE_URL.startswith('psql://'):
     DATABASE_URL = 'postgresql://' + DATABASE_URL[7:]
 elif DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = 'postgresql://' + DATABASE_URL[11:]
+# Conexão direta ao Neon, sem o pooler (PgBouncer em modo transação): lá o
+# "SET search_path TO emp_N" de um cliente fica na conexão do servidor e vaza
+# para o próximo, e tabela do public era criada (e gravada) dentro de
+# schema de cliente. O app já tem o próprio pool (abaixo) e o limite do Neon
+# (901 conexões) sobra. Os robôs herdam a variável. DB_USAR_POOLER=1 desliga.
+if os.environ.get('DB_USAR_POOLER') != '1' and re.search(r'@[^/@:]+-pooler\.', DATABASE_URL):
+    DATABASE_URL = re.sub(r'(@[^/@:]+?)-pooler\.', r'\1.', DATABASE_URL, count=1)
+    os.environ['DATABASE_URL'] = DATABASE_URL
+    logger.info('banco: conexão direta ao Postgres (sem o pooler do Neon)')
 
 _db_pool = None
 try:

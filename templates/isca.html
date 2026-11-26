@@ -117,7 +117,11 @@
                             opt_in: lead.opt_in.checked, params: params, consulta: EV.consulta_alvo || ''})})
       .then(function(r){ return r.json().then(function(j){ return [r.ok, j]; }); })
       .then(function(x){
-        if (x[0]) { msg.className = 'ok'; msg.textContent = 'Pronto! Confira sua caixa de entrada.'; lead.querySelector('button').disabled = true; }
+        if (x[0]) {
+          msg.className = 'ok'; msg.textContent = 'Pronto! Confira sua caixa de entrada.'; lead.querySelector('button').disabled = true;
+          // a tabela própria já gravou no servidor; isto só leva a conversão ao GA4 (com consentimento)
+          try { if (window._ga4Loaded) gtag('event', 'lead_capturado', EV); } catch (e) {}
+        }
         else { msg.className = 'erro'; msg.textContent = x[1].erro || 'Não deu certo. Tente de novo.'; }
       })
       .catch(function(){ msg.className = 'erro'; msg.textContent = 'Sem conexão. Tente de novo.'; });
