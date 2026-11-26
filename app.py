@@ -3037,6 +3037,16 @@ def _llms_resumo():
         "https://www.turbovenda.com.br/alternativas\n"
         "- Empresas ativas no Brasil por estado, ano de abertura e segmento (relatório): "
         "https://www.turbovenda.com.br/dados/empresas-ativas-no-brasil\n"
+        "- CNAE: descrição oficial do IBGE e empresas ativas por código, estado e cidade: "
+        "https://www.turbovenda.com.br/cnae\n"
+        "- Modelos prontos (e-mail, WhatsApp, ligação, proposta, planilha): "
+        "https://www.turbovenda.com.br/modelos\n"
+        "- Glossário de vendas B2B: https://www.turbovenda.com.br/glossario\n"
+        "- Comparativos de ferramentas de prospecção: https://www.turbovenda.com.br/comparar\n"
+        "- Ferramentas grátis: diagnóstico de prospecção, calculadora de CAC e LTV, ICP com dados da Receita, "
+        "cadência, checklist LGPD, consulta CNAE, funil de vendas, planilha de prospecção: "
+        "https://www.turbovenda.com.br/ferramentas\n"
+        "- Sobre e política editorial: https://www.turbovenda.com.br/sobre\n"
         "- Conteúdo completo (ferramentas, comparativos e artigos em texto): "
         "https://www.turbovenda.com.br/llms-full.txt\n"
     )
@@ -4095,12 +4105,14 @@ def _ld_ferramenta(nome, url, desc):
 @app.route('/ferramentas')
 def ferramentas_hub():
     canonical = f'{_PSEO_BASE}/ferramentas'
+    import iscas as _iscas
+    novas = [{'slug': _iscas.ISCAS[k]['slug'], 'nome': _iscas.ISCAS[k]['nome'],
+              'resumo': _iscas.ISCAS[k]['descricao']} for k in _iscas.NOVAS]
     return render_template(
-        'ferramentas_hub.html', ferramentas=FERRAMENTAS,
+        'ferramentas_hub.html', ferramentas=FERRAMENTAS + novas,
         titulo='Ferramentas grátis de prospecção B2B | TurboVenda',
-        descricao=('Ferramentas gratuitas, sem login: lista de empresas por cidade e '
-                   'segmento com dados da Receita, gerador de mensagem de prospecção '
-                   'com IA e calculadora de leads.'),
+        descricao=('13 ferramentas grátis, sem login: lista de empresas e consulta CNAE com dados da '
+                   'Receita, diagnóstico de prospecção, ICP, cadência, CAC e LGPD.'),
         canonical=canonical,
         ld_json=[_ld_breadcrumb([("Home", f"{_PSEO_BASE}/"),
                                  ("Ferramentas", canonical)])],
