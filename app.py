@@ -692,9 +692,21 @@ def _init_public_schema_safe():
             )""",
             # troca de senha derruba as outras sessões (QA-SEC-006)
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS sessao_versao INTEGER DEFAULT 0",
+            # QA-SEC-009: token da API só como hash (SHA-256) + os 6 últimos para a
+            # lista; os que existiam em texto puro são convertidos e apagados
+            "ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS token_hash TEXT",
+            "ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS token_final TEXT",
+            "ALTER TABLE api_tokens ALTER COLUMN token DROP NOT NULL",
+            """UPDATE api_tokens SET token_hash = encode(sha256(convert_to(token, 'UTF8')), 'hex'),
+                                    token_final = RIGHT(token, 6), token = NULL
+               WHERE token IS NOT NULL""",
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_api_tokens_hash ON api_tokens (token_hash)",
         ]:
+            # um commit por comando: antes, uma falha desfazia (rollback) também
+            # as migrações anteriores da mesma subida
             try:
                 c.execute(stmt)
+                conn.commit()
             except Exception:
                 conn.rollback()
         # Set users as pro
@@ -1235,8 +1247,8 @@ def token_required(f):
             c = conn.cursor()
             c.execute("""SELECT t.*, u.schema_name FROM api_tokens t
                          JOIN users u ON t.user_id = u.id
-                         WHERE t.token = %s AND t.ativo = TRUE AND u.ativo = TRUE""",
-                      (token,))
+                         WHERE t.token_hash = %s AND t.ativo = TRUE AND u.ativo = TRUE""",
+                      (hashlib.sha256(token.encode('utf-8')).hexdigest(),))
             row = c.fetchone()
             if not row:
                 return jsonify({'error': 'token inválido'}), 401
@@ -8159,7 +8171,7 @@ def api_list_tokens(bot):
         conn = _conn()
         c = conn.cursor()
         c.execute("""SELECT id, label, ativo, criado_em,
-                            '••••' || RIGHT(token, 6) AS token_preview
+                            '••••' || COALESCE(token_final, RIGHT(token, 6)) AS token_preview
                      FROM api_tokens WHERE user_id = %s ORDER BY criado_em DESC""", (uid,))
         rows = [dict(r) for r in c.fetchall()]
         return jsonify(rows)
@@ -8187,8 +8199,10 @@ def api_create_token(bot):
     try:
         conn = _conn()
         c = conn.cursor()
-        c.execute('INSERT INTO api_tokens (user_id, token, label) VALUES (%s,%s,%s) RETURNING id',
-                  (uid, token, label))
+        # só o hash vai para o banco; o token aparece uma única vez, nesta resposta
+        c.execute('INSERT INTO api_tokens (user_id, token_hash, token_final, label) '
+                  'VALUES (%s,%s,%s,%s) RETURNING id',
+                  (uid, hashlib.sha256(token.encode('utf-8')).hexdigest(), token[-6:], label))
         tid = c.fetchone()['id']
         conn.commit()
         return jsonify({'ok': True, 'id': tid, 'token': token,

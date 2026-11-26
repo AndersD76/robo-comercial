@@ -162,3 +162,31 @@ def test_exportar_e_excluir_os_proprios_dados():
     assert r.status_code in (200, 204), r.get_data(as_text=True)[:200]
     assert not sql('SELECT 1 FROM users WHERE id = %s', (uid,))
     assert not sql('SELECT 1 FROM information_schema.schemata WHERE schema_name = %s', (schema,))
+
+
+def test_token_da_api_guardado_so_como_hash():
+    c, uid, _, _ = cliente_logado()
+    sql("UPDATE users SET plano = 'pro', plano_expira = NOW() + INTERVAL '30 days' WHERE id = %s", (uid,))
+    A._sessoes_cache.clear()
+    with c.session_transaction() as s:
+        s['_csrf'] = 't'
+    r = c.post('/api/busca/tokens', json={'label': 'integração'}, headers={'X-CSRF-Token': 't'})
+    assert r.status_code == 200, r.get_data(as_text=True)[:200]
+    token = r.get_json()['token']
+    linha = sql('SELECT token, token_hash, token_final FROM api_tokens WHERE user_id = %s', (uid,))[0]
+    assert linha['token'] is None and linha['token_hash'] and linha['token_final'] == token[-6:]
+    api = A.app.test_client()
+    assert api.get('/api/v1/leads', headers={'Authorization': f'Bearer {token}'}).status_code == 200
+    assert api.get('/api/v1/leads', headers={'Authorization': 'Bearer token-errado'}).status_code == 401
+    assert c.get('/api/busca/tokens').get_json()[0]['token_preview'].endswith(token[-6:])
+
+
+def test_migracao_converte_token_antigo_em_texto_puro():
+    _, uid, _, _ = cliente_logado()
+    sql("UPDATE users SET plano = 'pro', plano_expira = NOW() + INTERVAL '30 days' WHERE id = %s", (uid,))
+    sql("INSERT INTO api_tokens (user_id, token, label) VALUES (%s, 'token-legado-em-texto-puro-123', 'antigo')", (uid,))
+    A._init_public_schema_safe()
+    linha = sql("SELECT token, token_hash FROM api_tokens WHERE label = 'antigo' AND user_id = %s", (uid,))[0]
+    assert linha['token'] is None and linha['token_hash']
+    r = A.app.test_client().get('/api/v1/leads', headers={'Authorization': 'Bearer token-legado-em-texto-puro-123'})
+    assert r.status_code == 200
