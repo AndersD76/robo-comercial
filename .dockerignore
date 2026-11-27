@@ -1,0 +1,9 @@
+.git
+**/__pycache__
+*.pyc
+tests/
+testes_e2e/
+testes_integracao/
+qa/
+.github/
+*.log

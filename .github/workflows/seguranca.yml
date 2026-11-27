@@ -16,15 +16,9 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-python@v7
         with:
-          python-version: '3.10'
-      # Riscos aceitos (qa/RELATORIO-QUALIDADE-SEGURANCA.md, QA-SEC-012): soupsieve
-      # 2.10, dependência do beautifulsoup4. As versões corrigidas (3.0.2 e 4.0)
-      # exigem Python 3.11 e o container roda 3.10; nenhum código usa seletores
-      # CSS (.select), onde o soupsieve atua. Tirar ao subir o container de Python.
+          python-version: '3.12'
       - name: Dependências com vulnerabilidade conhecida (pip-audit)
-        run: >-
-          pip install pip-audit && pip-audit -r requirements.txt
-          --ignore-vuln CVE-2026-126190 --ignore-vuln CVE-2026-126191 --ignore-vuln CVE-2026-126193
+        run: pip install pip-audit && pip-audit -r requirements.txt
       - name: Segredos em todo o histórico do git (sem imprimir valores)
         run: |
           python qa/ferramentas/segredos_historico.py | tee segredos.txt
